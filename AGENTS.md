@@ -20,6 +20,9 @@ Doppler curves of propeller aircraft. `README.md` explains the method; `PLAN.md`
   set, and `runs pull` brings the run folder back; `runs dev run -- tools/check.sh` uses the dev box.
   Profile `dopplertrack`; costs, inputs and the bucket's layout are in [tools/aws/README.md](tools/aws/README.md).
   Run `tools/aws/check.sh` before any `cdk deploy`.
+  - Before a new or changed job's real launch, run the same command with `--check` (inputs, guard, capacity; seconds)
+    and then `--rehearse` (the job on the dev box in a fleet box's layout, for long enough to reach its first full
+    stage). A rehearsal catches layout, path and network bugs that the Mac can't show.
 
 ## Tests
 

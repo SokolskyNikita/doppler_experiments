@@ -253,6 +253,11 @@ def launch_all(a) -> list[str]:
     and DOPPLERTRACK_SHARDS=n set."""
     if a.shards <= 1:
         return [launch(a)]
+    if getattr(a, "rehearse", False) or getattr(a, "check", False):    # one shard stands for all of them
+        k = getattr(a, "rehearse_shard", None) or 1
+        b = argparse.Namespace(**vars(a))
+        b.topic, b.shard = f"{a.topic}-s{k}of{a.shards}", [k, a.shards]
+        return [launch(b)]
     a.only_shard = getattr(a, "only_shard", None)
     pending = []        # every shard claimed and shipped first, then placed together
     for k in (a.only_shard or range(1, a.shards + 1)):
@@ -372,19 +377,25 @@ def launch(a) -> str:
     for p in inputs:
         if is_run_path(p):
             check_run_input(p)
-    seed_run_inputs(s3, bucket, inputs)
     caches = list(dict.fromkeys(a.cache or (["terrarium"] if a.case else [])))
+    if getattr(a, "check", False):       # preflight: everything a launch would do, short of writing anything
+        problems = preflight(a, s3, bucket, inputs, caches, prior, command, private_job)
+        sys.exit(1 if problems else 0)
+    seed_run_inputs(s3, bucket, inputs)
     with tempfile.TemporaryDirectory() as tmp:
         code, code_from = code_for(a, prior, Path(tmp) / "code")
-        ids = candidate_ids(f"{prior['run']}-resume", datetime.date.min) if prior else \
+        rehearse = getattr(a, "rehearse", False)
+        ids = candidate_ids(f"rehearse-{a.topic}", datetime.date.today()) if rehearse else \
+            candidate_ids(f"{prior['run']}-resume", datetime.date.min) if prior else \
             candidate_ids(a.topic, datetime.date.today())
         for job in ids:
-            if prior:
+            if prior and not rehearse:
                 job = job.split("-", 3)[-1]      # candidate_ids put a date in front; a resume keeps the run's
             if (DATA_ROOT / "runs" / job).exists():
                 continue
-            spec = {"job": job, "run": prior["run"] if prior else job, "topic": a.topic,
-                    "resume_of": a.resume, "shard": getattr(a, "shard", None), "private": private_job, "command": command, "inputs": inputs,
+            spec = {"job": job, "run": prior["run"] if prior and not rehearse else job, "topic": a.topic,
+                    "resume_of": None if rehearse else a.resume,
+                    "rehearsal_minutes": a.rehearse_minutes if rehearse else None, "shard": getattr(a, "shard", None), "private": private_job, "command": command, "inputs": inputs,
                     "caches": caches, "jobs": a.jobs, "max_hours": a.max_hours,
                     "checkpoint_minutes": a.checkpoint_minutes, "size": a.size,
                     "market": "on-demand" if a.on_demand else "spot", "submitted": now(),
@@ -407,11 +418,116 @@ def launch(a) -> str:
     s3.upload_file(str(HERE / "box" / "supervisor.py"), bucket, f"jobs/{job}/supervisor.py")
     put_status(s3, bucket, job, {"job": job, "state": "submitted", "updated": now()})
     a._code = code
+    if getattr(a, "rehearse", False):    # the dev box instead of a fleet box
+        rehearse_on_dev(out, job, a.rehearse_minutes)
+        return job
     if getattr(a, "defer", False):       # launch_all places shards together
         return job
     if not place(a, job, s3, bucket, 60 * (getattr(a, "wait_for_capacity", 0) or 0), final=True):
         sys.exit(f"no capacity for {job}")
     return job
+
+
+def free_vcpus(region: str) -> dict[str, int]:
+    """Spot and on-demand vCPUs this account may still start in region: the standard-family quotas less the vCPUs
+    of every running or pending instance there (not only ours)."""
+    sess = session(region)
+    quotas = {}
+    for market, code in (("spot", "L-34B43A08"), ("on-demand", "L-1216C47A")):
+        quotas[market] = int(sess.client("service-quotas").get_service_quota(ServiceCode="ec2", QuotaCode=code)
+                             ["Quota"]["Value"])
+    used = {"spot": 0, "on-demand": 0}
+    for page in sess.client("ec2").get_paginator("describe_instances").paginate(
+            Filters=[{"Name": "instance-state-name", "Values": ["pending", "running"]}]):
+        for res in page["Reservations"]:
+            for i in res["Instances"]:
+                n = i.get("CpuOptions", {}).get("CoreCount", 0) * i.get("CpuOptions", {}).get("ThreadsPerCore", 1)
+                used["spot" if i.get("InstanceLifecycle") == "spot" else "on-demand"] += n
+    return {m: quotas[m] - used[m] for m in quotas}
+
+
+def capacity_plan(free: dict[str, int], vcpus: int, boxes: int) -> tuple[dict[str, int], int]:
+    """How many of `boxes` boxes of `vcpus` each start now in each region (nearest first), and how many queue."""
+    placed, left = {}, boxes
+    for region, room in free.items():
+        n = min(left, max(0, room) // vcpus)
+        if n:
+            placed[region] = n
+            left -= n
+    return placed, left
+
+
+def input_problems(inputs: list[str], in_bucket, exists_here) -> list[str]:
+    """Each input missing where the job would get it: run folders and owner-allowed private files ship from here,
+    everything else comes from the bucket's data/."""
+    out = []
+    for rel in inputs:
+        if is_run_path(rel) or is_private(rel):
+            if not exists_here(rel):
+                out.append(f"{rel}: not in {DATA_ROOT} (it ships from here)")
+        elif not in_bucket(rel):
+            out.append(f"{rel}: not in the bucket's data/ (seed it: runs seed)")
+    return out
+
+
+def preflight(a, s3, bucket: str, inputs: list[str], caches: list[str], prior, command: str, private_job: bool) -> list[str]:
+    """`runs launch --check`: every check a launch makes, with nothing written; prints the plan and the problems."""
+    def in_bucket(rel):
+        r = s3.list_objects_v2(Bucket=bucket, Prefix=f"data/{rel.strip('/')}", MaxKeys=2)
+        keys = [o["Key"] for o in r.get("Contents", [])]
+        return f"data/{rel.strip('/')}" in keys or any(k.startswith(f"data/{rel.strip('/')}/") for k in keys)
+    problems = input_problems(inputs, in_bucket, lambda rel: (DATA_ROOT / rel).exists())
+    for kind in caches:
+        if not s3.list_objects_v2(Bucket=bucket, Prefix=f"cache/{kind}/", MaxKeys=1).get("KeyCount"):
+            problems.append(f"cache {kind}: nothing in the bucket's cache/{kind}/")
+    if prior and not getattr(a, "repo", None):
+        code_from = prior.get("code_from") or f"jobs/{a.resume}/code"
+        if not s3.list_objects_v2(Bucket=bucket, Prefix=f"{code_from}/", MaxKeys=1).get("KeyCount"):
+            problems.append(f"code: {code_from}/ is missing")
+        code = f"{(prior.get('git_commit') or '?')[:7]}{' (dirty)' if prior.get('git_dirty') else ''} from {code_from}/"
+    else:
+        repo = Path(a.repo).resolve() if getattr(a, "repo", None) else REPO
+        dirty = bool(git("status", "--porcelain", repo=repo))
+        code = f"{git('rev-parse', '--short', 'HEAD', repo=repo)}{' (dirty)' if dirty else ''} from {repo}"
+    boxes = 1 if getattr(a, "shard", None) is None else a.shard[1]
+    vcpus = session().client("ec2").describe_instance_types(InstanceTypes=[f"c8g.{a.size}"])["InstanceTypes"][0][
+        "VCpuInfo"]["DefaultVCpus"]
+    market = "on-demand" if a.on_demand else "spot"
+    free = {r: free_vcpus(r)[market] for r in (a.region or JOB_REGIONS) if deployed(r)}
+    placed, queued = capacity_plan(free, vcpus, boxes)
+    print(f"plan: {boxes} box{'es' if boxes > 1 else ''} of {a.size} ({vcpus} vCPU), {market}; code {code}")
+    print(f"      command: {command}")
+    print(f"      {len(inputs)} inputs, caches {caches or 'none'}{'; PRIVATE job' if private_job else ''}")
+    print("      free " + market + " vCPUs: " + ", ".join(f"{r} {n}" for r, n in free.items()))
+    print("      start now: " + (", ".join(f"{r} {n}" for r, n in placed.items()) or "none")
+          + (f"; {queued} would queue for capacity" if queued else ""))
+    for msg in problems:
+        print(f"PROBLEM {msg}")
+    print("check: " + ("ok" if not problems else f"{len(problems)} problem{'s' if len(problems) > 1 else ''}"))
+    return problems
+
+
+def rehearse_on_dev(out: dict, job: str, minutes: float) -> None:
+    """`runs launch --rehearse`: the job, shipped as for a fleet box, run by its own supervisor on the dev box in a
+    private /scratch (box/rehearse.sh) for at most `minutes`; prints the verdict and the log's tail."""
+    bucket, iid = out["Bucket"], out["DevBoxId"]
+    s3 = session().client("s3")
+    s3.upload_file(str(HERE / "box" / "rehearse.sh"), bucket, f"jobs/{job}/rehearse.sh")
+    dev_ready(session().client("ec2"), iid)
+    print(f"{job}: rehearsing on the dev box for up to {minutes:g} min", flush=True)
+    sh = f"/tmp/rehearse-{job}.sh"
+    try:
+        dev_run(iid, f"s5cmd --log error cp 's3://{bucket}/jobs/{job}/rehearse.sh' {sh} && sudo bash {sh} {bucket} {job}",
+                cwd=None, quiet=True)
+    except SystemExit:
+        pass         # the verdict below says what happened
+    st = get_status(s3, bucket, job)
+    print((st.get("log_tail") or st.get("error") or "")[-6000:])
+    verdict = st.get("state", "unknown")
+    print(f"{job}: {verdict}" + (f" at stage {st.get('stage_failed')}" if st.get("stage_failed") else "")
+          + f" after {st.get('wall_s', '?')} s of command")
+    if verdict != "rehearsal-ok":
+        sys.exit(1)
 
 
 def try_regions(a, job: str) -> tuple[list[str], str | None, list[str]]:
@@ -990,6 +1106,13 @@ def main(argv=None) -> None:
                     "(1..n) and DOPPLERTRACK_SHARDS=n, as jobs <topic>-s<k>of<n>")
     la.add_argument("--case", action="append", default=[], help="a bench case whose inputs the box needs")
     la.add_argument("--input", action="append", default=[], help="a file or folder under the data root, not runs/")
+    la.add_argument("--check", action="store_true", help="preflight: resolve and check every input, the code and "
+                    "the capacity, print the plan, and launch nothing")
+    la.add_argument("--rehearse", action="store_true", help="run the job on the dev box in a fleet box's layout for "
+                    "--rehearse-minutes, then stop it: a smoke run before the real launch (with --resume JOB: replay "
+                    "that job's code, inputs and command)")
+    la.add_argument("--rehearse-minutes", type=float, default=3, metavar="MIN", help="how long a rehearsal runs (default: 3)")
+    la.add_argument("--rehearse-shard", type=int, metavar="K", help="with --shards, the shard to rehearse (default: 1)")
     la.add_argument("--private", action="store_true", help="treat the job as private (its run folder under "
                     "private/runs/, its cache apart) even without a private input")
     la.add_argument("--input-run", action="append", default=[], metavar="runs/FOLDER", help="a run folder the job "

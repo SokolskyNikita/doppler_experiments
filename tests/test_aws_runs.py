@@ -362,3 +362,37 @@ def test_the_owner_clears_private_files_one_by_one(tmp_path, monkeypatch):
         runs.refuse_private(["private/traces/20261104-ha-pilot-2/area.log"], "--input")
     with pytest.raises(SystemExit, match="clears each file by name"):
         runs.refuse_private(["private/traces/20261104-ha-pilot-2"], "--input")
+
+
+def test_check_plans_capacity_region_by_region():
+    free = {"us-west-2": 130, "us-west-1": 64, "us-east-2": -10}
+    assert runs.capacity_plan(free, 64, 5) == ({"us-west-2": 2, "us-west-1": 1}, 2)
+    assert runs.capacity_plan(free, 16, 3) == ({"us-west-2": 3}, 0)
+    assert runs.capacity_plan({"us-west-2": 0}, 16, 2) == ({}, 2)
+
+
+def test_check_names_each_input_missing_where_the_job_would_get_it(tmp_path, monkeypatch):
+    monkeypatch.setattr(runs, "DATA_ROOT", tmp_path)
+    in_bucket = {"derived/oyster_bay/rec.npz", "derived/swfl"}.__contains__
+    here = {"runs/2026-11-04-livermore-audit"}.__contains__
+    got = runs.input_problems(["derived/oyster_bay/rec.npz", "derived/swfl", "derived/missing.npz",
+                               "runs/2026-11-04-livermore-audit", "runs/2026-11-04-gone",
+                               "private/traces/20261104-ha-pilot-2/area.npz"], in_bucket, here)
+    assert got == ["derived/missing.npz: not in the bucket's data/ (seed it: runs seed)",
+                   f"runs/2026-11-04-gone: not in {tmp_path} (it ships from here)",
+                   f"private/traces/20261104-ha-pilot-2/area.npz: not in {tmp_path} (it ships from here)"]
+
+
+def test_a_rehearsal_is_ok_to_its_cutoff_and_fails_on_an_error():
+    assert supervisor.rehearsal_verdict("timeout") == "rehearsal-ok"      # still running at the cut-off
+    assert supervisor.rehearsal_verdict("done") == "rehearsal-ok"
+    assert supervisor.rehearsal_verdict("failed") == "rehearsal-failed"
+    assert supervisor.rehearsal_verdict("interrupted") == "rehearsal-failed"
+
+
+def test_a_sharded_rehearsal_or_check_stands_in_for_one_shard(monkeypatch):
+    seen = []
+    monkeypatch.setattr(runs, "launch", lambda a: seen.append((a.topic, a.shard)) or a.topic)
+    runs.launch_all(runs.argparse.Namespace(topic="pairs", shards=8, shard=None, rehearse=True, rehearse_shard=3))
+    runs.launch_all(runs.argparse.Namespace(topic="pairs", shards=8, shard=None, check=True))
+    assert seen == [("pairs-s3of8", [3, 8]), ("pairs-s1of8", [1, 8])]

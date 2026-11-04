@@ -160,4 +160,55 @@ On the flagged 11: A-render is 50.7 % (contrast) and 26.7 % (brightness), and wa
 
 **Scripts:** `tools/experiments/2026-11-04/model_error_stage2.py`. **Outputs:** `runs/2026-11-04-model-error-stage2/stage2.csv` (one row per pass, input and objective, with `frac_curve_in_band` and any error).
 
+## Heavier models: one extra parameter
+
+**Question.** Does a pass model with one more parameter cut stage 1's model error? The candidates:
+- **drift:** a linear f0 drift, f0(1 + η·u/T), with u the emission time from CPA and T the ridge span;
+- **accel:** a constant along-track acceleration, x = v·u + ½·a·u², so v is the speed at CPA.
+
+Each is fitted as a forward model in emission time, with f0 and f0·η in closed form. Bounds: a within ±3 m/s². η within ±5 % was meant as a bound too, but η is solved in closed form, so in the fits it is unbounded; the ±5 % applies only to its profile grid.
+
+**Criterion, fixed before running.** A model enters if, on curve A:
+- it cuts the primary passes' median |R − R*| from 229 m to at most 160 m;
+- it doesn't worsen the flagged passes' median;
+- its extra parameter is identified on at least two thirds of the primary passes.
+
+Identified means: on A plus one stage-1 noise replicate, the parameter's profile Δ = (RSS(p) − RSS_min)/(σ²·κ) stays at or below 3.84 only on an interval that is finite on both sides inside the bounds. σ² is the sub-5 s noise variance, and κ the pass's (bootstrap SD / classical SD)² of R from stage 1.
+
+The combination of both models was run once, as the agreed check, after neither passed alone.
+
+Each model was first checked on its own synthetic curves: f0 180 Hz, 65 m/s, 1.5 km, with η 2 %, a 1.2 m/s² or both. Each recovered all of them exactly (RSS around 10⁻¹²). The straight case matches `straight_pass_ls` to 8 × 10⁻⁵ Hz. Those curves also show what is at stake: a straight-pass fit misses their slant range by −11 % (2 % drift), −45 % (1.2 m/s²) and +18 % (both).
+
+**Numbers**, median |error| (on curve A the true η is 0, so a fitted η there is a nuisance term absorbing kinematic error, not drift):
+
+| Curve, passes | Model | Slant range | v | f0 | τ |
+|---|---|---|---|---|---|
+| A, primary 29 | straight | 229 m (15.6 %) | 3.0 % | 0.65 % | 0.93 s |
+| | drift | 750 m (30.0 %) | 13.2 % | 0.80 % | 1.55 s |
+| | accel | 231 m (18.1 %) | 7.2 % | 1.62 % | 2.38 s |
+| | both | 576 m (32.7 %) | 29.8 % | – | 4.57 s |
+| A, flagged 11 | straight | 193 m (15.3 %) | 11.0 % | 1.54 % | 1.28 s |
+| | drift | 882 m (62.9 %) | 30.3 % | 2.27 % | 1.93 s |
+| | accel | 334 m (28.8 %) | 18.7 % | 4.83 % | 3.64 s |
+| | both | 1,569 m (79.2 %) | 48.3 % | – | 4.55 s |
+| D, primary 29 | straight | 230 m (15.0 %) | 4.8 % | 0.83 % | 1.12 s |
+| | drift | 1,084 m (48.9 %) | 18.7 % | 0.93 % | 2.03 s |
+| | accel | 299 m (14.5 %) | 8.1 % | 2.46 % | 3.19 s |
+| | both | 1,136 m (48.6 %) | 27.3 % | – | 3.36 s |
+
+- **Better fits, worse slant range.** The heavier models fit the curve shape better: RSS against the straight fit's is 0.90 (drift), 0.83 (accel) and 0.71 (both) on A, and 0.95, 0.95 and 0.88 on D. Meanwhile slant range, speed and τ all get worse.
+- **Identifiability, drift:** 5 of 29 primary passes (1 of 11 flagged). η correlates with v and R at 0.98 and 0.95 over the bootstrap: it trades off with them.
+- **Identifiability, accel:** 16 of 29 primary passes (6 of 11 flagged), short of two thirds.
+- **The fitted acceleration isn't the aircraft's.** It is uncorrelated with the trajectories' own along-track acceleration within ±30 s of CPA (r = −0.01; median |a − a_traj| 0.22 m/s² against a median |a_traj| of 0.09).
+- **Drift read on D, the published ridge.** η̂ has a median of +3.8 % (IQR −4.5 to +10 %, partly beyond the ±5 % bound). Stage 1's half-fit differences on D imply drifts of a few tenths of a percent. So η̂ isn't measuring drift there either.
+- **Turns.** 10 of 29 primary passes and 6 of 11 flagged ones turn faster than 1°/s within ±30 s of CPA, with medians of 0.54 and 1.2°/s.
+
+**Outcome: neither model enters, nor does the combination.**
+- **Criterion 1 fails for both:** 750 m and 231 m against the 160 m target, and the combination gives 576 m.
+- **Criterion 3 fails for both:** 5 and 16 of 29 identified, against 20 needed.
+- **What the failure says.** With one more degree of freedom the fit lowers its residual by trading the new parameter against speed and distance. The information on R that the straight model had goes into explaining shape the extra parameter can't account for physically. So the model error isn't a drift or a steady acceleration.
+- **The flagged passes are mostly turns** (6 of 11 above 1°/s). That is the case for the three-parameter turn model next round: turn rate, plus the split of R into horizontal offset and height, plus the turn's sign. And for anything heavier, the criterion should be read on R, not on RSS.
+
+**Script:** `tools/experiments/2026-11-04/heavier_model.py`. **Outputs:** `runs/2026-11-04-heavier-model/` (`heavier_fits.csv`, `heavier_profiles.csv` with each profile's Δ values) and `runs/2026-11-04-heavier-model-both/`.
+
 **Scripts (stage 1):** `tools/experiments/2026-11-04/straight_pass_ls.py`, `model_error.py`, `model_error_summary.py`, `crb.py`. **Outputs:** `runs/2026-11-04-model-error-2/` (`fits.csv`, `perturbations.csv`, `halves.csv`, `noise.csv`, `summary.json`) and `runs/2026-11-04-crb-2/` (`crb.csv`, `crb_summary.json`; `runs/2026-11-04-crb/` used the invalid truncated covariance and is superseded). Weather: `raw/aux/metar/KLVK_*`, `RAOB_KOAK_*`.

@@ -16,6 +16,7 @@ Run from the repo root:  uv run python tools/experiments/2026-11-04/model_error_
 """
 import argparse
 import csv
+import json
 import os
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
@@ -86,13 +87,16 @@ def main():
     ap = argparse.ArgumentParser(); ap.add_argument("run"); ap.add_argument("--workers", type=int, default=3)
     a = ap.parse_args()
     xs = crossings()
-    print(f"{len(xs)} crossings with FR24 rows", flush=True)
-    with ProcessPoolExecutor(a.workers) as ex:
-        rows = []
-        for k, r in enumerate(ex.map(one, xs, chunksize=4)):
-            rows.append(r)
+    part = Path(a.run) / "alaska.jsonl"       # one row per finished crossing, so a stopped run resumes
+    done = {(r["flight"], r["node"]) for r in map(json.loads, open(part))} if part.exists() else set()
+    todo = [x for x in xs if (x["flight"], x["node"]) not in done]
+    print(f"{len(xs)} crossings with FR24 rows, {len(done)} done, {len(todo)} to go", flush=True)
+    with ProcessPoolExecutor(a.workers) as ex, open(part, "a") as fh:
+        for k, r in enumerate(ex.map(one, todo, chunksize=2)):
+            fh.write(json.dumps(r, default=float) + "\n"); fh.flush()
             if k % 50 == 0:
-                print(f"  {k + 1} / {len(xs)}", flush=True)
+                print(f"  {len(done) + k + 1} / {len(xs)}", flush=True)
+    rows = [json.loads(line) for line in open(part)]
     keys = list(dict.fromkeys(k for r in rows for k in r))
     with open(Path(a.run) / "alaska.csv", "w", newline="") as fh:
         w = csv.DictWriter(fh, fieldnames=keys); w.writeheader(); w.writerows(rows)

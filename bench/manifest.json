@@ -1634,6 +1634,27 @@
    "licence": null
   },
   {
+   "path": "raw/aux/metar/KLVK_2026-05-09.csv",
+   "bytes": 6042,
+   "sha256": "b700f35c054c65dd2f8a0b8a66b269f6ca099d6df29c81e687074297457872df",
+   "source": "Iowa Environmental Mesonet: ASOS/METAR and RAOB soundings",
+   "licence": null
+  },
+  {
+   "path": "raw/aux/metar/KLVK_2026-05-12.csv",
+   "bytes": 17747,
+   "sha256": "f0d2e4b5f7035c9f9056adb4b0590a6249a6449848ca43d9ffc20a5234e04cfc",
+   "source": "Iowa Environmental Mesonet: ASOS/METAR and RAOB soundings",
+   "licence": null
+  },
+  {
+   "path": "raw/aux/metar/KLVK_2026-05-16.csv",
+   "bytes": 10726,
+   "sha256": "6f398b940ec6984c191cc41eba747716efb93d643f3d55d75f671057079fbf99",
+   "source": "Iowa Environmental Mesonet: ASOS/METAR and RAOB soundings",
+   "licence": null
+  },
+  {
    "path": "raw/aux/metar/KPGD_2024-12-27.csv",
    "bytes": 23760,
    "sha256": "d1bfb5d1a99dd49a4fc77b0efff1c98d14abd85ac16c960a0ceea90b1f1e8894",
@@ -1644,6 +1665,27 @@
    "path": "raw/aux/metar/KRSW_2024-12-27.csv",
    "bytes": 19299,
    "sha256": "ab128bdf9e8298a7582bb1d6ca5e435763f714cca1ba7c65da007eba6e2fca45",
+   "source": "Iowa Environmental Mesonet: ASOS/METAR and RAOB soundings",
+   "licence": null
+  },
+  {
+   "path": "raw/aux/metar/RAOB_KOAK_2026-05-09.csv",
+   "bytes": 23188,
+   "sha256": "5387a3a9557df0a58f012ffd2016dc7fbd376c2659498e7490d3090692473b33",
+   "source": "Iowa Environmental Mesonet: ASOS/METAR and RAOB soundings",
+   "licence": null
+  },
+  {
+   "path": "raw/aux/metar/RAOB_KOAK_2026-05-12.csv",
+   "bytes": 70525,
+   "sha256": "965a7ac92bb34a3b4a87c75d850807c0a714173c21cc270eff63014a240e5d46",
+   "source": "Iowa Environmental Mesonet: ASOS/METAR and RAOB soundings",
+   "licence": null
+  },
+  {
+   "path": "raw/aux/metar/RAOB_KOAK_2026-05-16.csv",
+   "bytes": 49851,
+   "sha256": "8e0977db7ae673e230838a2a61c31de0a087ef1275034ec73961a38b87c7a585",
    "source": "Iowa Environmental Mesonet: ASOS/METAR and RAOB soundings",
    "licence": null
   },

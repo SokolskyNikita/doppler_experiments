@@ -229,7 +229,8 @@
    "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
    "blind": false,
    "date": "2026-11-04",
-   "notes": "no pass within 12 km between 17:00 and 17:20 UTC"
+   "notes": "no pass within 12 km between 17:00 and 17:20 UTC",
+   "line": null
   },
   {
    "window": "e740-e02",
@@ -237,7 +238,8 @@
    "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
    "blind": false,
    "date": "2026-11-04",
-   "notes": "no pass within 12 km between 17:00 and 17:20 UTC"
+   "notes": "no pass within 12 km between 17:00 and 17:20 UTC",
+   "line": null
   },
   {
    "window": "e740-e03",
@@ -245,7 +247,8 @@
    "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
    "blind": false,
    "date": "2026-11-04",
-   "notes": "no pass within 12 km between 17:00 and 17:20 UTC"
+   "notes": "no pass within 12 km between 17:00 and 17:20 UTC",
+   "line": null
   },
   {
    "window": "e740-e04",
@@ -253,7 +256,8 @@
    "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
    "blind": false,
    "date": "2026-11-04",
-   "notes": "no pass within 12 km between 17:00 and 17:20 UTC"
+   "notes": "no pass within 12 km between 17:00 and 17:20 UTC",
+   "line": null
   },
   {
    "window": "e740-e05",
@@ -261,7 +265,8 @@
    "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
    "blind": false,
    "date": "2026-11-04",
-   "notes": "no pass within 12 km between 17:00 and 17:20 UTC"
+   "notes": "no pass within 12 km between 17:00 and 17:20 UTC",
+   "line": null
   },
   {
    "window": "e740-e06",
@@ -269,7 +274,8 @@
    "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
    "blind": false,
    "date": "2026-11-04",
-   "notes": "no pass within 12 km between 17:00 and 17:20 UTC"
+   "notes": "no pass within 12 km between 17:00 and 17:20 UTC",
+   "line": null
   }
  ],
  "overlays": "runs/2026-11-04-blind-labels/esid740_overlay"

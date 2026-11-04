@@ -287,3 +287,15 @@ def test_search_overrides_parse_and_refuse_the_cpa_inputs():
     assert d.params["search_overrides"] == {"tol_s": 12, "time_convention": "emission"}
     with pytest.raises(ValueError, match="CPA table"):
         runner.Draft(case, {}, "saved-fit", lambda m: None, {"spacing_m": 100})
+
+
+def test_a_recipe_can_write_into_a_folder(tmp_path, monkeypatch):
+    import hashlib
+    monkeypatch.setenv("DOPPLERTRACK_DATA", str(tmp_path))
+    body = b"cut"
+    write = "import pathlib, sys; pathlib.Path(sys.argv[1], 'box.npz').write_bytes(b'cut'); pathlib.Path(sys.argv[1], 'other.npz').write_bytes(b'x')"
+    case = {"derived": [{"path": "derived/traces/box.npz", "sha256": hashlib.sha256(body).hexdigest(),
+                         "recipe": [["python", "-c", write, "{out_dir}"]]}]}
+    assert cases.build(case, log=lambda m: None) == []
+    assert (tmp_path / "derived" / "traces" / "box.npz").read_bytes() == body
+    assert sorted(p.name for p in (tmp_path / "derived" / "traces").iterdir()) == ["box.npz"]

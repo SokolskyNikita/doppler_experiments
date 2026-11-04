@@ -283,7 +283,7 @@ The experiments run in this order. Each is judged in Tiers 1–2 against labelle
    - **Explain away.** Take detections strongest first. One whose curve mostly runs through cells an accepted detection already claims is a harmonic, a duplicate or a borrowed ridge: drop it, or rescore it on the unclaimed cells only (doppler-locate). This is also what stops a candidate flight from borrowing another source's ridge (unheard).
    - **Controls per event.** Besides the linear chirp below, compare each curve's support with the same curve shifted in frequency and with the curve reversed in time (echotrace). These are diagnostics first; they get statistical meaning only from the threshold curve.
    - Mask the unreliable stretches of a track instead of cropping to a fixed width ([rewindow](docs/experiments/2026-11-03-rewindow.md)).
-   - Set `detect`'s threshold here, as a curve of detections against false alarms per audio hour on the development background recordings, the Essex ones (E4, E5). One input to that curve: the ideal-curve score against the best linear chirp on the same support, since smooth clutter beats a stationary-tone null (echolocate). Short genuine passes look linear too, so it is a feature, never a gate.
+   - Set `detect`'s threshold here, as a curve of detections against false alarms per audio hour on the development background recordings: the Essex ones, AeroSonicDB's six continuous hours with aircraft marked every 5 s, and DataSEC's helicopter, machinery and vehicle clips as confusers (E4, E5). AeroSonicDB's 467 turbofan clips against its 150 propeller clips are the labelled set for E5, jets scoring like props. One input to that curve: the ideal-curve score against the best linear chirp on the same support, since smooth clutter beats a stationary-tone null (echolocate). Short genuine passes look linear too, so it is a feature, never a gate.
 7. **Joint hypotheses instead of gates** (M; E1). Replace the independent speed, distance, time and f0 gates with each event's own hypotheses: its best few local optima, each with the joint region its data supports.
    - **Why joint.** Time and f0 trade off along the curve's slope, and distance follows speed (6.1). Marginal ranges combined freely admit combinations the event never supported.
    - **Partial passes.** When the tails are faint, speed and distance are each ill-determined but k = v²/d = c·|f′|max/f0 is pinned by the steep middle. Parametrise such a hypothesis by k and a wide speed range; each candidate flight's own ground speed then gives the distance it implies, d = v²/k (audio-flyover-geolocation). Report the speed–distance correlation of every fit.
@@ -470,12 +470,13 @@ The measuring stick has to be trustworthy before it gets big: caches that can't 
    - the right day with the box moved 150 km;
    - the right day and box with one confirmed source aircraft removed and the surrounding traffic kept, for each confirmed flyover in turn, and once with both search events' flights removed. This is the substitution L2 makes likely: a wrong flight standing in for an audible one that has no ADS-B. Expected: abstain, or locate from the remaining flyovers; a confident answer from a substituted flight fails. Mask the flight's column in the CPA table rather than rebuilding it per variant;
    - stretches with no flyovers, confirmed in the spectrogram;
-   - real background recordings with other tonal sources and no prop passes: the three Essex recordings (jets) and ESID 937 (no prop within 20 km all day). These also give `detect`'s false alarms per audio hour.
+   - real background recordings with other tonal sources and no prop passes: the three Essex recordings (jets), ESID 937 (no prop within 20 km all day), and the stretches of AeroSonicDB's six soundscape hours marked as having no aircraft. These also give `detect`'s false alarms per audio hour.
 4. **Stress tests**, inspected rather than scored as plain negatives:
    - time-reversed audio. Its curves mostly rise, which turns, climbs and power changes can also produce, so it isn't a guaranteed negative;
    - incomplete flight data (an hour of traces removed);
    - a recording crossing UTC midnight: ESID 375 and 937 do;
-   - a true location within a few km of the box edge.
+   - a true location within a few km of the box edge;
+   - the three A2O soundscapes, whose published coordinates are shifted by up to about 270 m and whose aircraft are unlabelled: a coarse check of the 1 km verdict at unseen sites in other airspace, once their days' flight data is fetched and `site_traffic.py` confirms propeller passes. Never calibration or evaluation.
 5. **Independent recordings** (5.6), the only source of calibration and evaluation data.
 
 **Synthetic failure matrix.** Small cases that run in seconds as Tier 0–1 tests. Each phase adds the ones it needs.
@@ -609,7 +610,8 @@ The evaluation set is what limits M3, and collecting it takes calendar time rath
 | xeno-canto XC990819, XC990820, XC986433 | Essex, jets only | development: background negatives for `detect`'s threshold; the first two are one group |
 | Seattle (planned) | your recordings, several devices at one spot | one group per session: it tests devices, not new sites |
 | Livermore (Pathak 2026) | 40 phone recordings of one light-aircraft pass each, May 2026, one site: WAV, the published frequency track, the ADS-B track as KML and a results table. The microphone position is not published; it can be reconstructed from the published offsets | development for Phase 2's fits and tracks, as one group. Single passes, so not a `locate` case, and three other projects have tuned on it ([related projects](docs/reference/related-projects.md)), so never evaluation. Its provenance audit (microphone position, WAV start times against the CSV's UTC stamps) comes first |
-| AeroSonicDB, DataSED, DataSEC, A2O | labelled aircraft and environmental clips and some continuous hours, with approximate or no positions | detection only (E4, E5): background rates and confusers such as jets, helicopters and machinery. Not location truth |
+| AeroSonicDB, DataSED, DataSEC | labelled aircraft and environmental clips, and AeroSonicDB's six continuous hours with aircraft marked every 5 s; positions deliberately shifted or absent | detection only, in Phase 2 item 6: the false-alarm curve and the jet confusers (E4, E5). Not location truth |
+| A2O, three soundscapes | Australian Acoustic Observatory recordings, about 6 h, with coordinates shifted by up to about 270 m and no aircraft labels | a 5.1 stress test of the 1 km verdict at unseen sites, once their flight data is fetched. Never calibration or evaluation |
 
 ESID 375 and 937 both run past UTC midnight into 2024-04-08, so they also test the midnight case, and they need that day's flight data.
 

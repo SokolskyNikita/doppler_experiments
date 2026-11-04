@@ -1,6 +1,7 @@
 """Extract a Doppler event from a spectrogram window and fit the ideal model."""
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass, asdict
 
 import numpy as np
@@ -112,8 +113,10 @@ def grid_search(sp: Spectrogram, t_start, t_end, f_lo, f_hi, c, harmonics=1,
         sp = Spectrogram(sp.t, sp.f, maximum_filter1d(sp.S, fat_bins, axis=0))
     v_grid = np.arange(30, 170, 10.0) if v_grid is None else v_grid
     d_grid = np.geomspace(300, 9000, 14) if d_grid is None else d_grid
-    f0s = np.arange(*(f0_range or (f_lo * 1.15, f_hi * 0.85)), f0_step)
-    t0s = np.arange(*(t0_range or (t_start, t_end)), t0_step)
+    f0_min, f0_max = f0_range or (f_lo * 1.15, f_hi * 0.85)
+    t0_min, t0_max = t0_range or (t_start, t_end)
+    f0s = np.arange(f0_min, f0_max, f0_step)
+    t0s = np.arange(t0_min, t0_max, t0_step)
     tq = np.linspace(t_start, t_end, n_curve)
     bs = np.full(len(t0s), -np.inf); bp = np.zeros((len(t0s), 3))
     for v in v_grid:
@@ -194,19 +197,64 @@ def fit_event(sp: Spectrogram, t_start: float, t_end: float, f_lo: float, f_hi: 
                     f_pre=float(f0 * c / (c - v)), f_post=float(f0 * c / (c + v)))
 
 
-def _scan_window(args):
-    """Up to k local maxima (separated by min_sep seconds) of the coarse search in one window."""
-    win, t, t1, f_lo, f_hi, c, harmonics, v_grid, d_grid, f0_step, t0_step, n_curve, k, min_sep = args
-    if not np.any(win.S > 0):
+@dataclass(frozen=True)
+class ScanRequest:
+    """One detector window, as sent to a worker process. Times are recording seconds."""
+    window: Spectrogram         # whitened crop, padded 30 s on each side of the scored span
+    window_start_s: float       # the scored span and the searched emission-CPA times
+    window_end_s: float
+    f_lo_hz: float
+    f_hi_hz: float
+    sound_speed_mps: float
+    harmonics: int
+    speed_grid_mps: np.ndarray
+    slant_grid_m: np.ndarray
+    f0_step_hz: float
+    t0_step_s: float
+    n_curve: int
+    per_window: int             # local maxima kept from this window
+    min_sep_s: float            # between those maxima's emission-CPA times
+
+
+@dataclass(frozen=True)
+class Candidate:
+    """A coarse grid-search maximum, before refinement by fit_event."""
+    score: float
+    f0_hz: float
+    speed_mps: float
+    slant_m: float
+    t_cpa_emit_s: float         # emission-time CPA in recording seconds, not the heard CPA time
+
+
+def _scan_window(req: ScanRequest) -> list[Candidate]:
+    """Up to req.per_window local maxima (separated by req.min_sep_s seconds) of the coarse search in one window."""
+    if not np.any(req.window.S > 0):
         return []
-    t0s, bs, bp = grid_search(win, t, t1, f_lo, f_hi, c, harmonics, v_grid, d_grid,
-                              f0_step=f0_step, t0_step=t0_step, n_curve=n_curve, per_t0=True)
-    out = []
+    t0s, bs, bp = grid_search(req.window, req.window_start_s, req.window_end_s, req.f_lo_hz, req.f_hi_hz,
+                              req.sound_speed_mps, req.harmonics, req.speed_grid_mps, req.slant_grid_m,
+                              f0_step=req.f0_step_hz, t0_step=req.t0_step_s, n_curve=req.n_curve, per_t0=True)
+    out: list[Candidate] = []
     order = np.argsort(-bs)
     for i in order:
-        if all(abs(t0s[i] - o[4]) >= min_sep for o in out):
-            out.append((float(bs[i]), float(bp[i, 0]), float(bp[i, 1]), float(bp[i, 2]), float(t0s[i])))
-        if len(out) >= k:
+        if all(abs(t0s[i] - o.t_cpa_emit_s) >= req.min_sep_s for o in out):
+            out.append(Candidate(float(bs[i]), float(bp[i, 0]), float(bp[i, 1]), float(bp[i, 2]), float(t0s[i])))
+        if len(out) >= req.per_window:
+            break
+    return out
+
+
+def merge_candidates(cands: list[Candidate], min_sep_s: float, keep: int) -> list[Candidate]:
+    """The best `keep` candidates whose emission-CPA times are at least min_sep_s apart.
+
+    Candidates are ranked by (score, f0, speed, slant range, emission CPA time), all descending, so
+    equal scores are broken by the higher fundamental, then speed, and so on; a kept candidate
+    suppresses every lower-ranked one within min_sep_s of it."""
+    ranked = sorted(cands, key=lambda cnd: (cnd.score, cnd.f0_hz, cnd.speed_mps, cnd.slant_m, cnd.t_cpa_emit_s), reverse=True)
+    out: list[Candidate] = []
+    for cnd in ranked:
+        if all(abs(cnd.t_cpa_emit_s - k.t_cpa_emit_s) >= min_sep_s for k in out):
+            out.append(cnd)
+        if len(out) >= keep:
             break
     return out
 
@@ -240,11 +288,15 @@ def detect_events(sp: Spectrogram, f_lo: float, f_hi: float, c: float | None = N
         for t in starts:
             t1 = min(t + window_s, sp.t[-1])
             win = local_whiten(sp.crop(t - 30, t1 + 30, max(f_lo - pad, sp.f[0]), min(f_hi * harmonics + pad, sp.f[-1])))
-            yield (win, t, t1, f_lo, f_hi, c, harmonics, v_grid, d_grid, f0_step, t0_step, n_curve, per_window, min_sep_s)
+            yield ScanRequest(window=win, window_start_s=t, window_end_s=t1, f_lo_hz=f_lo, f_hi_hz=f_hi,
+                              sound_speed_mps=c, harmonics=harmonics, speed_grid_mps=v_grid, slant_grid_m=d_grid,
+                              f0_step_hz=f0_step, t0_step_s=t0_step, n_curve=n_curve, per_window=per_window,
+                              min_sep_s=min_sep_s)
 
-    cands = []
+    cands: list[Candidate] = []
+    ex = None
     if workers == 1:
-        it = map(_scan_window, jobs())
+        it: Iterator[list[Candidate]] = map(_scan_window, jobs())
     else:
         ex = ProcessPoolExecutor(workers)
         it = ex.map(_scan_window, jobs(), chunksize=2)
@@ -252,27 +304,22 @@ def detect_events(sp: Spectrogram, f_lo: float, f_hi: float, c: float | None = N
         cands.extend(r)
         if progress:
             progress(k + 1, len(starts))
-    if workers != 1:
+    if ex is not None:
         ex.shutdown()
-    cands.sort(reverse=True)
-    keep = []
-    for cnd in cands:
-        if all(abs(cnd[4] - k[4]) >= min_sep_s for k in keep):
-            keep.append(cnd)
-        if len(keep) >= (2 * top if refine else top):
-            break
+    keep = merge_candidates(cands, min_sep_s, 2 * top if refine else top)
     out = []
-    for score, f0, v, d, t0 in keep:
+    for cnd in keep:
+        f0, v, d, t0 = cnd.f0_hz, cnd.speed_mps, cnd.slant_m, cnd.t_cpa_emit_s
         if refine:
             ef = fit_event(sp, max(t0 - 120, sp.t[0]), min(t0 + 120, sp.t[-1]), f_lo, f_hi, c=c,
                            harmonics=harmonics, init=(f0, v, d, t0), v_bounds=(35.0, 200.0), d_bounds=(200.0, 15000.0))
         else:
             ef = EventFit(t_cpa=t0 + d / c, t_cpa_emit=t0, f0=f0, v=v, d=d, t_start=t0 - 120, t_end=t0 + 120,
-                          score=score, f_pre=f0 * c / (c - v), f_post=f0 * c / (c + v))
+                          score=cnd.score, f_pre=f0 * c / (c - v), f_post=f0 * c / (c + v))
         if np.isfinite(ef.score) and ef.score > min_score:
             out.append(ef)
     out.sort(key=lambda e: -e.score)
-    final = []
+    final: list[EventFit] = []
     for e in out:          # refined fits can converge onto the same event; keep the best
         if all(abs(e.t_cpa - f.t_cpa) >= min_sep_s for f in final):
             final.append(e)

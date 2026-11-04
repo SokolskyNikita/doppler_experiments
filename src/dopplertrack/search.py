@@ -15,7 +15,7 @@ from scipy.spatial import cKDTree
 
 from .adsb import Trace
 from .doppler import speed_of_sound
-from .geo import lla_to_enu, enu_to_lla
+from .geo import lla_to_enu
 
 
 @dataclass

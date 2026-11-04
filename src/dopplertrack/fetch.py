@@ -6,7 +6,7 @@ import io
 import re
 import tarfile
 import time
-from typing import Callable, Iterable, Iterator
+from typing import Callable, Iterator
 
 import requests
 
@@ -49,7 +49,7 @@ class _ChainedHTTP(io.RawIOBase):
                     self.resp = r.iter_content(self.chunk)
                     return
                 r.close()
-            except (requests.RequestException, IOError) as e:
+            except (requests.RequestException, IOError):
                 if k == self.retries - 1:
                     raise
             time.sleep(min(60, 2 ** k))

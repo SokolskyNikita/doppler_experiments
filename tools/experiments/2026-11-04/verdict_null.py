@@ -12,6 +12,8 @@ verdict is "located" when exactly one mode clears gamma, else "ambiguous" with c
 below_null_threshold. verdicts.json is written and hashed before any label is read; reveal.json comes after.
 Matched-flight count m is 2 throughout this arm (no extras), so kappa doesn't enter yet.
 
+gumbel(x, seed) fits one m's null maxima; its keys follow result schema v3's verdict.null.
+
 usage, from the repo root:
   verdict_null.py [RUN] [--shard K/N] [--resume DIR ...] [--merge] [--inputs] [--workers N]"""
 import argparse
@@ -97,10 +99,12 @@ def gumbel(x: np.ndarray, seed: int) -> dict:
     boot = [stats.gumbel_r.ppf(1 - P_FA, *stats.gumbel_r.fit(rng.choice(x, len(x)))) for _ in range(BOOT)]
     xs = np.sort(x)
     pp = [[float((i + 0.5) / len(xs)), float(stats.gumbel_r.cdf(v, loc, scale))] for i, v in enumerate(xs)]
-    return {"n": len(x), "loc": float(loc), "scale": float(scale), "gamma": g,
+    # names as in result schema v3's verdict.null (B, 2026-11-04), for one m
+    return {"mu": float(loc), "beta": float(scale), "gamma": g,
             "gamma_ci95": [float(np.percentile(boot, 2.5)), float(np.percentile(boot, 97.5))],
-            "ks": float(stats.kstest(x, "gumbel_r", (loc, scale)).statistic),
-            "exceed_empirical": int((x > g).sum()), "max": float(x.max()), "pp": pp}
+            "bootstrap": {"n": BOOT, "seed": seed},
+            "fit_check": {"ks": float(stats.kstest(x, "gumbel_r", (loc, scale)).statistic), "n": len(x)},
+            "exceedances_at_gamma": int((x > g).sum()), "bound_3_over_B": 3.0 / len(x), "max": float(x.max()), "pp": pp}
 
 
 def merge(run: Path, folders: dict, meta: dict):
@@ -120,7 +124,8 @@ def merge(run: Path, folders: dict, meta: dict):
         above = [m for m in ms if m["score"] > fit["gamma"]]
         outcome = "located" if len(above) == 1 else "ambiguous"
         codes = [] if outcome == "located" else ["competing_mode" if above else "below_null_threshold"]
-        verdicts[c] = {"null": fit, "null_days_without_candidates": len(tops[c]) - len(x), "modes": ms[:5],
+        fit["draws"], fit["draws_without_candidate"] = len(tops[c]), len(tops[c]) - len(x)
+        verdicts[c] = {"null": fit, "modes": ms[:5],
                        "modes_above_gamma": len(above), "outcome": outcome, "reason_codes": codes,
                        "located_at": above[0] if outcome == "located" else None}
     data = (json.dumps(verdicts, indent=1, sort_keys=True) + "\n").encode()

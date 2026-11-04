@@ -116,7 +116,7 @@ def main():
     a = ap.parse_args()
     if a.inputs:
         doc = bench_inputs.run_inputs([EAGLE, "oyster-bay"], "saved-fit")
-        shards.print_inputs(doc["cases"], doc["inputs"] + [FULL, "derived/oyster_bay/rec.npz"], doc["cpa_tables"],
+        shards.print_inputs(doc["cases"], list(dict.fromkeys(doc["inputs"] + [FULL, "derived/oyster_bay/rec.npz"])), doc["cpa_tables"],
                             tuple(doc["cache_kinds"]))
         return
     params = dict(units=UNITS, v_grid=[100, 170, 2.5], d_grid=[3000, 8000, 125], ob_ev2=OB_EV2, eagle_detect=dict(band=[60, 300], top=40))

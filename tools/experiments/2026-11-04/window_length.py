@@ -21,6 +21,8 @@ Criterion: a variant is kept if, for each objective and each of f0, v and d, its
 over the 29 primary passes is at most 1.05x the 2.048 s window's, and the same for v and d on the
 development events; the paired sign test is reported.
 
+Passes and events run in parallel, one per process (JOBS, default 10).
+
 usage: window_length.py RUN [livermore|dev|all]"""
 import csv
 import json
@@ -124,38 +126,57 @@ def speed_at_cpa(p, site):
     return float(np.linalg.norm(P.derivative()(te[k])))
 
 
+_LIV = {}
+
+
+def _liv_init():
+    _LIV["passes"] = {p["id"]: p for p in LA.load_passes()}
+    _LIV["rows"] = {r["id"]: r for r in csv.DictReader(open(AUDIT / "passes.csv"))}
+    _LIV["sites"] = {s["name"]: s for s in json.load(open(AUDIT / "sites.json"))["sites"]}
+
+
+def livermore_one(pid):
+    r, p = _LIV["rows"][pid], _LIV["passes"][pid]
+    site = _LIV["sites"][r["site"]]
+    th, g, _, _, _ = LA.heard_curve(p, site, C)
+    shift, f0, start = float(r["shift_15C"]), float(r["f0_15C"]), float(r["start"])
+    fref = lambda t: f0 * np.interp(start + np.asarray(t) - shift, th, g, left=np.nan, right=np.nan)
+    span = (p["ridge"][0, 0] - start, p["ridge"][-1, 0] - start)
+    fs = fref(np.arange(*span, HOP))
+    band = (0.85 * np.nanmin(fs), 1.15 * np.nanmax(fs))
+    truth = dict(f0=f0, v=speed_at_cpa(p, site), d=float(r["slant_m_15C"]))
+
+    def ref_rate(t):
+        f = fref(t)
+        return np.gradient(np.where(np.isfinite(f), f, np.nanmean(f)), t)
+
+    x, _ = audio.load_audio(p["dir"] / "audio.wav", SR)
+    t0 = time.perf_counter()
+    fits, info = fit_all(x, *span, *band, ref_rate=ref_rate)
+    res = dict(id=pid, good=float(r["fit_rms_hz_15C"]) / f0 * 100 < GOOD_RMS, truth=truth, band=band, span=span,
+               seconds=time.perf_counter() - t0, info=info,
+               err={v: {o: rel(e, truth) for o, e in fo.items()} for v, fo in fits.items()},
+               fits={v: {o: e.to_dict() for o, e in fo.items()} for v, fo in fits.items()})
+    e = res["err"]
+    print(pid, "good" if res["good"] else "flag", " ".join(
+        f"{v}:{e[v]['contrast']['d']:.3f}/{e[v]['brightness']['d']:.3f}" for v in ("w8192", "w4096", "w2048", "two")),
+        f"{res['seconds']:.1f}s", flush=True)
+    return res
+
+
+def _pool(fn, items, init=None):
+    """One item per worker process, BLAS pinned to one thread (PLAN Phase 1 item 1's rule)."""
+    import os
+    from concurrent.futures import ProcessPoolExecutor
+    for k in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "VECLIB_MAXIMUM_THREADS", "MKL_NUM_THREADS"):
+        os.environ[k] = "1"
+    with ProcessPoolExecutor(int(os.environ.get("JOBS", "10")), initializer=init) as ex:
+        return list(ex.map(fn, items))
+
+
 def livermore(run):
-    passes = {p["id"]: p for p in LA.load_passes()}
-    rows = {r["id"]: r for r in csv.DictReader(open(AUDIT / "passes.csv"))}
-    sites = {s["name"]: s for s in json.load(open(AUDIT / "sites.json"))["sites"]}
-    out = []
-    for pid in sorted(rows):
-        r, p = rows[pid], passes[pid]
-        site = sites[r["site"]]
-        th, g, _, _, _ = LA.heard_curve(p, site, C)
-        shift, f0, start = float(r["shift_15C"]), float(r["f0_15C"]), float(r["start"])
-        fref = lambda t: f0 * np.interp(start + np.asarray(t) - shift, th, g, left=np.nan, right=np.nan)
-        span = (p["ridge"][0, 0] - start, p["ridge"][-1, 0] - start)
-        fs = fref(np.arange(*span, HOP))
-        band = (0.85 * np.nanmin(fs), 1.15 * np.nanmax(fs))
-        truth = dict(f0=f0, v=speed_at_cpa(p, site), d=float(r["slant_m_15C"]))
-
-        def ref_rate(t):
-            f = fref(t)
-            return np.gradient(np.where(np.isfinite(f), f, np.nanmean(f)), t)
-
-        x, _ = audio.load_audio(p["dir"] / "audio.wav", SR)
-        t0 = time.perf_counter()
-        fits, info = fit_all(x, *span, *band, ref_rate=ref_rate)
-        res = dict(id=pid, good=float(r["fit_rms_hz_15C"]) / f0 * 100 < GOOD_RMS, truth=truth, band=band, span=span,
-                   seconds=time.perf_counter() - t0, info=info,
-                   err={v: {o: rel(e, truth) for o, e in fo.items()} for v, fo in fits.items()},
-                   fits={v: {o: e.to_dict() for o, e in fo.items()} for v, fo in fits.items()})
-        out.append(res)
-        e = res["err"]
-        print(pid, "good" if res["good"] else "flag", " ".join(
-            f"{v}:{e[v]['contrast']['d']:.3f}/{e[v]['brightness']['d']:.3f}" for v in ("w8192", "w4096", "w2048", "two")),
-            f"{res['seconds']:.1f}s", flush=True)
+    pids = sorted(r["id"] for r in csv.DictReader(open(AUDIT / "passes.csv")))
+    out = _pool(livermore_one, pids, _liv_init)
     (run / "window_livermore.json").write_text(json.dumps(out, indent=1, default=float))
     return out
 
@@ -199,22 +220,25 @@ DEV = [   # (name, source, (t_start, t_end), (f_lo, f_hi), harmonics, traces, tr
 ]
 
 
+def dev_one(ev):
+    name, src, (a, b), (lo, hi), harm, trp, (lat, lon), icao, heard, clock = ev
+    truth = cpa_truth(DATA / trp, lat, lon, icao, heard, unix(clock))
+    pad = 400.0
+    a0 = max(a - pad, 0.0)
+    x = decode(DATA / src, a0, b - a0 + pad)
+    # the segment's sample 0 is recording second a0: shift the window instead of the spectrogram
+    fits, info = fit_all(x, a - a0, b - a0, lo, hi, harmonics=harm)
+    res = dict(event=name, truth=truth, info=info,
+               err={v: {o: {k: abs(getattr(e, k) - truth[k]) / truth[k] for k in ("v", "d")} for o, e in fo.items()}
+                    for v, fo in fits.items()},
+               fits={v: {o: e.to_dict() for o, e in fo.items()} for v, fo in fits.items()})
+    print(name, truth, {v: {o: {k: round(x, 3) for k, x in d.items()} for o, d in res["err"][v].items()}
+                        for v in ("w8192", "w4096", "w2048", "two")}, flush=True)
+    return res
+
+
 def dev(run):
-    out = []
-    for name, src, (a, b), (lo, hi), harm, trp, (lat, lon), icao, heard, clock in DEV:
-        truth = cpa_truth(DATA / trp, lat, lon, icao, heard, unix(clock))
-        pad = 400.0
-        a0 = max(a - pad, 0.0)
-        x = decode(DATA / src, a0, b - a0 + pad)
-        # the segment's sample 0 is recording second a0: shift the window instead of the spectrogram
-        fits, info = fit_all(x, a - a0, b - a0, lo, hi, harmonics=harm)
-        res = dict(event=name, truth=truth, info=info,
-                   err={v: {o: {k: abs(getattr(e, k) - truth[k]) / truth[k] for k in ("v", "d")} for o, e in fo.items()}
-                        for v, fo in fits.items()},
-                   fits={v: {o: e.to_dict() for o, e in fo.items()} for v, fo in fits.items()})
-        out.append(res)
-        print(name, truth, {v: {o: {k: round(x, 3) for k, x in d.items()} for o, d in res["err"][v].items()}
-                            for v in ("w8192", "w4096", "w2048", "two")}, flush=True)
+    out = _pool(dev_one, DEV)
     (run / "window_dev.json").write_text(json.dumps(out, indent=1, default=float))
     return out
 

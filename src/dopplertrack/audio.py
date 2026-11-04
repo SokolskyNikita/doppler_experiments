@@ -80,12 +80,18 @@ class Spectrogram:
     fit to the flat tails alone, its sweep lost in a gap, look as confident as a full curve.
 
     `start_utc`, when known, is the UNIX time of audio second 0, so frame i was heard at
-    start_utc + t[i]."""
+    start_utc + t[i].
+
+    `whitening` names how S was normalised: "time" (the default) is dB above each bin's median over
+    time (compute_spectrogram's running median, and local_whiten's over an event window); "frequency"
+    is dB above each frame's median across frequency within +-bg_hz (Ramseier & Pieren 2024 eq. 11),
+    which keeps a tone that sits in one bin for long, and local_whiten then leaves it as it is."""
     t: np.ndarray      # (T,) centre time of each frame, s
     f: np.ndarray      # (F,) bin frequencies, Hz
     S: np.ndarray      # (F, T) whitened power, dB above per-bin median
     valid: np.ndarray = None           # type: ignore[assignment]  # (T,) bool, True where the frame carries evidence; None -> all valid
     start_utc: float | None = None     # UNIX time of audio second 0, if known
+    whitening: str = "time"            # "time" or "frequency"; see above
 
     def __post_init__(self):
         self.valid = (np.ones(len(self.t), bool) if self.valid is None
@@ -135,7 +141,7 @@ class Spectrogram:
         fm = np.ones_like(self.f, bool)
         if f0 is not None: fm &= self.f >= f0
         if f1 is not None: fm &= self.f <= f1
-        return Spectrogram(self.t[m], self.f[fm], self.S[np.ix_(fm, m)], self.valid[m], self.start_utc)
+        return Spectrogram(self.t[m], self.f[fm], self.S[np.ix_(fm, m)], self.valid[m], self.start_utc, self.whitening)
 
     def save(self, path):
         """Write an .npz (the suffix is added if missing, as numpy does), atomically: readers see
@@ -144,6 +150,8 @@ class Spectrogram:
         if path.suffix != ".npz":
             path = path.with_name(path.name + ".npz")
         extra = {} if self.start_utc is None else {"start_utc": np.float64(self.start_utc)}
+        if self.whitening != "time":
+            extra["whitening"] = np.array(self.whitening)
         tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp.npz")
         try:
             np.savez_compressed(tmp, t=self.t, f=self.f, S=self.S.astype(np.float32), valid=self.valid, **extra)
@@ -156,7 +164,8 @@ class Spectrogram:
         z = np.load(path)
         valid = z["valid"] if "valid" in z.files else np.ones(len(z["t"]), bool)
         start = float(z["start_utc"]) if "start_utc" in z.files else None
-        return cls(z["t"], z["f"], z["S"], valid, start)
+        whitening = str(z["whitening"]) if "whitening" in z.files else "time"
+        return cls(z["t"], z["f"], z["S"], valid, start, whitening)
 
 
 def _whiten(L: np.ndarray, valid: np.ndarray | None, hop_s: float, whiten_window_s: float | None) -> np.ndarray:
@@ -198,6 +207,19 @@ def _whiten(L: np.ndarray, valid: np.ndarray | None, hop_s: float, whiten_window
     return out
 
 
+WHITENINGS = ("time", "frequency")
+
+
+def _whiten_frequency(L: np.ndarray, df: float, bg_hz: float, chunk: int = 4096) -> np.ndarray:
+    """Each frame's dB less its running median across frequency within +-bg_hz, in place, a chunk of
+    frames at a time."""
+    from scipy.ndimage import median_filter
+    size = 2 * int(round(bg_hz / df)) + 1
+    for k in range(0, L.shape[1], chunk):
+        L[:, k:k + chunk] -= median_filter(L[:, k:k + chunk], size=(size, 1), mode="nearest")
+    return L
+
+
 def _band(sr, nfft, fmin, fmax):
     f = np.fft.rfftfreq(nfft, 1 / sr)
     band = (f >= fmin) & (f <= fmax)
@@ -213,7 +235,7 @@ def _stft_db(seg, sr, nperseg, hop, band, nfft=None):
 def compute_spectrogram(x: np.ndarray, sr: int, nperseg: int = 8192, hop_s: float = 0.25,
                         fmin: float = 40.0, fmax: float = 450.0,
                         whiten_window_s: float | None = 600.0, chunk_frames: int = 16384,
-                        nfft: int | None = None) -> Spectrogram:
+                        nfft: int | None = None, whiten: str = "time", bg_hz: float = 10.0) -> Spectrogram:
     """High-resolution STFT in the low band, converted to dB and whitened.
 
     Whitening subtracts, per frequency bin, the running median over
@@ -223,7 +245,12 @@ def compute_spectrogram(x: np.ndarray, sr: int, nperseg: int = 8192, hop_s: floa
     The Hann window is `nperseg` samples long and is zero-padded to `nfft` (default nperseg), so
     windows of different lengths can share one frequency grid; padding only interpolates the
     spectrum, and the resolution stays sr / nperseg.
+
+    whiten="frequency" replaces the median over time with each frame's median across frequency
+    within +-bg_hz (Spectrogram.whitening); whiten_window_s is then unused.
     """
+    if whiten not in WHITENINGS:
+        raise ValueError(f"whiten must be one of {WHITENINGS}")
     hop = max(1, int(round(hop_s * sr)))
     # frames k = 0 .. K-1 cover samples [k*hop, k*hop + nperseg); computed in chunks so a
     # many-hour recording never holds its full complex STFT in memory
@@ -235,6 +262,8 @@ def compute_spectrogram(x: np.ndarray, sr: int, nperseg: int = 8192, hop_s: floa
         parts.append(_stft_db(x[k0 * hop:(k1 - 1) * hop + nperseg], sr, nperseg, hop, band, nfft))
     L = np.concatenate(parts, axis=1)
     t = (nperseg / 2 + np.arange(K) * hop) / sr
+    if whiten == "frequency":
+        return Spectrogram(t, f, _whiten_frequency(L, float(f[1] - f[0]), bg_hz), whitening="frequency")
     L = _whiten(L, None, hop / sr, whiten_window_s)
     return Spectrogram(t, f, L.astype(np.float32))
 
@@ -311,7 +340,7 @@ def spectrogram_from_files(files, sr: int = 4000, start_utc: float | None = None
 def spectrogram_from_blocks(blocks, sr: int, start_utc: float | None = None, nperseg: int = 8192,
                             hop_s: float = 0.25, fmin: float = 40.0, fmax: float = 450.0,
                             whiten_window_s: float | None = 600.0, chunk_frames: int = 16384,
-                            nfft: int | None = None) -> Spectrogram:
+                            nfft: int | None = None, whiten: str = "time", bg_hz: float = 10.0) -> Spectrogram:
     """compute_spectrogram over a sample stream given as (samples, is_audio) blocks in timeline
     order; a block with is_audio=False is a gap (its samples are ignored and every frame whose
     window overlaps it is invalid). Frames are computed in the same chunks as
@@ -349,9 +378,12 @@ def spectrogram_from_blocks(blocks, sr: int, start_utc: float | None = None, npe
     L = np.concatenate(parts, axis=1)
     valid = np.concatenate(vparts)
     t = (nperseg / 2 + np.arange(L.shape[1]) * hop) / sr
-    L = _whiten(L, valid, hop / sr, whiten_window_s)
+    if whiten == "frequency":
+        L = _whiten_frequency(L, float(f[1] - f[0]), bg_hz)
+    else:
+        L = _whiten(L, valid, hop / sr, whiten_window_s)
     L[:, ~valid] = 0.0
-    return Spectrogram(t, f, L.astype(np.float32, copy=False), valid, start_utc)
+    return Spectrogram(t, f, L.astype(np.float32, copy=False), valid, start_utc, whiten)
 
 
 def spectrogram_from_audiomoth(directory, snap_s: float = 1.0, **kw) -> Spectrogram:

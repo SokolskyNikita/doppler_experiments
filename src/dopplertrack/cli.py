@@ -63,6 +63,9 @@ def main(argv=None):
                                  "timeline with the holes between files marked invalid")
     s.add_argument("out"); s.add_argument("--hop", type=float, default=0.25)
     s.add_argument("--fmin", type=float, default=40); s.add_argument("--fmax", type=float, default=450)
+    s.add_argument("--whiten", choices=("time", "frequency"), default="time",
+                   help="time: dB above each bin's running median (the default); frequency: dB above each frame's "
+                        "median across frequency within +-10 Hz, which keeps stationary tones")
 
     f = sub.add_parser("fit", help="fit an ideal Doppler curve inside a time/frequency window")
     f.add_argument("spec"); f.add_argument("--window", nargs=2, type=float, required=True, metavar=("T0", "T1"))
@@ -167,10 +170,14 @@ def main(argv=None):
         ap.error("--top must be positive and --min-score must be finite")
     if a.cmd == "spectrogram":
         from pathlib import Path
-        from .audio import spectrogram_from_audiomoth
+        from .audio import compute_spectrogram, load_audio, spectrogram_from_audiomoth
         try:
             if Path(a.audio).is_dir():
-                sp = spectrogram_from_audiomoth(a.audio, hop_s=a.hop, fmin=a.fmin, fmax=a.fmax)
+                sp = spectrogram_from_audiomoth(a.audio, hop_s=a.hop, fmin=a.fmin, fmax=a.fmax, whiten=a.whiten)
+                sp.save(a.out)
+            elif a.whiten != "time":
+                x, sr = load_audio(a.audio)
+                sp = compute_spectrogram(x, sr, hop_s=a.hop, fmin=a.fmin, fmax=a.fmax, whiten=a.whiten)
                 sp.save(a.out)
             else:
                 sp = pipeline.make_spectrogram(a.audio, a.out, hop_s=a.hop, fmin=a.fmin, fmax=a.fmax)

@@ -21,21 +21,28 @@ launch() {
   # the files a box reads come from the bucket's seed: upload what this branch added under derived/
   $RUNS seed
   [ -d "$WT" ] || git worktree add --detach "$WT" "$BASELINE"
-  # 1, 2. locate on every case, both pair rules in one pass, the silence filter off and on, one case per box
-  $RUNS launch locate-t2-off --shards "$LOCATE_CASES" --inputs-from "uv run python -m bench inputs --profile locate" \
-    -- uv run python -m bench run --profile locate --search-param pair_rule=both --resume
-  $RUNS launch locate-t2-on --shards "$LOCATE_CASES" --inputs-from "uv run python -m bench inputs --profile locate" \
-    -- uv run python -m bench run --profile locate --search-param pair_rule=both --search-param silence_d_m=6000 --resume
+  # 1, 2. locate on every case, both pair rules in one pass, the silence filter off and on, one case per box.
+  # 4xlarge boxes: spot is 256 vCPUs a region, so 44 boxes fit at 16 vCPUs, with on-demand for any spot can't place.
+  # The command runs under bash -c on the box, where $DOPPLERTRACK_SHARD_SPEC is this box's I/N.
+  local box=(--size 4xlarge --fallback-on-demand)
+  $RUNS launch locate-t2-off --shards "$LOCATE_CASES" "${box[@]}" \
+    --inputs-from "uv run python -m bench inputs --profile locate" \
+    -- 'uv run python -m bench run --profile locate --search-param pair_rule=both --shard "$DOPPLERTRACK_SHARD_SPEC" --resume'
+  $RUNS launch locate-t2-on --shards "$LOCATE_CASES" "${box[@]}" \
+    --inputs-from "uv run python -m bench inputs --profile locate" \
+    -- 'uv run python -m bench run --profile locate --search-param pair_rule=both --search-param silence_d_m=6000 --shard "$DOPPLERTRACK_SHARD_SPEC" --resume'
   # 3. saved fits on the legacy cuts, at the commit before the bump; 4. the same on the bumped cases
-  $RUNS launch savedfit-legacy-cut --repo "$WT" --shards "$FIT_CASES" \
+  $RUNS launch savedfit-legacy-cut --repo "$WT" --shards "$FIT_CASES" "${box[@]}" \
     --inputs-from "uv run python -m bench inputs --profile saved-fit" \
-    -- uv run python -m bench run --profile saved-fit --resume
-  $RUNS launch savedfit-margin-cut --shards "$FIT_CASES" --inputs-from "uv run python -m bench inputs --profile saved-fit" \
-    -- uv run python -m bench run --profile saved-fit --resume
+    -- 'uv run python -m bench run --profile saved-fit --shard "$DOPPLERTRACK_SHARD_SPEC" --resume'
+  $RUNS launch savedfit-margin-cut --shards "$FIT_CASES" "${box[@]}" \
+    --inputs-from "uv run python -m bench inputs --profile saved-fit" \
+    -- 'uv run python -m bench run --profile saved-fit --shard "$DOPPLERTRACK_SHARD_SPEC" --resume'
   # 5. Tier 1, cold: the boxes get no detection or window-fit cache, only terrain; one unit per box, blind only
-  $RUNS launch tier1-cold --shards "$T1_UNITS" --cache terrarium \
+  $RUNS launch tier1-cold --shards "$T1_UNITS" "${box[@]}" --cache terrarium \
     --inputs-from "uv run python -m bench inputs --tier1 | python3 -c 'import json,sys; d=json.load(sys.stdin); d[\"cache_kinds\"]=[\"terrarium\"]; print(json.dumps(d))'" \
-    -- uv run python -m bench tier1 --resume
+    -- 'uv run python -m bench tier1 --shard "$DOPPLERTRACK_SHARD_SPEC" --resume'
+  $RUNS status
 }
 
 shards() {   # the run folders of one sharded job, as runs pull leaves them

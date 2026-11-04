@@ -104,7 +104,7 @@ Doppler curves of propeller aircraft. `README.md` explains the method; `PLAN.md`
 | `tools/experiments/<date>/` | scripts behind the numbers in `docs/experiments/`; records, not tools |
 | `bench/manifest.json` | size, SHA-256, source and licence of every raw input |
 | `bench/cases.json` | benchmark cases: sources, start times, recipes for derived files, search parameters, labels |
-| `bench/*.py` | `uv run python -m bench validate\|build\|run\|compare`: rebuild a case's derived files, run cases blind into a run folder, compare two runs |
+| `bench/*.py` | `uv run python -m bench validate\|build\|run\|merge\|inputs\|tier1\|report\|compare`: rebuild a case's derived files, run cases blind into a run folder (`--shard`, `--resume`), merge shards, list a job's inputs, render each record's HTML report into a new run folder, compare two runs |
 | `docs/architecture.md` | edit map: the detector and CPA-build code paths and the tests that check them |
 | `docs/experiments/` | one record per experiment: question, setup, numbers, outcome, script and run folder |
 | `docs/reference/README.md` | reading list for the papers in `$DOPPLERTRACK_DATA/reference/` |

@@ -1,4 +1,4 @@
-"""uv run python -m bench {validate,build,run,merge,inputs,tier1,compare}"""
+"""uv run python -m bench {validate,build,run,merge,inputs,tier1,report,compare}"""
 from __future__ import annotations
 
 import argparse
@@ -57,6 +57,11 @@ def main(argv=None):
     i.add_argument("--profile", choices=sorted(runner.PROFILES), default="saved-fit")
     i.add_argument("--tier1", action="store_true", help="Tier 1's spans and known-point cases instead of cases")
     i.add_argument("--set", action="append", choices=("development", "calibration", "evaluation"))
+    rp = sub.add_parser("report", help="the Phase 5 HTML page of each case's result.json, and an index.html, in a new "
+                        "run folder (or --out)")
+    rp.add_argument("run_dir", type=Path)
+    rp.add_argument("--out", type=Path, help="the folder for the pages (default: a new runs/<date>-report-<RUN>/)")
+    rp.add_argument("case", nargs="*", help="case ids (default: every case folder with a result.json)")
     c = sub.add_parser("compare", help="print the difference between two benchmark runs")
     c.add_argument("a", type=Path); c.add_argument("b", type=Path)
     a = ap.parse_args(argv)
@@ -103,6 +108,9 @@ def main(argv=None):
         only = runner.shard_of(tier1.unit_ids(sets), a.shard) if a.shard else a.only
         print(tier1.run_tier1(sets, run_dir=a.run_dir, workers=a.workers, only=only, resume=a.resume,
                               compare=not (a.no_compare or a.shard)))
+    elif a.cmd == "report":
+        from .report import report_run
+        print(report_run(a.run_dir, a.case or None, out_dir=a.out))
     elif a.cmd == "compare":
         print(runner.compare_runs(a.a, a.b))
 

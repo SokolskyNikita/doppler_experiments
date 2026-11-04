@@ -185,6 +185,7 @@ def launch(a) -> str:
         put_status(s3, bucket, job, {"job": job, "state": "failed", "stage": "launch", "error": errs,
                                      "updated": now()})
         sys.exit(f"no capacity for {job}: {errs}")
+    ec2.get_waiter("instance_exists").wait(InstanceIds=ids)     # describe lags create_fleet by a moment
     desc = ec2.describe_instances(InstanceIds=ids)["Reservations"][0]["Instances"][0]
     print(f"{job}: {ids[0]} {desc['InstanceType']} {desc['Placement']['AvailabilityZone']} "
           f"{desc.get('InstanceLifecycle', 'on-demand')}, commit {code['git_commit'][:7]}"

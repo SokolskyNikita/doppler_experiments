@@ -74,6 +74,25 @@ YYYY-MM-DD day traces; `--case` refuses `private: true` or a `site`. What it gua
 - `bench inputs` refuses a private case, so a job listing can never name one.
 - A test in each repo's Tier 0: a fixture private case (a fake site, fake audio) that every guard refuses.
 
+## Built (2026-11-04, after acceptance)
+
+- `bench/private.py`: the site read in place, a case resolved from its private file, the record put in the site's
+  frame (candidates, the refined point and every box as offsets, the triples sidecar as east and north arrays), and
+  `assert_no_site`, which refuses to write a record holding a latitude and a longitude near the site in any one
+  container, whatever the field is called.
+- Result schema: v2's site-relative variant (`frame: "site-relative"`, `site`, `offset_m` in place of lat and lon),
+  chosen by the record's frame; no v3 needed.
+- `bench`: a private case runs only in-process, never with a public case, into `private/runs/`, with its caches in
+  `private/cache/`; `--reveal` writes absolute coordinates and marks the record so; the comparison scores distances
+  from the offsets (or from the site, read in place, when revealed); `bench inputs` refuses a private case;
+  `bench validate` refuses a private entry that carries a coordinate, an audio path, a box or a derived file.
+- The report draws a site-relative record in east and north km from an unmarked site and writes no GeoJSON or KML.
+- `tools/data/session_spectrogram.py`: a recorder session's spectrogram, written only under `private/`.
+- The first case, `seattle-home-20261104-ha-pilot-2`, blocked until the owner approves a local run: its public entry,
+  and its private file (spectrogram recipe, flight data, a 4 km search box whose 12 km padding stays inside the
+  recorder's 20 km circle, the traffic notes).
+- Not built: `locate --site` on the command line; the benchmark runs `locate` on a private case already.
+
 ## Order
 
 1. Archive the sessions under `raw/seattle-home/` once `manifest.py`'s private manifest (8bffd51) is on dev, so no

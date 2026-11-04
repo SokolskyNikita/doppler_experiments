@@ -1,7 +1,6 @@
 """Gaps in the audio (PLAN Phase 1 item 8): the spectrogram keeps the recording's timeline, frames
 over a gap are invalid, and fits neither bridge nor are dragged by them."""
 import datetime
-from concurrent.futures import ProcessPoolExecutor
 
 import numpy as np
 import pytest
@@ -9,6 +8,7 @@ import scipy.io.wavfile
 
 from dopplertrack import audio, doppler, tracks
 from dopplertrack.audio import Spectrogram
+from dopplertrack.parallel import process_pool
 
 C, SR = 340.0, 4000
 F0, V, D, T0 = 110.0, 80.0, 400.0, 150.0     # a close, fast pass: most of its sweep lies within ±10 s of CPA
@@ -62,7 +62,7 @@ def _three_fits(seed):
 
 @pytest.fixture(scope="module")
 def fits():
-    with ProcessPoolExecutor(min(len(SEEDS), 6)) as ex:
+    with process_pool(min(len(SEEDS), 6)) as ex:      # spawn, as on the Mac: fork on Linux warns under threads
         return list(ex.map(_three_fits, SEEDS))
 
 

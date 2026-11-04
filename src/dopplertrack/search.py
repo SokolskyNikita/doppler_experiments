@@ -153,6 +153,11 @@ def _segment_cpa(enu: np.ndarray, tree: cKDTree, s: Segment, max_range_m: float,
     """CPA rows for one segment, in grid-index order: (gidx, t_emit, t_heard, d, v) arrays, or None. With a
     ground temperature, t_heard uses each CPA's own sound speed (atmosphere.point_sound_speed) instead of c."""
     m = _corridor(tree, s, max_range_m)
+    # Each distinct position once, as its earliest sample. Samples at the same position (an aircraft
+    # stopped, or a lap flown again) tie exactly, and BLAS rounds the tied columns differently on
+    # different platforms (Accelerate and OpenBLAS picked different samples of one stopped aircraft),
+    # so argmin's first-index rule would no longer pick the earliest one.
+    first = np.sort(np.unique(s.enu, axis=0, return_index=True)[1])
     out = []
     for k in range(0, len(m), chunk):
         idx = m[k:k + chunk]
@@ -161,8 +166,9 @@ def _segment_cpa(enu: np.ndarray, tree: cKDTree, s: Segment, max_range_m: float,
         # which points share a chunk is part of the result's bits.
         ctr = enu[idx].mean(0)
         g = enu[idx] - ctr                                        # (G,3)
-        p = s.enu - ctr
-        best, j = _nearest_samples(g, (g ** 2).sum(1), p, (p ** 2).sum(1), max_range_m, tile_m)
+        p = s.enu[first] - ctr
+        best, jf = _nearest_samples(g, (g ** 2).sum(1), p, (p ** 2).sum(1), max_range_m, tile_m)
+        j = first[jf]
         r = np.sqrt(np.maximum(best, 0.0))
         ok = (r <= max_range_m) & (j > 0) & (j < len(s.t) - 1)     # interior CPA only
         if ok.any():
@@ -230,7 +236,7 @@ def empty_cpa_table() -> pd.DataFrame:
                          "d": np.zeros(0, np.float32), "v": np.zeros(0, np.float32)})
 
 
-CPA_CACHE_VERSION = 1      # bump when cpa_table's output changes for the same inputs
+CPA_CACHE_VERSION = 2      # bump when cpa_table's output changes for the same inputs (2: tied positions)
 
 
 def cpa_fingerprint(grid: Grid, segs: list[Segment], max_range_m: float, c: float,

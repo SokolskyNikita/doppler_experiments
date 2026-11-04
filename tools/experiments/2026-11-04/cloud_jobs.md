@@ -267,13 +267,14 @@ Every driver runs on `shards.py`:
 
 ### The jobs
 
-| Job | Command (from the repo root) | Units |
-|---|---|---|
-| Stage B A1/A3 (`hypotheses-pairs`) | `event_pairs_z.py --hypotheses --detected $DOPPLERTRACK_DATA/runs/2026-11-04-bench-5314396-raw-audio-t2 --case eagle-cam-clip-18000s oyster-bay oyster-bay-moved-wsw150` | 30 searches |
-| Stage A comparable score (`comparable-score`) | the same without `--hypotheses` | 30 searches |
-| Event pairs by raw score (SDE-B's `event_pairs.py`) | the same with `--score raw` | 30 searches |
-| B1/B2 (`hypotheses-b1b2`) | `hypotheses_b1b2.py` | 3 cases |
-| Item 1's timing sweep (`timing-sweep`) | `timing_sweep.py` | 45 `bench run` cells |
+| Job | Command (from the repo root) | Units | Box from here (first launch, 2026-11-04) |
+|---|---|---|---|
+| Stage B A1/A3 (`hypotheses-pairs`) | `event_pairs_z.py --hypotheses --detected $DOPPLERTRACK_DATA/runs/2026-11-04-bench-5314396-raw-audio-t2 --case eagle-cam-clip-18000s oyster-bay oyster-bay-moved-wsw150` | 30 searches | 8xlarge, 32 workers per search, one at a time: two to a 64 GB box ran out of memory; d4 + d3 needs over 128 GB (8 × 8xlarge, 16 per search: 45–51 % busy) |
+| Stage A comparable score (`comparable-score`) | the same without `--hypotheses` | 30 searches | 8xlarge, 32 workers per search, one at a time (4 × 8xlarge, 16 per search) |
+| Event pairs by raw score (SDE-B's `event_pairs.py`) | the same with `--score raw` | 30 searches | not launched |
+| B1/B2 (`hypotheses-b1b2`) | `hypotheses_b1b2.py` | 3 cases | 4xlarge (3 × 8xlarge) |
+| Item 1's timing sweep (`timing-sweep`) | `timing_sweep.py` | 45 `bench run` cells | 4xlarge (8 × 8xlarge: 22–37 % busy) |
+| N = 250,000 null (`hypotheses-pairs-n250000`) | stage B's command with `--null-n 250000` | 30 searches | cancelled once A1 was decided (10 × 8xlarge, 32 per search: 45–51 % busy) |
 
 Splitting a job across boxes can't bring it under its longest unit.
 

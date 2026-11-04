@@ -124,3 +124,37 @@ a two-event search on Oyster Bay takes about a minute, against 4.5 min before.
 Run folder: `$DOPPLERTRACK_DATA/runs/2026-11-04-parallel-cpa/` (`run.json`, `steps.sh`, `single.log`,
 `quiet.log`, `cmp.log`, one log per step, `tables/*.json`, the compare JSONs, `cpa_split.json`, the
 CSVs and detect JSONs; the tables themselves are regenerable and can be deleted).
+
+## The table on Linux and on macOS
+
+Stage A's fleet rerun ([comparable-score](2026-11-04-comparable-score.md)) found that the eagle-cam clip's table, as
+version 1 of the case builds it, has one row more on a fleet box than on the Mac:
+- 35,861,817 rows on the box, against 35,861,816;
+- from the same trace file, grid, DEM and sound speed;
+- enough to move the comparable score's null, which draws rows by position.
+
+**The row.** Grid point 286222 and segment 899 (a9010c), at 3,494.6 m.
+- a9010c stops at the end of its segment: samples 106–110, the last five, are at one position, so they tie exactly
+  as the nearest sample.
+- On the box, `argmin` picked sample 106, an interior sample, so the row was kept. On the Mac it picked the endpoint,
+  so the row was dropped.
+- The two BLAS libraries (OpenBLAS, Accelerate) round the matmul's tied columns differently, so the first-index
+  rule the build relies on no longer picked the earliest tied sample.
+- Beyond that row, 17 common rows differ in the last bits of `t_heard` and 8 in `d`, and the fingerprints differ:
+  the grid's and tracks' coordinates come out of the platforms' trigonometry with different last bits. Those don't
+  change which rows exist.
+
+**The fix** (`search._segment_cpa`, CPA table version 2): each segment's distinct positions are compared once, each
+as its earliest sample.
+- Exact ties can't occur, so the first-index rule holds whatever the rounding. The stopped aircraft's CPA is
+  sample 106 everywhere, an interior one, so the row is kept.
+- `tests/test_cpa_build.py` fixes the row count of a 13 × 13 grid with a stopped aircraft at 168, and requires the
+  earliest tied sample. The brute-force reference applies the same rule.
+- On a fleet box the fixed build gives the same 35,861,817 rows and the same emission times at chunk sizes 20,000
+  and 7,919. The chunk sets every block's centre, and so the matmul's rounding.
+- It isn't yet checked on the Mac, since doppler_track compute no longer runs there. The next Mac build of a case's
+  table is that check.
+
+Scripts: [`cpa_platform.py`](../../tools/experiments/2026-11-04/cpa_platform.py) (`build`, `diff`, `explain`,
+`chunks`). Runs: `runs/2026-11-04-cpa-platform-3/` (the Linux table at the old code), `-4` (the explain),
+`-5` (the chunk check at the fix).

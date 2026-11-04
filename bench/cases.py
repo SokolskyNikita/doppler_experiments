@@ -38,6 +38,17 @@ def cache_root() -> Path:
     return Path(os.environ.get("DOPPLERTRACK_CACHE", Path.home() / ".cache" / "dopplertrack"))
 
 
+def is_private(case: dict) -> bool:
+    """A case of the owner's private recordings (docs/proposals/2026-11-04-private-cases.md): never off this Mac."""
+    return bool(case.get("private")) or "site" in case
+
+
+def private_cache_root() -> Path:
+    """Where a private case's caches live: under the data root's private/, never the shared cache root that `runs
+    seed` uploads, since a detection or window-fit entry computed from household audio carries no private marker."""
+    return data_root() / "private" / "cache"
+
+
 def resolve(path: str) -> Path:
     """A manifest path on this machine: raw/ and derived/ under the data root, cpa/ under the cache root,
     anything else relative to the repo."""

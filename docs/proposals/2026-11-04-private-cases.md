@@ -53,8 +53,12 @@ coordinate, an audio path or a derived path.
   record is revealed. GeoJSON and KML are not written for an unrevealed record, since they are absolute by nature.
 - **Records and reports of private cases** go to `private/runs/`, not `runs/`, since `runs/` is where the fleet's
   results come back and what a later `--input-run` could send up.
-- **Caches:** a private case runs with `DOPPLERTRACK_CACHE` under `private/cache/`, so its detection and window-fit
-  entries never reach the shared cache that `runs seed` uploads (SDE-E's suggestion).
+- **Caches, a rule:** every private case runs with `DOPPLERTRACK_CACHE` set to `$DOPPLERTRACK_DATA/private/cache/` by
+  `bench` itself (`runner.private_cache`, around the case's execution and `bench prepare`), never the shared cache
+  root. A detection or window-fit entry computed from household audio carries no private marker, and `runs seed`
+  uploads the shared caches; the CPA table, built around the site, lands there too. Terrain tiles for the site's box
+  are fetched into the private cache from the public tile server, as the recorder's ADS-B fetch already queries the
+  area.
 
 ## Guards (SDE-E, for the fleet)
 

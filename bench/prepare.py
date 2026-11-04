@@ -13,16 +13,23 @@ import time
 
 
 def prepare_case(case_id: str, use_weather: bool = False, workers: int | None = None, log=print) -> dict:
-    from dopplertrack.adsb import join_days
-    from dopplertrack.pipeline import cached_cpa_table
-    from dopplertrack.search import Grid, build_segments
-    from dopplertrack.doppler import speed_of_sound
-    from dopplertrack.terrain import Terrain
-
     from .cases import latest_case
-    from .runner import cpa_cache_path, geometry_kw, trace_paths
+    from .runner import private_cache
     case = latest_case(case_id)
     case.pop("labels", None)                       # never read: this is preparation, not a run
+    with private_cache(case):
+        return _prepare(case, use_weather, workers, log)
+
+
+def _prepare(case: dict, use_weather: bool, workers: int | None, log) -> dict:
+    from dopplertrack.adsb import join_days
+    from dopplertrack.doppler import speed_of_sound
+    from dopplertrack.pipeline import cached_cpa_table
+    from dopplertrack.search import Grid, build_segments
+    from dopplertrack.terrain import Terrain
+
+    from .runner import cpa_cache_path, geometry_kw, trace_paths
+    case_id = case["id"]
     s = case["search"]
     t0 = time.perf_counter()
     terrain = Terrain() if s["dem"] else None

@@ -92,9 +92,9 @@ After the table, `run_search` scores the surviving triples with `locked_score`, 
 points, both in chunks of `SCORE_CHUNK` through `parallel.ordered_map`. Each pool's workers receive the
 two `EventWindow`s and the segments the chunks refer to once, through `_set_score_state`, and the results
 come back in task order, so the ranking is the same for any `workers`.
-4. **`search.save_cpa_table`** writes the table to a temporary file in the same folder and renames it
-   into place, and **`search.load_cpa_table`** treats a mismatched fingerprint or an unreadable file as a
-   miss.
+4. **`search.save_cpa_table`** writes the table uncompressed, about 3 GB for a case-day's box (compressing
+   it took longer than building it), to a temporary file in the same folder and renames it into place,
+   and **`search.load_cpa_table`** treats a mismatched fingerprint or an unreadable file as a miss.
 
 If a change alters the table built from the same inputs, bump `CPA_CACHE_VERSION` so old cache files
 are rebuilt.

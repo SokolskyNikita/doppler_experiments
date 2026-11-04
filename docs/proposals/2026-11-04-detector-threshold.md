@@ -85,3 +85,45 @@ From PLAN item 6, on Tier 1, each setting at its own real-null threshold:
 - **Reported:** Livermore recall, the per-null rates and the score each labelled flyover gets.
 - **What a change invalidates:** a change to `detect` invalidates the detections cache and Tier 1's span records
   (re-run, not edited); the saved fits are untouched.
+
+## Retune 1 (counted, written before it runs)
+
+The first gate: S₁ stopped. Its threshold at 1 false alarm per hour on noise was 9–11, not the ~2 a unit-spread
+score predicts. Two things made its spread wrong:
+- S₁ is unit-spread for a fixed curve, but the search maximises S₀ over many curves, so the winner's S₁ carries
+  the best-of-many tail;
+- its null level σ_c was unstable: the robust and the cross-window estimates differ by more than 20 % on 33–41 %
+  of events.
+
+**S₂ replaces σ_c with the null of the maximum** (Kay II's ln L; the same principle as the verdict null one level
+up). For each event, `fit_event` (the same grid search and Nelder–Mead that `detect` refines with) runs on K = 8
+null copies of the event's window and band, and S₂ = (S₀ − μ) / σ, where μ and σ are the mean and spread of the 8
+null maxima.
+- **The null copies** are the window reversed in time, then circularly shifted by i/8 of its length for
+  i = 0..7.
+- **Why reversal.** Reversal keeps every steady tone, burst and level, but turns a falling Doppler curve into a
+  rising one that the model can't fit. It is the time-reversed control PLAN item 6 lists (echotrace).
+- **Why not a frequency shift**, as the earlier note said: a Doppler curve shifted in frequency is still a Doppler
+  curve at another f0, so the search would find the event again.
+
+S₂ is computed by `tracks.rescore_null`, kept apart from `detect_events` so that the detections cache stays valid.
+The settings are S₂ × {B0, B1, B2}, on the same synthetic data.
+
+*Amended before any run.* The Tier 0 test of the eight-copy null gave S₂ = 6 on pure noise. Eight circular shifts
+of one 180 s window share most of their content, so their maxima are strongly correlated and their spread is far
+too small. One window gives one independent null sample. So:
+- D = S₀ − (`fit_event`'s maximum on the window reversed in time), the event against its own window's clutter;
+- S₂ = (D − μ_null) / σ_null, with μ_null and σ_null the mean and spread of every null candidate's D: the 2 h of synthetic noise in the ROC, and
+  the pooled background spans in Tier 1.
+
+`tracks.rescore_null` returns D. The criterion below is unchanged.
+
+**The retune's criterion,** fixed now (the gate's second half is unchanged):
+- **Threshold calibration.** S₂'s threshold at 1 false alarm per hour lands within a factor of 1.5 of the
+  unit-spread prediction, Φ⁻¹(1 − 1/n), where n is the noise candidates per hour that `detect` returns (the
+  prediction is computed from the run's own n and reported).
+- **Detection.** At the gate's amplitude, its detection counts are no lower than S₀'s: f0 ≤ 300 Hz for all three
+  bands, and above 300 Hz for B1 and B2.
+
+Tier 1 then runs, with `--shards 11`, for every setting past the gate, plus S₀/B0, S₀/B1 and the 300–900 Hz half,
+to set the band from its false-alarm cost.

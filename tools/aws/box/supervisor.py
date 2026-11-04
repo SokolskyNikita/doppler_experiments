@@ -304,6 +304,10 @@ def main(argv=None) -> int:
     code = proc.returncode
     if state == "done" and code != 0:
         state = "failed"
+    try:    # the command may have added to run.json (bench run --run-dir does), so merge into what is there
+        info = {**info, **json.loads((run / "run.json").read_text())}
+    except (OSError, ValueError):
+        pass
     info.update(finished=now(), wall_s=wall, exit_code=code, state=state, notice=notice)
     (run / "run.json").write_text(json.dumps(info, indent=1) + "\n")
 

@@ -180,7 +180,8 @@
       ]
      }
     }
-   }
+   },
+   "notes": "Saved-fit search scores drift from the committed docs/results tables in the fourth significant figure (top 27.1008 against 27.0993; 40,889 triples against 40,885) because of the Phase 0 trajectory evidence masks; ranks and coordinates are exact. The 2026-11-03 cache check at 2bf61cc already showed it (27.1036). Not a regression"
   },
   {
    "id": "eagle-cam-clip-18000s",
@@ -694,7 +695,8 @@
     "blind": false
    },
    "built_with": "1cb9c34",
-   "role": "seed case (PLAN 5.1)"
+   "role": "seed case (PLAN 5.1)",
+   "notes": "Saved-fit search scores drift from the committed docs/results tables in the fourth significant figure (top 27.1008 against 27.0993; 40,889 triples against 40,885) because of the Phase 0 trajectory evidence masks; ranks and coordinates are exact. The 2026-11-03 cache check at 2bf61cc already showed it (27.1036). Not a regression"
   },
   {
    "id": "oyster-bay-moved-north150",
@@ -911,7 +913,7 @@
     ]
    },
    "start_time": {
-    "source": "AudioMoth clock set by the AudioMoth time chime (site README and total_eclipse_data.csv); the WAV file name gives the start in UTC to the second. Crystal drift since deployment is unmeasured: about 20 ppm over the few days since the site's first deployment file is under 10 s, so the uncertainty is a bound from that reasoning, not a measurement",
+    "source": "AudioMoth clock set by the AudioMoth time chime (site README and total_eclipse_data.csv); the WAV file name gives the start in UTC to the second. The \u00b110 s is the chime's one second plus an unmeasured drift budget of a few seconds (about 20 ppm over the 2-3 days since the site's first deployment file), rounded up; it is derived from that reasoning, not measured",
     "utc": "2024-04-07T01:39:34Z",
     "uncertainty_s": 10,
     "first_file": "ESID_375_2024_04_07/20240407_013934.WAV"
@@ -977,7 +979,7 @@
     ]
    },
    "start_time": {
-    "source": "AudioMoth clock set by the AudioMoth time chime (site README and total_eclipse_data.csv); the WAV file name gives the start in UTC to the second. Crystal drift since deployment is unmeasured: about 20 ppm over the few days since the site's first deployment file is under 10 s, so the uncertainty is a bound from that reasoning, not a measurement",
+    "source": "AudioMoth clock set by the AudioMoth time chime (site README and total_eclipse_data.csv); the WAV file name gives the start in UTC to the second. The \u00b110 s is the chime's one second plus an unmeasured drift budget of a few seconds (about 20 ppm over the 2-3 days since the site's first deployment file), rounded up; it is derived from that reasoning, not measured",
     "utc": "2024-04-07T00:00:06Z",
     "uncertainty_s": 10,
     "first_file": "ESID_710_2024_04_07/20240407_000006.wav"
@@ -1043,7 +1045,7 @@
     ]
    },
    "start_time": {
-    "source": "AudioMoth clock set by the AudioMoth time chime (site README and total_eclipse_data.csv); the WAV file name gives the start in UTC to the second. Crystal drift since deployment is unmeasured: about 20 ppm over the few days since the site's first deployment file is under 10 s, so the uncertainty is a bound from that reasoning, not a measurement",
+    "source": "AudioMoth clock set by the AudioMoth time chime (site README and total_eclipse_data.csv); the WAV file name gives the start in UTC to the second. The \u00b110 s is the chime's one second plus an unmeasured drift budget of a few seconds (about 20 ppm over the 2-3 days since the site's first deployment file), rounded up; it is derived from that reasoning, not measured",
     "utc": "2024-04-07T00:00:46Z",
     "uncertainty_s": 10,
     "first_file": "ESID_740_2024_04_07/20240407_000046.wav"
@@ -1109,7 +1111,7 @@
     ]
    },
    "start_time": {
-    "source": "AudioMoth clock set by the AudioMoth time chime (site README and total_eclipse_data.csv); the WAV file name gives the start in UTC to the second. Crystal drift since deployment is unmeasured: about 20 ppm over the few days since the site's first deployment file is under 10 s, so the uncertainty is a bound from that reasoning, not a measurement",
+    "source": "AudioMoth clock set by the AudioMoth time chime (site README and total_eclipse_data.csv); the WAV file name gives the start in UTC to the second. The \u00b110 s is the chime's one second plus an unmeasured drift budget of a few seconds (about 20 ppm over the 2-3 days since the site's first deployment file), rounded up; it is derived from that reasoning, not measured",
     "utc": "2024-04-07T05:40:21Z",
     "uncertainty_s": 10,
     "first_file": "ESID_937_2024_04_07/20240407_054021.WAV"

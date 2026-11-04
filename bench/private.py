@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 from pathlib import Path
 
 import numpy as np
@@ -74,6 +75,18 @@ def _enu(lat, lon, site: dict):
     return east, north
 
 
+def site_box(site: dict, side_m: float, offset_m=(0.0, 0.0)) -> list:
+    """A square search box [lat0, lat1, lon0, lon1] of side_m around the site, its centre offset_m (east, north) metres
+    from the site the other way, so the site sits offset_m from the centre: an offset that isn't a multiple of the
+    grid spacing keeps the site off every grid node."""
+    half = side_m / 2.0
+    k = math.degrees(1.0 / 6371008.8)
+    lat_c = site["lat"] - offset_m[1] * k
+    lon_c = site["lon"] - offset_m[0] * k / math.cos(math.radians(site["lat"]))
+    dlat, dlon = half * k, half * k / math.cos(math.radians(site["lat"]))
+    return [lat_c - dlat, lat_c + dlat, lon_c - dlon, lon_c + dlon]
+
+
 def _offset(lat, lon, site) -> dict:
     e, n = _enu(lat, lon, site)
     return {"east": round(float(e), 1), "north": round(float(n), 1)}
@@ -83,6 +96,21 @@ def _offset_box(box, site) -> list:
     """[lat0, lat1, lon0, lon1] as [south, north, west, east] metres from the site."""
     east, north = _enu([box[0], box[1]], [box[2], box[3]], site)
     return [round(float(north[0]), 1), round(float(north[1]), 1), round(float(east[0]), 1), round(float(east[1]), 1)]
+
+
+_PAIR = re.compile(r"(-?\d+\.\d+)(\s*,\s*|\s+)(-?\d+\.\d+)")
+
+
+def redact(text: str, site: dict) -> str:
+    """Text with every "lat, lon" pair within GUARD_DEG of the site rewritten as its offset from the site, for a log or
+    summary line a private run writes (locate prints its refined point)."""
+    def sub(m):
+        lat, lon = float(m.group(1)), float(m.group(3))
+        if abs(lat - site["lat"]) < GUARD_DEG and abs(lon - site["lon"]) < GUARD_DEG:
+            o = _offset(lat, lon, site)
+            return f"{o['east']:+.0f} m east, {o['north']:+.0f} m north of the site"
+        return m.group(0)
+    return _PAIR.sub(sub, text)
 
 
 def _is_box(v) -> bool:

@@ -2,7 +2,7 @@
 
 <!-- index
 question: What does the owner's indoor phone recorder hear of the propeller traffic around it, and what does locate make of a 2.3 h session?
-outcome: Tonal check hears 2 of the 11 passes the owner's ear heard, both within 1 km; locate's time join finds the true pair and the silence filter removes it; filter-off run and broadband check pending
+outcome: Tonal check hears 2 of the 11 passes the owner's ear heard; with the silence filter off, locate's top 4 km node is the site's (no verdict); box series and broadband check pending
 -->
 
 ## Question
@@ -185,15 +185,87 @@ The filter took S4's risk (PLAN section 4): it assumes every flight within 6 km 
 2 of the 23 propeller passes, and none of the 83 jets were scored. The filter was made the default on one recording,
 Oyster Bay, and is judged again on the next positive; this is a recording where it is certain to fire.
 
-**Run 7:** `locate` with the filter off on the same case. The launch script's `locate --silence off` runs it, into
-`locate-silence-off/`. If that yields candidates, the default should depend on the site, with the filter off wherever
-the traffic density makes it certain to fire, and the density itself, not a hand setting, would be the switch.
+**Run 7: with the filter off, the top candidate is the site.** Run 7 (`private/runs/2026-11-04-seattle-home-pilot-7/
+locate-silence-off/`, at 34d9743, 361 s, $0.03) ended `ambiguous` with `winner_only_refined` and `silence_filter_off`.
+Those reasons come by construction: step A refines only the winner, and the filter was off.
 
-**Run 6** (at b8802ee, the full command with the broadband check) is on its box.
+The funnel:
+
+| Stage | Count |
+|---|---|
+| CPA records | 129,069 |
+| After the speed and distance gates | 2,315 / 2,330 |
+| Time join | 6 |
+| Clock gate | 6 |
+| Scored | 6 |
+
+This time the comparable rule chose a different event pair, and the time join kept 6 triples. All 6 are the same
+flight pair, the two passes the known-point check heard.
+
+**The scored triples' surface (from the site-relative sidecar):**
+
+| Grid node | Distance from the site | Score |
+|---|---|---|
+| top | 0 m | 5.95 |
+| the three next | 200 m each | 1.97, 1.79, 1.66 |
+| | 283 m | 0.92 |
+| | 400 m | 0.81 |
+
+- **Clock:** the winning pair's clock puts the recording's start 0.31 s from the stated one, inside its 1 s.
+- **Refine:** the 50 m refine over ±600 m, with 8 more flyovers, stayed on the winning node. Those flyovers were
+  assigned 7 distinct flights, all among the 23 propeller passes within 6 km.
+- **Margin:** the winning node scores 3 times the best of its neighbours.
+- **What the 0.0 means:** the box was centred on the site, so the site is a grid node by construction. The 0.0 says the
+  top node is the site's own node and the refine's peak is within its 50 m step, so within about 25 m. It doesn't say
+  the error is zero. The refine's own surface isn't saved, so its margin can't be read.
+- **No verdict yet:** the top candidate was judged among 6 triples of one flight pair. A verdict waits for Phase 4's
+  null of the maximum.
+- **The silence filter:** its rule should depend on the traffic. It would be off where the expected count of other
+  flights within 6 km between two events exceeds about one, a number the case's own flight data gives before any
+  search, and on, as already judged, at quiet sites.
+- **Privacy:** run 7's `run.log` and `summary.txt` (under `private/` only) carry the refined point in absolute
+  coordinates, from `locate`'s summary line. A private run's log and summary now give it only as an offset from the
+  site.
+
+**Run 6** (at b8802ee) ran `locate` and then failed at the end of the broadband check, on a numpy integer in its JSON.
+The PM's fix reruns the check in `broadband` mode.
+
+### The box series: criterion, written before any run
+
+The owner asked for the true limit once a box under 4 km succeeds. The series runs `locate` with the filter off on
+the same case and the same flight data, at boxes of 4, 8, 12 and then 20 km.
+
+- **Placement:** each box is a square around the site, its centre 73 m west and 131 m south of it, so the site sits 73 m
+  east and 131 m north of the centre, off every 200 m node. The 4 km box is rerun this way, which tests the run 7
+  artefact directly.
+- **The site counts as the top mode when** the top-ranked candidate is within 300 m of the site (a grid diagonal plus
+  the offset).
+- **Reported at each size:**
+  - the top candidate's distance from the site, and the refined point's;
+  - the margin from the top node to the best node outside 300 m;
+  - the best candidate at least 1 km from the top: its distance from the site, and its score as a share of the top's.
+- **Stop rule:** the series stops at the first size where the site is not the top mode. Sizes beyond it are moot even
+  if they ran.
+- **Flight data:** the case's cut. Its declared envelope (±14 km) is a rectangle inside a 20 km circle. The adsbfetch
+  record of the query names the public metro box (47.45–47.80 N, 122.60–122.05 W), and the cut holds the archive's
+  count of propeller aircraft in every ring of it during the recording's hours:
+
+  | Ring around the site | 11-01 (archive) | 11-02 (archive) | 11-04 (case cut) |
+  |---|---|---|---|
+  | within 6 km | 27 | 19 | 23 |
+  | within 14 km | 46 | 27 | 45 |
+  | 14–18 km | 11 | 1 | 17 |
+  | beyond 18 km | 14 | 12 | 10 |
+
+  So the series declares the metro box as the envelope (`extraction_box`). The 4, 8 and 12 km boxes plus `locate`'s
+  12 km reach fit inside it; the 12 km box has 99 m to spare. The 20 km box needs a wider cut: adsb.lol's archive for
+  2026-11-04, which appears after the day ends, cut wide with `fetch-day`.
+- **Mechanism:** the box comes from the runner's `box_m` override, built from the site file the owner approved, so no
+  new private file is shipped. The launch script's `locate --silence off --box KM` runs each size.
 
 ## Outcome
 
-So far, from runs 4 and 5:
+So far, from runs 4, 5 and 7:
 - The tonal check hears 2 of the 11 passes the owner's ear heard, both within 1 km. The rest of the ear's range, 1–3.5
   km, gets nothing.
 - Run 4: `locate` refused before searching. The flight data stopped short of the whole day, a defect in its coverage
@@ -201,8 +273,12 @@ So far, from runs 4 and 5:
 - Run 5: `locate`'s time join found the true pair, the two heard passes, and then the silence filter removed it. The
   traffic here, about one aircraft within 6 km every 80 s, makes that certain for events tens of minutes apart.
 
-Run 7 (filter off) decides whether `locate` places the site. Run 6 adds the broadband check. Whether the box series
-follows depends on run 7's region holding the site.
+- Run 7, with the filter off: the top candidate is the site's own grid node, with the clock 0.31 s from the stated
+  start. The refine stayed there. The site was a node by construction, so the box series reruns 4 km with the site
+  off the grid.
+
+The box series (4, 8 and 12 km, then 20 km once the day's archive is out) looks for the limit. The broadband check
+adds what the indoor recording carries.
 
 ## Files
 

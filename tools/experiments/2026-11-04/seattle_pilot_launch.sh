@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 # The home recorder pilot (docs/experiments/2026-11-04-seattle-home-pilot.md) on one fleet box, shipping exactly the
 # files the owner approved, one --input per path, nothing else.
-#   tools/experiments/2026-11-04/seattle_pilot_launch.sh APPROVED_LIST [all|broadband|locate] [--silence off]
+#   tools/experiments/2026-11-04/seattle_pilot_launch.sh APPROVED_LIST [all|broadband|locate] [--silence off] [--box KM]
 # all (the default): the spectrogram, the known point, locate, the broadband check. broadband: no locate. locate: the
 # spectrogram and locate only. --silence off runs locate with the silence filter off, into $RUN/locate-silence-off.
+# --box KM (the box series): locate's box becomes a KM-km square around the site, its centre 73 m west and 131 m south
+# of it so the site is off every 200 m node, with the metro box the cut was fetched for (adsbfetch's own record of
+# the query, public) as the flight data's envelope; into $RUN/locate[-silence-off]-box<KM>km.
 # APPROVED_LIST: one path per line, relative to $DOPPLERTRACK_DATA, as the owner cleared them (blank lines and # comments
 # ignored). The run needs every one of these, so a missing one stops the launch before anything ships:
 REQUIRED=(
@@ -28,11 +31,19 @@ LIST=${1:?give the approved list from the owner}
 MODE=${2:-all}
 case "$MODE" in all|broadband|locate) ;; *) echo "unknown mode: $MODE"; exit 1 ;; esac
 LOCATE_ARGS="" LOCATE_DIR=locate
-case "${3:-} ${4:-}" in
-  " ") ;;
-  "--silence off") LOCATE_ARGS="--search-param silence_d_m=null"; LOCATE_DIR=locate-silence-off ;;
-  *) echo "unknown option: ${3:-} ${4:-}"; exit 1 ;;
-esac
+shift $(( $# < 2 ? $# : 2 ))
+while [ $# -gt 0 ]; do
+  case "$1 ${2:-}" in
+    "--silence off") LOCATE_ARGS="$LOCATE_ARGS --search-param silence_d_m=null"; LOCATE_DIR=$LOCATE_DIR-silence-off ;;
+    "--box "[0-9]*) KM=$2
+      LOCATE_ARGS="$LOCATE_ARGS --search-param box_m=$((KM * 1000)) --search-param box_offset_m=[73.0,131.0]"
+      LOCATE_ARGS="$LOCATE_ARGS --search-param extraction_box=[47.45,47.80,-122.60,-122.05]"
+      BOX_SUFFIX=-box${KM}km ;;
+    *) echo "unknown option: $1 ${2:-}"; exit 1 ;;
+  esac
+  shift 2
+done
+LOCATE_DIR=$LOCATE_DIR${BOX_SUFFIX:-}
 RUNS=tools/aws/runs
 [ -z "$(git status --porcelain)" ] || { echo "commit first: the box runs a clean commit"; exit 1; }
 $RUNS launch --help | grep -q -- "--private" || { echo "runs has no private mode yet (SDE-E): not launching"; exit 1; }

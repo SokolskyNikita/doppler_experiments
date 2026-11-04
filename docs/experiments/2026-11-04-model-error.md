@@ -124,7 +124,7 @@ On the flagged 11, every |Δ|/SD median is below 1 except drift ±2 % in v (1.8)
   - **The window.** It enters strongly, the wrong way: on real trajectories a longer window is worse, so windows should stay with the observed tone.
 - **What doesn't enter:** sound speed from the temperature, interpolation (linear, PCHIP or spline), the geoid datum and the recorder height all stay below the spread on the median pass.
 - **The textbook covariance can't be the spread.** On a wrong model it is about right (classical) or 1.5× wide (sandwich) only by accident. The bootstrap, or the bound for the straight-pass part, is what to report.
-- **Not yet run:** stage 3, Alaska, as an independent check of total error.
+- **Stage 3,** Alaska as an independent check of total error, is the section after stage 2.
 
   The whitening floor and window and synthesised waveforms are left for a later round.
 
@@ -159,6 +159,33 @@ On the flagged 11: A-render is 50.7 % (contrast) and 26.7 % (brightness), and wa
 - **So, as shipped, the pipeline can't use 20 % of these passes, and fits another 22 % on a truncated curve.** The band should follow the tone, or the harmonics should be searched (item 6).
 
 **Scripts:** `tools/experiments/2026-11-04/model_error_stage2.py`. **Outputs:** `runs/2026-11-04-model-error-stage2/stage2.csv` (one row per pass, input and objective, with `frac_curve_in_band` and any error).
+
+## Stage 3: Alaska, an independent check of total error
+
+**Setup.** The Alaska geophone crossings (Seppi, Tape & Fee 2025): seismic nodes along the Parks Highway, February–March 2019, vertical channel at 500 samples/s. There are no trajectories, only Flightradar24's CPA parameters, so stage 1's model-error split isn't possible here; this measures fit against reference.
+- **Fit:** `tracks.fit_event`, imported unchanged: contrast objective, one harmonic, over the FR24 CPA time ±60 s, on a 2.048 s Hann / 0.25 s spectrogram from the raw counts, in 40–240 Hz (below the 250 Hz Nyquist). Run at c = 340.3 m/s (the package's 15 °C) and at the authors' fitted c for that crossing.
+- **Reference:** FR24's slant range, √(horizontal distance² + (altitude − node elevation)²), and speed. The authors' own fitted speed and slant range sit beside it.
+- **Only speed, slant range and τ are compared;** f0 depends on which harmonic the fit locks to.
+- **Sample:** 50 of the authors' 789 non-jet fitted crossings. The first 24 are those a stopped full run had finished, which goes through the file in date order; the other 26 were drawn with seed 20261104 from the remainder. They cover 36 flights at 44 nodes on 22 days: 14 C185, 10 PA31, 8 PC12, 7 PA46 and 11 others. FR24 slant ranges are 624 m to 8.0 km, median 1.9 km; median speed is 83 m/s.
+
+**Numbers**, against FR24, median (IQR), and the share of crossings missing slant range by more than 20 %:
+
+| Fit | Slant range | over 20 % | Speed, median abs | τ, median abs |
+|---|---|---|---|---|
+| `fit_event`, c = 340.3 m/s | +1.2 %, abs 6.9 % (−6.7 to +6.5) | 20 % | 6.3 % (median +5.5 %) | 1.6 s |
+| `fit_event`, authors' c (median 310 m/s) | −8.2 %, abs 10.1 % | 24 % | 5.2 % | 1.7 s |
+| The authors' own fits | −9.3 %, abs 12.8 % | 22 % | 4.4 % | – |
+
+**Outcome.**
+- **The first independent number for our fitter at close range.** On real passes at a median 1.9 km, `fit_event` at the package's sound speed misses slant range by a median 6.9 %, against the authors' own 12.8 %. That sits beside stage 2's 29 % on Livermore's farther, longer passes (median 2.2 km reference, ridges of about 30–170 s). The fitter does far better on these close crossings, fitted over ±60 s, than on Livermore's passes, many of which turn (stage 1). The Alaska straightness can't be checked: FR24's CPA parameters are all there is. That is consistent with stage 1's finding that model error, not the fitter's noise, drives the Livermore numbers, though it is a different microphone (a geophone), a different site and a different traffic mix.
+- **The authors' c makes the fit worse.** Their median 310 m/s, against the package's 340.3 m/s, moves slant range from 6.9 % to 10.1 % and its bias from +1.2 % to −8.2 %. Their c is fitted jointly with everything else, so it carries their model's error. That bears on stage 1's sound-speed perturbation: a c that is "right" for a jointly fitted model isn't automatically right for ours.
+
+**A failed run, kept and marked: `runs/2026-11-04-model-error-alaska-narrow/`.** It was meant to fit all 789 in a narrow band placed on the authors' best-determined tone (0.85–1.15×; their f0 placed the band and never entered the comparison).
+- **The crash.** 655 crossings raised `ValueError: attempt to get argmax of an empty sequence`. `grid_search` searches f0 over (1.15·f_lo, 0.85·f_hi), which assumes the band holds a whole Doppler span. With f_hi/f_lo = 1.15/0.85 that range collapses to a point: 654 of the failures had no f0 candidate at all. The 134 that "ran" had exactly one, left by floating-point rounding. So `fit_event` needs f_hi/f_lo above about 1.35 or it crashes. This is also the real cause of stage 2's crash on R35, R08 and R51.
+- **The 134 that ran are a biased sample,** fitted with a single f0 candidate. Their c = 340.3 slant-range error is a median 20.3 % over all 134. On the 7 of them that are also in the wide-band 50, it is 45.7 % against the wide band's 18.4 % on the same 7. Read that only as "a single fixed f0 fits badly", not as a band comparison.
+- **A corrected rerun is queued, not started.** All 789 with the band at 0.70–1.50× the tone: f0 range 0.805–1.275×, wide enough for the span up to about 120 m/s at c = 310 m/s. It waits for an idle machine: `runs/2026-11-04-model-error-alaska-band070/command.sh`.
+
+**Scripts:** `tools/experiments/2026-11-04/alaska_to_npz.py` (the one-off obspy conversion), `model_error_alaska.py`. **Outputs:** `runs/2026-11-04-alaska-npz/`; `runs/2026-11-04-model-error-alaska/` (the wide-band 50: `alaska.jsonl`, `alaska.csv`); `runs/2026-11-04-model-error-alaska-stopped/` (the first full run, stopped at about 150 crossings and never written); `runs/2026-11-04-model-error-alaska-narrow/` (failed, as above).
 
 ## Heavier models: one extra parameter
 

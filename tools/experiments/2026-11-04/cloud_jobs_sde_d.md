@@ -142,4 +142,5 @@ The branch is `claude/sde-c-pm-coordination-cbbe43`. Every change is committed. 
    `collective_run.py <new run> --fine-from tools/experiments/2026-11-04/collective_kept_rest.json --merge --resume <the 20 …-s*of20 folders> --extra-units <the 8 collective-coarse-v2-s*of8 folders> <the 19 …-s*of19 folders>`.
    Each case takes its best cell over the coarse stage's cell 0 and every fine cell.
 3. Report each case's best cell.
-4. Then the denser coarse sampler (1 s shift, 1 % f0, 120 samples), cost measured first, and ace391's window checked against the find test.
+4. **Read the two diagnostics.** `2026-11-04-collective-truth-2` (fc224b3) gives `pair_detail`: ace391's segments, coverage and the find test's brightness per window. `2026-11-04-collective-truth-3` (5ba8c4b) adds `coarse_variants`: the true cell's Z under the today, dense, sub-grid and 1 km samplers. Their costs are in the record.
+5. **Fix** ace391's window, if segment coverage is the cause (score a flight's segments joined), and **adopt the cheapest coarse sampler** whose true-cell Z enters the margin. Rerun the coarse stage.

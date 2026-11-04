@@ -13,11 +13,12 @@ S5=s5cmd_2.3.0_Linux-arm64.tar.gz
 curl -sfL -o "/tmp/$S5" "https://github.com/peak/s5cmd/releases/download/v2.3.0/$S5"
 echo "1439f0d00ecedcd2a2f1f2c6749bbb0152b2257bf5086f29646ec8ae38798e24  /tmp/$S5" | sha256sum -c --quiet || exit 1
 tar xzf "/tmp/$S5" -C /usr/local/bin s5cmd
-# on the first deploy the box boots before `runs seed-tools` has filled tools/, so wait for it
+# on the first deploy the box boots before `runs seed-tools` has filled tools/; tools.json goes up last
 for i in $(seq 1 120); do
-  s5cmd --log error cp "s3://$BUCKET/tools/arm64/*" /usr/local/bin/ && break
+  s5cmd --log error ls "s3://$BUCKET/tools/tools.json" >/dev/null 2>&1 && break
   sleep 30
 done
+s5cmd --log error cp "s3://$BUCKET/tools/arm64/*" /usr/local/bin/
 chmod +x /usr/local/bin/uv /usr/local/bin/ffmpeg /usr/local/bin/ffprobe || exit 1
 mkdir -p /srv/dopplertrack/data /srv/dopplertrack/cache && chown -R ubuntu:ubuntu /srv/dopplertrack
 cat > /etc/profile.d/dopplertrack.sh <<EOS

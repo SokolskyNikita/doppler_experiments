@@ -152,3 +152,11 @@ def test_the_interruption_notice_is_read_from_instance_metadata():
     tar = io.BytesIO()
     tarfile.open(fileobj=tar, mode="w").close()
     assert runs.merge_cache_delta(tar.getvalue(), Path("/nonexistent")) == 0
+
+
+def test_everything_after_the_double_dash_is_the_command(monkeypatch):
+    seen = {}
+    monkeypatch.setattr(runs, "launch", lambda a: seen.update(vars(a)) or "job")
+    runs.main(["launch", "t2", "--case", "oyster-bay", "--jobs", "8", "--", "python", "-m", "bench", "run", "--tier", "t2"])
+    assert seen["case"] == ["oyster-bay"] and seen["jobs"] == 8
+    assert seen["command"] == ["python", "-m", "bench", "run", "--tier", "t2"]

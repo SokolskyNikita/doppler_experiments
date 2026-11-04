@@ -490,7 +490,8 @@ def main(argv=None) -> None:
     la.add_argument("--max-hours", type=float, default=12, help="stop the command after this long (default: 12)")
     la.add_argument("--checkpoint-minutes", type=float, default=10, help="upload the run folders this often")
     la.add_argument("--wait", action="store_true", help="wait for it, then pull")
-    la.add_argument("command", nargs=argparse.REMAINDER, help="-- then the command, run with bash in the checkout")
+    la.epilog = "then -- and the command, run with bash in the checkout"
+    la.set_defaults(command=[])
     for name, help_ in (("status", "list jobs, or one job's status"), ("wait", "wait until a job ends"),
                         ("pull", "copy a job's run folders and cache entries here"), ("log", "a job's command.log"),
                         ("cancel", "terminate a job's box"), ("interrupt", "send a job's spot box a real interruption")):
@@ -501,10 +502,15 @@ def main(argv=None) -> None:
     sd.add_argument("--dry-run", action="store_true")
     dv = sub.add_parser("dev", help="the persistent dev box")
     dv.add_argument("action", choices=("start", "stop", "status", "shell", "sync", "run"))
-    dv.add_argument("command", nargs=argparse.REMAINDER)
+    dv.set_defaults(command=[])
+    argv = sys.argv[1:] if argv is None else list(argv)
+    command = []
+    if "--" in argv:     # everything after the first -- is the command, options and all
+        i = argv.index("--")
+        argv, command = argv[:i], argv[i + 1:]
     a = ap.parse_args(argv)
-    if getattr(a, "command", None) and a.command[:1] == ["--"]:
-        a.command = a.command[1:]
+    if hasattr(a, "command"):
+        a.command = command
     if a.cmd == "launch":
         job = launch(a)
         if a.wait:

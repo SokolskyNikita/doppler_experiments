@@ -275,6 +275,8 @@ def main(argv=None) -> int:
     job = Job(args.bucket, args.job, md)
     spec = json.loads(s5("cat", f"{job.prefix}/spec.json", capture=True).stdout)
     data, cache, work = SCRATCH / "data", SCRATCH / "cache", SCRATCH / "work"
+    if spec.get("private"):      # a case the owner cleared: its cache stays apart and none of it comes back
+        cache = SCRATCH / "data" / "private" / "cache"
     repo = SCRATCH / "dopplertrack"
     run = data / "runs" / spec["run"]
     host = host_info(md)
@@ -365,7 +367,7 @@ def main(argv=None) -> int:
 
     made = sorted(run_folders(data) - runs_before)
     upload_runs(args.bucket, data, made)
-    added = new_cache_entries(cache_before, cache_files(cache), spec.get("caches", []))
+    added = [] if spec.get("private") else new_cache_entries(cache_before, cache_files(cache), spec.get("caches", []))
     delta = None
     if added:
         write_delta(cache, added, work / "delta.tar")

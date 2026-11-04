@@ -91,8 +91,21 @@ def is_private(rel: str) -> bool:
     return rel.startswith("derived/traces/") and not DAY_TRACE.fullmatch(rel)
 
 
-def refuse_private(paths, what: str) -> None:
-    bad = [p for p in paths if is_private(p)]
+def fleet_allow() -> set[str]:
+    """What the owner has cleared for the fleet: private/fleet-allow.txt, one data-root path or case id per line.
+    A missing file clears nothing; the default stays refuse."""
+    return {e.strip("/") for e in listed("fleet-allow.txt")}
+
+
+def owner_allowed(rel: str) -> bool:
+    """rel is an entry of fleet-allow.txt, or inside a folder that is one."""
+    rel = rel.strip("/")
+    return any(rel == e or rel.startswith(e + "/") for e in fleet_allow())
+
+
+def refuse_private(paths, what: str, cleared=()) -> None:
+    """Exits on a private path unless the owner allowed it, or it is a file of a case they cleared (`cleared`)."""
+    bad = [p for p in paths if is_private(p) and not owner_allowed(p) and p not in cleared]
     if bad:
         sys.exit(f"{what} {bad[0]}: private data (the owner's home recordings and what is derived from them) never "
                  "goes to the fleet or the bucket; it is processed on the Mac only")
@@ -187,9 +200,9 @@ def case_inputs(case_ids: list[str]) -> list[str]:
         if cid not in cases:
             sys.exit(f"no case {cid!r} in bench/cases.json")
         c = cases[cid]
-        if c.get("private") or c.get("site"):
-            sys.exit(f"--case {cid}: a private case (its site's coordinates and audio stay on the Mac) never goes to "
-                     "the fleet")
+        if (c.get("private") or c.get("site")) and cid not in fleet_allow():
+            sys.exit(f"--case {cid}: a private case (its site's coordinates and audio stay on the Mac) goes to the "
+                     "fleet only when the owner lists it in private/fleet-allow.txt")
         traces = c.get("flight_data", {}).get("traces")          # one file, or one per UTC day
         paths = [c.get("audio", {}).get("path"), c.get("spectrogram"),
                  *([traces] if isinstance(traces, str) else traces or [])]
@@ -279,11 +292,20 @@ def check_run_input(p: str) -> str:
     return "/".join(parts)
 
 
-def seed_run_inputs(s3, bucket: str, inputs: list[str]) -> None:
+def seed_run_inputs(s3, bucket: str, inputs: list[str], cleared=()) -> None:
     """Inputs under runs/ (small reference files from earlier runs) go up from here when the bucket lacks
     them or they changed; data/ inputs come from the seed."""
-    refuse_private(inputs, "input")
+    refuse_private(inputs, "input", cleared)
     for rel in inputs:
+        if is_private(rel):          # owner-allowed (refuse_private let it through): goes up from here, like a run
+            src = DATA_ROOT / rel
+            if not src.exists():
+                sys.exit(f"--input {rel}: not in {DATA_ROOT}")
+            if src.is_dir():
+                aws_cli("s3", "sync", "--only-show-errors", str(src), f"s3://{bucket}/data/{rel}")
+            else:
+                aws_cli("s3", "cp", "--only-show-errors", str(src), f"s3://{bucket}/data/{rel}")
+            continue
         if rel.startswith("runs/"):
             src = DATA_ROOT / rel
             if not src.exists():
@@ -340,11 +362,16 @@ def launch(a) -> str:
     a.input = a.input + [check_run_input(p) for p in getattr(a, "input_run", None) or []]
     inputs = case_inputs(a.case) + [p for p in a.input if p not in case_inputs(a.case)]
     inputs = list(dict.fromkeys(inputs))
-    refuse_private(inputs, "input")
+    cleared = case_inputs([c for c in a.case if c in fleet_allow()])      # a cleared case's own files
+    refuse_private(inputs, "input", cleared)
+    private_job = any(is_private(i) for i in inputs) or any(cid in fleet_allow() for cid in a.case)
+    if private_job:
+        print("allowed by the owner (private/fleet-allow.txt): " + ", ".join(
+            [i for i in inputs if is_private(i)] + [c for c in a.case if c in fleet_allow()]), flush=True)
     for p in inputs:
         if is_run_path(p):
             check_run_input(p)
-    seed_run_inputs(s3, bucket, inputs)
+    seed_run_inputs(s3, bucket, inputs, cleared)
     caches = list(dict.fromkeys(a.cache or (["terrarium"] if a.case else [])))
     with tempfile.TemporaryDirectory() as tmp:
         code, code_from = code_for(a, prior, Path(tmp) / "code")
@@ -356,7 +383,7 @@ def launch(a) -> str:
             if (DATA_ROOT / "runs" / job).exists():
                 continue
             spec = {"job": job, "run": prior["run"] if prior else job, "topic": a.topic,
-                    "resume_of": a.resume, "shard": getattr(a, "shard", None), "command": command, "inputs": inputs,
+                    "resume_of": a.resume, "shard": getattr(a, "shard", None), "private": private_job, "command": command, "inputs": inputs,
                     "caches": caches, "jobs": a.jobs, "max_hours": a.max_hours,
                     "checkpoint_minutes": a.checkpoint_minutes, "size": a.size,
                     "market": "on-demand" if a.on_demand else "spot", "submitted": now(),
@@ -582,13 +609,14 @@ def wait(a) -> dict:
         time.sleep(15)
 
 
-def free_local(name: str) -> str:
+def free_local(name: str, root: Path | None = None) -> str:
     """name, or name-2, -3, ... if a run folder of that name already exists here (never write into one)."""
-    if not (DATA_ROOT / "runs" / name).exists():
+    root = root or DATA_ROOT / "runs"
+    if not (root / name).exists():
         return name
     m = re.fullmatch(r"(.*?)-(\d+)", name)
     base, n = (m.group(1), int(m.group(2)) + 1) if m else (name, 2)
-    while (DATA_ROOT / "runs" / f"{base}-{n}").exists():
+    while (root / f"{base}-{n}").exists():
         n += 1
     return f"{base}-{n}"
 
@@ -638,12 +666,17 @@ def pull(a) -> None:
         own = json.loads(s3.get_object(Bucket=bucket, Key=f"jobs/{a.job}/spec.json")["Body"].read())["run"]
     except s3.exceptions.NoSuchKey:
         own = a.job
+    try:
+        private_job = json.loads(s3.get_object(Bucket=bucket, Key=f"jobs/{a.job}/spec.json")["Body"].read()).get("private")
+    except s3.exceptions.NoSuchKey:
+        private_job = False
+    runs_root = DATA_ROOT / "private" / "runs" if private_job else DATA_ROOT / "runs"
     for name in st.get("run_folders") or [own]:
-        local = name if name == own and same_run(DATA_ROOT / "runs" / name) else free_local(name)
+        local = name if name == own and same_run(runs_root / name) else free_local(name, runs_root)
         if local != name:
             print(f"runs/{name} exists here; pulling into runs/{local}")
-        aws_cli("s3", "sync", "--only-show-errors", f"s3://{bucket}/runs/{name}/", str(DATA_ROOT / "runs" / local))
-        print(f"runs/{local}")
+        aws_cli("s3", "sync", "--only-show-errors", f"s3://{bucket}/runs/{name}/", str(runs_root / local))
+        print(f"{runs_root.relative_to(DATA_ROOT)}/{local}")
     print(f"cost: {job_cost(s3, bucket, a.job, st)}")
     if st.get("cache_delta"):
         body = s3.get_object(Bucket=bucket, Key=st["cache_delta"])["Body"].read()
@@ -746,6 +779,14 @@ def seed(a) -> None:
     print("uploading: " + ", ".join(f"data/{x}/" for x in SEED_DATA) + ", " + ", ".join(f"cache/{k}/" for k in CACHE_KINDS))
     print("excluded: " + ", ".join(private_prefixes()) + ", any */private/*, derived/traces/ except YYYY-MM-DD day traces",
           flush=True)
+    allowed = sorted(e for e in fleet_allow() if (DATA_ROOT / e).exists())
+    print("allowed by the owner (private/fleet-allow.txt): " + (", ".join(allowed) or "nothing"), flush=True)
+    for e in allowed:
+        src = DATA_ROOT / e
+        if src.is_dir():
+            aws_cli("s3", "sync", "--only-show-errors", *dry, str(src), f"s3://{bucket}/data/{e}")
+        else:
+            aws_cli("s3", "cp", "--only-show-errors", *dry, str(src), f"s3://{bucket}/data/{e}")
     for sub in SEED_DATA:
         aws_cli("s3", "sync", "--only-show-errors", "--exclude", ".DS_Store", *seed_excludes(sub), *dry, str(DATA_ROOT / sub),
                 f"s3://{bucket}/data/{sub}")

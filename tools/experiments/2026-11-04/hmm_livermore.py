@@ -10,7 +10,13 @@ and clock shift chosen by today's curve score (EventWindow.sweep_scores) over 0.
 to dev_references.json before any tracker runs on the events; its f0 is reported beside item 8's warp estimates,
 and an event where they disagree by more than 2 % is judged on nothing.
 
-usage: hmm_livermore.py RUN WHITEN THETA_CONT THETA_BIRTH [references|livermore|dev|all]"""
+Units: the references (one file, RUN/dev_references.json), one per Livermore pass and one per development event
+under RUN/hmm/<whiten>_tc<theta_cont>_tb<theta_birth>/, each written when it finishes and skipped if present, so
+the same command resumes a stopped job and boxes split it by naming passes or events. Workers: DOPPLERTRACK_JOBS.
+
+usage: hmm_livermore.py RUN references
+       hmm_livermore.py RUN livermore|dev WHITEN THETA_CONT THETA_BIRTH [PASS or EVENT ...]
+       hmm_livermore.py RUN merge WHITEN THETA_CONT THETA_BIRTH"""
 import csv
 import json
 import os
@@ -27,6 +33,7 @@ import numpy as np                                                       # noqa:
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import freqtrack_livermore as FL                                         # noqa: E402
 import livermore_audit as LA                                            # noqa: E402
+import units as U                                                       # noqa: E402
 
 from dopplertrack import audio, freqtrack as ft, hmmtrack as hm          # noqa: E402
 from dopplertrack.adsb import load_traces                                # noqa: E402
@@ -133,60 +140,78 @@ def track_all(x, sp, st, span, band, fref, p):
     return res
 
 
-def livermore(run, whiten, p):
-    passes = {q["id"]: q for q in LA.load_passes()}
-    rows = {r["id"]: r for r in csv.DictReader(open(FL.AUDIT / "passes.csv"))}
-    sites = {s["name"]: s for s in json.load(open(FL.AUDIT / "sites.json"))["sites"]}
-    c = speed_of_sound(15.0)
-    out = []
-    for pid in sorted(rows):
-        r, q = rows[pid], passes[pid]
-        th, g, _, _, _ = LA.heard_curve(q, sites[r["site"]], c)
-        shift, f0, start = float(r["shift_15C"]), float(r["f0_15C"]), float(r["start"])
-        fref = lambda t, th=th, g=g, f0=f0, start=start, shift=shift: f0 * np.interp(start + np.asarray(t) - shift, th, g,
-                                                                                        left=np.nan, right=np.nan)
-        span = (q["ridge"][0, 0] - start, q["ridge"][-1, 0] - start)
-        fs = fref(np.arange(*span, HOP)); band = (0.85 * np.nanmin(fs), 1.15 * np.nanmax(fs))
-        x, _ = audio.load_audio(q["dir"] / "audio.wav", SR)
-        sp = spectrogram(x, whiten); st = ft.SampleSTFT(x, SR, N, HOP)
-        res = track_all(x, sp, st, span, band, fref, p)
-        row = dict(id=pid, good=float(r["fit_rms_hz_15C"]) / f0 * 100 < FL.GOOD_RMS, band=band,
-                   **{f"time_{k}": res[f"time_{k}"] for k in ("A", "H", "B1")})
-        for k in ("A", "H", "B1"):
-            row[k] = FL.score(res[k], span, fref, sp.df, 0.02)
-        t0 = time.perf_counter()
-        ev = hm.hmm_track(sp, st, sp.t[0], sp.t[-1], 40.0, 450.0, p)       # no oracle band
-        row["time_H450"] = time.perf_counter() - t0
-        if float(np.nanmax(fs)) <= 450:
-            grp = ev.event_track()
-            row["H450_contains"] = bool(grp) and any(FL.score([(ev.tracks[i].t, ev.tracks[i].f)], span, fref, sp.df, 0.02)["n_pass_tracks"]
-                                                      for i in grp["tracks"])
-        out.append(row)
-        print(pid, "good" if row["good"] else "flag", " | ".join(f"{k} err {row[k]['error']:.4f} br {row[k]['bridges']} fr {row[k]['fragments']} cov {row[k]['coverage']:.2f}"
-                                                                    for k in ("A", "H", "B1")), f"H {row['time_H']:.2f}s", flush=True)
-    (run / "hmm_livermore.json").write_text(json.dumps(out, indent=1, default=float))
-    return out
+_LIV: dict = {}
 
 
-def dev(run, whiten, p, refs):
-    out = []
-    for ev, ref in zip(DEV, refs):
-        name, src, (a, b), band, trp, (lat, lon), icao, heard, clock, _ = ev
-        x, a0 = dev_audio(ev)
-        el = Terrain().elevation(np.array([lat]), np.array([lon]))
-        obs = lla_to_enu(np.array([lat]), np.array([lon]), el, lat, lon)[0]
-        seg = next(s for s in build_segments(load_traces(DATA / trp), lat, lon) if s.icao == icao and s.t[0] == ref["seg_t0"])
-        to, r = modelled_curve(seg, obs, C)
-        T = ref["clock_T0"] + ref["shift_s"]
-        fref = lambda t, to=to, r=r, T=T, f0=ref["f0"]: f0 * np.interp(np.asarray(t), to + T, r, left=np.nan, right=np.nan)
-        sp = spectrogram(x, whiten, fmax=1000.0); st = ft.SampleSTFT(x, SR, N, HOP)
-        res = track_all(x, sp, st, (a - a0, b - a0), band, fref, p)
-        row = dict(event=name, judged=ref["judged"], **{k: FL.score(res[k], (a - a0, b - a0), fref, sp.df, 0.02) for k in ("A", "H", "B1")},
-                   **{f"time_{k}": res[f"time_{k}"] for k in ("A", "H", "B1")})
-        out.append(row)
-        print(name, " | ".join(f"{k} err {row[k]['error']:.4f} br {row[k]['bridges']} fr {row[k]['fragments']}" for k in ("A", "H", "B1")), flush=True)
-    (run / "hmm_dev.json").write_text(json.dumps(out, indent=1, default=float))
-    return out
+def _liv_init():
+    _LIV["passes"] = {q["id"]: q for q in LA.load_passes()}
+    _LIV["rows"] = {r["id"]: r for r in csv.DictReader(open(FL.AUDIT / "passes.csv"))}
+    _LIV["sites"] = {s["name"]: s for s in json.load(open(FL.AUDIT / "sites.json"))["sites"]}
+
+
+def livermore_one(job):
+    pid, whiten, tc, tb, out_path = job
+    if out_path.exists():
+        return json.loads(out_path.read_text())
+    if not _LIV:
+        _liv_init()
+    p = params(tc, tb)
+    r, q = _LIV["rows"][pid], _LIV["passes"][pid]
+    th, g, _, _, _ = LA.heard_curve(q, _LIV["sites"][r["site"]], speed_of_sound(15.0))
+    shift, f0, start = float(r["shift_15C"]), float(r["f0_15C"]), float(r["start"])
+    fref = lambda t: f0 * np.interp(start + np.asarray(t) - shift, th, g, left=np.nan, right=np.nan)
+    span = (q["ridge"][0, 0] - start, q["ridge"][-1, 0] - start)
+    fs = fref(np.arange(*span, HOP)); band = (0.85 * np.nanmin(fs), 1.15 * np.nanmax(fs))
+    x, _ = audio.load_audio(q["dir"] / "audio.wav", SR)
+    sp = spectrogram(x, whiten); st = ft.SampleSTFT(x, SR, N, HOP)
+    res = track_all(x, sp, st, span, band, fref, p)
+    row = dict(id=pid, good=float(r["fit_rms_hz_15C"]) / f0 * 100 < FL.GOOD_RMS, band=band,
+               **{f"time_{k}": res[f"time_{k}"] for k in ("A", "H", "B1")})
+    for k in ("A", "H", "B1"):
+        row[k] = FL.score(res[k], span, fref, sp.df, 0.02)
+    t0 = time.perf_counter()
+    ev = hm.hmm_track(sp, st, sp.t[0], sp.t[-1], 40.0, 450.0, p)           # no oracle band
+    row["time_H450"] = time.perf_counter() - t0
+    if float(np.nanmax(fs)) <= 450:
+        grp = ev.event_track()
+        row["H450_contains"] = bool(grp) and any(FL.score([(ev.tracks[i].t, ev.tracks[i].f)], span, fref, sp.df, 0.02)["n_pass_tracks"]
+                                                  for i in grp["tracks"])
+    U.write(out_path, row)
+    print(pid, "good" if row["good"] else "flag", " | ".join(f"{k} err {row[k]['error']:.4f} br {row[k]['bridges']} fr {row[k]['fragments']} cov {row[k]['coverage']:.2f}"
+                                                                for k in ("A", "H", "B1")), f"H {row['time_H']:.2f}s", flush=True)
+    return row
+
+
+def dev_one(job):
+    ev, ref, whiten, tc, tb, out_path = job
+    if out_path.exists():
+        return json.loads(out_path.read_text())
+    p = params(tc, tb)
+    name, src, (a, b), band, trp, (lat, lon), icao, heard, clock, _ = ev
+    x, a0 = dev_audio(ev)
+    el = Terrain().elevation(np.array([lat]), np.array([lon]))
+    obs = lla_to_enu(np.array([lat]), np.array([lon]), el, lat, lon)[0]
+    seg = next(s for s in build_segments(load_traces(DATA / trp), lat, lon) if s.icao == icao and s.t[0] == ref["seg_t0"])
+    to, r = modelled_curve(seg, obs, C)
+    T = ref["clock_T0"] + ref["shift_s"]
+    fref = lambda t: ref["f0"] * np.interp(np.asarray(t), to + T, r, left=np.nan, right=np.nan)
+    sp = spectrogram(x, whiten, fmax=1000.0); st = ft.SampleSTFT(x, SR, N, HOP)
+    res = track_all(x, sp, st, (a - a0, b - a0), band, fref, p)
+    row = dict(event=name, judged=ref["judged"], **{k: FL.score(res[k], (a - a0, b - a0), fref, sp.df, 0.02) for k in ("A", "H", "B1")},
+               **{f"time_{k}": res[f"time_{k}"] for k in ("A", "H", "B1")})
+    U.write(out_path, row)
+    print(name, " | ".join(f"{k} err {row[k]['error']:.4f} br {row[k]['bridges']} fr {row[k]['fragments']}" for k in ("A", "H", "B1")), flush=True)
+    return row
+
+
+def _pool(fn, jobs, init=None):
+    from concurrent.futures import ProcessPoolExecutor
+    with ProcessPoolExecutor(U.jobs(), initializer=init) as ex:
+        return list(ex.map(fn, jobs))
+
+
+def unit_root(run, whiten, tc, tb):
+    return run / "hmm" / f"{whiten}_tc{tc:g}_tb{tb:g}"
 
 
 def summarise(run, liv, devs):
@@ -219,10 +244,22 @@ def summarise(run, liv, devs):
 
 
 if __name__ == "__main__":
-    run, whiten, tc, tb = Path(sys.argv[1]), sys.argv[2], float(sys.argv[3]), float(sys.argv[4])
-    what = sys.argv[5] if len(sys.argv) > 5 else "all"
-    p = params(tc, tb)
-    refs = references(run) if what in ("references", "all") else json.loads((run / "dev_references.json").read_text())
-    liv = livermore(run, whiten, p) if what in ("livermore", "all") else None
-    devs = dev(run, whiten, p, refs) if what in ("dev", "all") else None
-    summarise(run, liv, devs)
+    run, step = Path(sys.argv[1]), sys.argv[2]
+    if step == "references":                                              # once, before any tracker runs on the events
+        if not (run / "dev_references.json").exists():
+            references(run)
+        sys.exit(0)
+    whiten, tc, tb, chosen = sys.argv[3], float(sys.argv[4]), float(sys.argv[5]), sys.argv[6:]
+    root = unit_root(run, whiten, tc, tb)
+    if step == "livermore":
+        pids = U.select(sorted(r["id"] for r in csv.DictReader(open(FL.AUDIT / "passes.csv"))), chosen)
+        _pool(livermore_one, [(pid, whiten, tc, tb, U.path(root, "livermore", pid)) for pid in pids], _liv_init)
+    elif step == "dev":
+        refs = json.loads((run / "dev_references.json").read_text())
+        names = U.select([e[0] for e in DEV], chosen)
+        _pool(dev_one, [(e, r, whiten, tc, tb, U.path(root, "dev", e[0].replace(" ", "_")))
+                        for e, r in zip(DEV, refs) if e[0] in names])
+    elif step == "merge":
+        summarise(root, U.read_all(root / "livermore") or None, U.read_all(root / "dev") or None)
+    else:
+        sys.exit(__doc__)

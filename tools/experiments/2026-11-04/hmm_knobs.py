@@ -9,8 +9,11 @@ tracked: the (theta_cont, theta_birth) pairs, then the pick.
    the lowest at which ridge() covers 95 % of every span; freqtrack_retune.py), the pair with the fewest
    fragments, then the most coverage, then the highest theta_cont, scored as in freqtrack_livermore.py.
 
-usage: hmm_knobs.py RUN time|frequency"""
-import json
+Units: one per theta_cont (pairs), each written to RUN/hmm_knobs/<whiten>/pair_<theta_cont>.json when its
+bisection ends and skipped if present; `pick` reads every pair file. Workers (noise windows): DOPPLERTRACK_JOBS.
+
+usage: hmm_knobs.py RUN pairs time|frequency [THETA_CONT ...]
+       hmm_knobs.py RUN pick time|frequency"""
 import os
 import sys
 from concurrent.futures import ProcessPoolExecutor
@@ -23,6 +26,7 @@ import numpy as np                                                       # noqa:
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import freqtrack_livermore as FL                                         # noqa: E402
 import freqtrack_retune as FR                                            # noqa: E402
+import units as U                                                       # noqa: E402
 
 from dopplertrack import audio, freqtrack as ft, hmmtrack as hm          # noqa: E402
 
@@ -49,25 +53,28 @@ def rate(ex, tc, tb):
     return sum(ex.map(_window, jobs)) / HOURS
 
 
-def pairs(whiten):
-    out, table = {}, {}
-    with ProcessPoolExecutor(int(os.environ.get("JOBS", "2")), initializer=_init, initargs=(whiten,)) as ex:
-        for tc in THETA_CONT:
-            lo, hi = max(tc, 6.0), 18.0
-            if rate(ex, tc, hi) > TARGET:
+def pairs(run, whiten, chosen):
+    root = run / "hmm_knobs" / whiten
+    todo = [tc for tc in THETA_CONT if (not chosen or tc in chosen) and not U.done(U.path(root, f"pair_{tc:g}"))]
+    if not todo:
+        return
+    with ProcessPoolExecutor(U.jobs(), initializer=_init, initargs=(whiten,)) as ex:
+        for tc in todo:
+            lo, hi, table = max(tc, 6.0), 18.0, {}
+            r = rate(ex, tc, hi); table[f"{hi:g}"] = r
+            if r > TARGET:
                 print(f"theta_cont {tc}: even theta_birth {hi} exceeds the target", flush=True)
-                table[tc] = None; continue
+                U.write(U.path(root, f"pair_{tc:g}"), dict(theta_cont=tc, theta_birth=None, rates=table)); continue
             while hi - lo > 0.25:
                 mid = 0.5 * (lo + hi)
-                r = rate(ex, tc, mid); table[f"{tc}/{mid}"] = r
+                r = rate(ex, tc, mid); table[f"{mid:g}"] = r
                 print(f"theta_cont {tc} theta_birth {mid:.2f}: {r:.1f} per hour per 100 Hz", flush=True)
                 if r <= TARGET:
                     hi = mid
                 else:
                     lo = mid
-            out[tc] = hi
+            U.write(U.path(root, f"pair_{tc:g}"), dict(theta_cont=tc, theta_birth=hi, rates=table))
             print(f"theta_cont {tc}: theta_birth {hi:.2f}", flush=True)
-    return out, table
 
 
 def pick(chosen, whiten):
@@ -92,9 +99,15 @@ def pick(chosen, whiten):
 
 
 if __name__ == "__main__":
-    run, whiten = Path(sys.argv[1]), sys.argv[2]
-    chosen, table = pairs(whiten)
-    scores, best = pick(chosen, whiten)
-    print("chosen theta_cont, theta_birth:", best)
-    (run / f"hmm_knobs_{whiten}.json").write_text(json.dumps(dict(pairs=chosen, rates=table, weak_pass=scores,
-                                                                   chosen=best), indent=1, default=str))
+    run, step, whiten = Path(sys.argv[1]), sys.argv[2], sys.argv[3]
+    if step == "pairs":
+        pairs(run, whiten, [float(x) for x in sys.argv[4:]])
+    elif step == "pick":
+        found = U.read_all(run / "hmm_knobs" / whiten, "pair_*.json")
+        chosen = {d["theta_cont"]: d["theta_birth"] for d in found if d["theta_birth"] is not None}
+        scores, best = pick(chosen, whiten)
+        print("chosen theta_cont, theta_birth:", best)
+        U.write(run / "hmm_knobs" / whiten / "chosen.json", dict(pairs=chosen, rates={d["theta_cont"]: d["rates"] for d in found},
+                                                                  weak_pass=scores, chosen=best))
+    else:
+        sys.exit(__doc__)

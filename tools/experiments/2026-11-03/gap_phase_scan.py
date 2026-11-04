@@ -3,6 +3,7 @@ phases (the gap starting every 3 s from CPA-30 to CPA+27 s): how far each gapped
 uncut one, how often it lands off the optimum (|dv| > 0.5 m/s) and what it does to the score."""
 import sys; from pathlib import Path; sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "tests"))
 import numpy as np
+from dopplertrack.parallel import default_jobs
 from concurrent.futures import ProcessPoolExecutor
 import test_gaps as G
 PH = list(range(-30, 30, 3))
@@ -13,7 +14,7 @@ def job(a):
     return seed, ph, e.f0, e.v, e.d, e.t_cpa, e.score
 if __name__ == '__main__':
     jobs = [(s, None) for s in range(8)] + [(s, p) for s in range(8) for p in PH]
-    with ProcessPoolExecutor(10) as ex: R = list(ex.map(job, jobs))
+    with ProcessPoolExecutor(default_jobs()) as ex: R = list(ex.map(job, jobs))
     U = {r[0]: r for r in R if r[1] is None}
     print('uncut v', [round(U[s][3], 2) for s in range(8)], 'd', [round(U[s][4]) for s in range(8)])
     for p in PH:

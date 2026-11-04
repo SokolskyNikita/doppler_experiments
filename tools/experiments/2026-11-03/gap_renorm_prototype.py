@@ -4,6 +4,7 @@ share of sweep weight on valid samples. Needs the mask to reach the fit window (
 keeping it). Same seeds and phases as tests/test_gaps.py."""
 import sys; from pathlib import Path; sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "tests"))
 import numpy as np
+from dopplertrack.parallel import default_jobs
 from concurrent.futures import ProcessPoolExecutor
 from scipy.optimize import minimize
 import test_gaps as G
@@ -44,7 +45,7 @@ def run(seed):
     s = f(G._spec(G._gapped(x, G.T_CPA - G.GAP_S / 2)))
     return u, g, s
 if __name__ == '__main__':
-    with ProcessPoolExecutor(6) as ex: R = list(ex.map(run, range(6)))
+    with ProcessPoolExecutor(default_jobs()) as ex: R = list(ex.map(run, range(6)))
     for k in ('f0', 'v', 'd', 't_cpa'):
         u = np.array([r[0][k] for r in R]); g = np.array([r[1][k] for r in R]) - u; s = np.array([r[2][k] for r in R]) - u
         print(f'{k:5s} sd {u.std(ddof=1):.3f} cut shift mean {g.mean():+.3f} max {abs(g).max():.3f} | steep shift mean {s.mean():+.3f} max {abs(s).max():.3f}')

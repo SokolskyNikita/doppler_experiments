@@ -552,8 +552,7 @@ def detect_events(sp: Spectrogram, f_lo: float, f_hi: float, c: float | None = N
                   window_s: float = 240.0, step_s: float = 120.0, v_grid=None, d_grid=None,
                   f0_step: float = 2.0, t0_step: float = 2.0, n_curve: int = 80, top: int = 20,
                   per_window: int = 3, min_sep_s: float = 60.0, refine: bool = True,
-                  workers: int | None = None, progress=None, min_score: float = 0.0,
-                  statistic: str = "contrast", diagnostics: list | None = None) -> list[EventFit]:
+                  workers: int | None = None, progress=None, min_score: float = 0.0) -> list[EventFit]:
     """Scan a whole recording for Doppler-shaped curves whose fundamental lies in [f_lo, f_hi].
 
     Each window gets the coarse grid search used by fit_event (windows run in `workers`
@@ -562,14 +561,7 @@ def detect_events(sp: Spectrogram, f_lo: float, f_hi: float, c: float | None = N
     Nelder-Mead, and the best `top` after refinement are returned, sorted by score
     (sweep-weighted ridge contrast, dB). Only finite scores strictly above
     min_score are returned, so the result may be empty. The default rejects zero
-    evidence; a useful false-alarm threshold still needs calibration.
-
-    statistic="contrast" (S0, the default) scores each event by the search's objective, the sweep-weighted mean
-    ridge contrast; statistic="z" (S1, PLAN item 6) rescores each refined fit by curve_zscore, which ranks, thresholds
-    and is returned as the score, while the search and the fits stay S0's. With a `diagnostics` list, S1 appends each
-    event's sigma_c and the recording's median of them."""
-    if statistic not in ("contrast", "z"):
-        raise ValueError(f"unknown statistic {statistic!r}")
+    evidence; a useful false-alarm threshold still needs calibration. rescore_z puts the result on S1's scale."""
     if top < 1:
         raise ValueError("top must be at least 1")
     if not np.isfinite(min_score):
@@ -610,27 +602,45 @@ def detect_events(sp: Spectrogram, f_lo: float, f_hi: float, c: float | None = N
         else:
             ef = EventFit(t_cpa=t0 + d / c, t_cpa_emit=t0, f0=f0, v=v, d=d, t_start=t0 - 120, t_end=t0 + 120,
                           score=cnd.score, f_pre=f0 * c / (c - v), f_post=f0 * c / (c + v))
-        if statistic == "z" and np.isfinite(ef.score):
-            pad = 0.3 * (f_hi - f_lo)
-            win = local_whiten(sp.crop(ef.t_start - 30, ef.t_end + 30, max(f_lo - pad, sp.f[0]),
-                                       min(f_hi * harmonics + pad, sp.f[-1])))
-            z, sigma = curve_zscore(win, ef, c, harmonics)
-            if diagnostics is not None:
-                diagnostics.append(dict(t_cpa=ef.t_cpa, s0=ef.score, s1=z, sigma_c=sigma))
-            ef = dataclasses.replace(ef, score=z)
         if np.isfinite(ef.score) and ef.score > min_score:
             out.append(ef)
-    if statistic == "z" and diagnostics:
-        sig = np.array([x["sigma_c"] for x in diagnostics if np.isfinite(x["sigma_c"])])
-        if len(sig):
-            med = float(np.median(sig))
-            for x in diagnostics:
-                x["sigma_c_cross_window"] = med
     out.sort(key=lambda e: -e.score)
     final: list[EventFit] = []
     for e in out:          # refined fits can converge onto the same event; keep the best
         if all(abs(e.t_cpa - f.t_cpa) >= min_sep_s for f in final):
             final.append(e)
         if len(final) >= top:
+            break
+    return final
+
+
+def rescore_z(sp: Spectrogram, events: list[EventFit], f_lo: float, f_hi: float, c: float | None = None,
+              harmonics: int = 1, min_sep_s: float = 60.0, top: int | None = None, min_score: float = 0.0,
+              diagnostics: list | None = None) -> list[EventFit]:
+    """detect_events' fits rescored by S1 (curve_zscore, PLAN item 6), re-ranked, one event per min_sep_s, the best
+    `top` above min_score. The fits are unchanged; only the score is S1's. Kept apart from detect_events so that
+    detect's code, and the detections cache keyed on it, don't change before item 6 is decided. With a
+    `diagnostics` list, each event's sigma_c is appended beside the median over the events (the cross-window
+    estimate)."""
+    c = speed_of_sound() if c is None else c
+    pad = 0.3 * (f_hi - f_lo)
+    scored, rows = [], []
+    for ef in events:
+        win = local_whiten(sp.crop(ef.t_start - 30, ef.t_end + 30, max(f_lo - pad, sp.f[0]),
+                                   min(f_hi * harmonics + pad, sp.f[-1])))
+        z, sigma = curve_zscore(win, ef, c, harmonics)
+        rows.append(dict(t_cpa=ef.t_cpa, s0=ef.score, s1=z, sigma_c=sigma))
+        if np.isfinite(z) and z > min_score:
+            scored.append(dataclasses.replace(ef, score=z))
+    sig = [r["sigma_c"] for r in rows if np.isfinite(r["sigma_c"])]
+    if diagnostics is not None:
+        med = float(np.median(sig)) if sig else float("nan")
+        diagnostics.extend({**r, "sigma_c_cross_window": med} for r in rows)
+    scored.sort(key=lambda e: -e.score)
+    final: list[EventFit] = []
+    for e in scored:
+        if all(abs(e.t_cpa - f.t_cpa) >= min_sep_s for f in final):
+            final.append(e)
+        if top is not None and len(final) >= top:
             break
     return final

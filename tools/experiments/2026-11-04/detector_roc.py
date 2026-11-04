@@ -1,8 +1,8 @@
 """Item 6 (docs/proposals/2026-11-04-detector-threshold.md): the synthetic ROC of detect's statistic and band, before
 any real recording is read.
 
-Settings: statistic S0 (today: the sweep-weighted mean contrast) or S1 (tracks.curve_zscore, a z-score over the
-curve's frames with Harris's overlap weight), by band:
+Settings: statistic S0 (today: the sweep-weighted mean contrast) or S1 (tracks.rescore_z over every event detect
+proposes: curve_zscore, a z-score over the curve's frames with Harris's overlap weight), by band:
   B0 fundamentals 60-300 Hz on the 40-450 Hz image (today's raw-audio profile)
   B1 fundamentals 60-900 Hz on a 40-1000 Hz image, one search
   B2 60-300 and 300-900 Hz searched apart on the 40-1000 Hz image, each at 0.5 false alarms per hour
@@ -31,7 +31,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import units as U                                                       # noqa: E402
 
 from dopplertrack import audio                                           # noqa: E402
-from dopplertrack.tracks import detect_events                            # noqa: E402
+from dopplertrack.tracks import detect_events, rescore_z                 # noqa: E402
 
 SR, C = 4000, 340.0
 BANDS = {"B0": (450.0, [(60.0, 300.0)]), "B1": (1000.0, [(60.0, 900.0)]), "B2": (1000.0, [(60.0, 300.0), (300.0, 900.0)])}
@@ -63,7 +63,12 @@ def detect(x, setting, workers, top):
     sp = audio.compute_spectrogram(x, SR, fmax=fmax)
     out, diag = [], []
     for i, (lo, hi) in enumerate(parts):
-        for e in detect_events(sp, lo, hi, c=C, top=top, workers=workers, statistic=stat, diagnostics=diag):
+        if stat == "z":                                                   # every event detect proposes, then S1 ranks
+            found = rescore_z(sp, detect_events(sp, lo, hi, c=C, top=200, workers=workers), lo, hi, c=C, top=top,
+                              diagnostics=diag)
+        else:
+            found = detect_events(sp, lo, hi, c=C, top=top, workers=workers)
+        for e in found:
             out.append(dict(part=i, score=float(e.score), t_cpa=float(e.t_cpa), f0=float(e.f0)))
     return out, diag
 

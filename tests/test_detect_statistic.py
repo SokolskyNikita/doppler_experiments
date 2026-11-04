@@ -1,12 +1,11 @@
 """detect's S1 statistic (PLAN Phase 2 item 6): a named option, S0 the default, with unit spread in noise."""
 import numpy as np
-import pytest
 
 from dopplertrack import audio, tracks
 
 
 def test_s1_is_a_named_statistic_with_unit_spread_in_noise():
-    """detect's S1 rescoring: S0 stays the default; on noise S1 has about unit spread."""
+    """S1 has about unit spread on noise, and rescore_z reports each event's sigma_c."""
     rng = np.random.default_rng(3)
     zs = []
     for seed in range(6):
@@ -18,6 +17,6 @@ def test_s1_is_a_named_statistic_with_unit_spread_in_noise():
         assert sigma > 0
         zs.append(z)
     assert np.all(np.abs(zs) < 4)
-    with pytest.raises(ValueError):
-        tracks.detect_events(sp, 100.0, 200.0, statistic="nope")
+    diag: list = []
+    assert tracks.rescore_z(sp, [ef], 100.0, 250.0, c=340.0, diagnostics=diag) is not None and len(diag) == 1
     assert abs(tracks.overlap_weight(0.25) - 0.254) < 0.001

@@ -22,6 +22,7 @@ pulled folder.
 | Alaska, all crossings (`model-error-alaska`) | `tools/experiments/2026-11-04/model_error_alaska.py --band narrow --band-factors 0.70 1.50` | 789 crossings (one per FR24-matched crossing) | `alaska.csv`; then `model_error_alaska_summary.py` on it |
 
 **Turn model, bootstrap.**
+- **decision: none, so cancelled.** It would inform PLAN Phase 2 item 2's turn-model sentence. That sentence rejects the model on slant range (criteria 1–4) whatever the bootstrap shows, so no outcome changes it. Launched on 2026-11-04 as 8 × 4xlarge and cancelled under the PM's rule that a run which changes no PLAN sentence is stopped. One shard had already finished (`runs/2026-11-04-turn-model-boot-s1of8` in the bucket); its 1,000 replicates are kept, not merged.
 - **One unit** is one replicate of one pass: curve A plus a moving-block replicate (2 s blocks) of that pass's sub-5 s
   residuals, refitted.
 - **Seeds.** Each replicate's seed is sha256("pass:replicate"), so a unit gives the same numbers on any box and in any shard.
@@ -36,6 +37,10 @@ pulled folder.
   them in the bucket.
 
 **Alaska, all crossings.**
+- **decision:** PLAN Phase 2 item 2, stage 3, and whether station temperatures become the fitter's default. Stage 3 is the external check against Flightradar24, today on 50 crossings.
+  - If the 789 reproduce the 50's ordering (the station-temperature c gives the smallest speed bias, the 15 °C default's range bias is a cancellation, and the authors' c is worse), stage 3's numbers in PLAN become the 789's, with intervals.
+  - If they don't, PLAN's sound-speed conclusion is restated on the larger sample.
+  - The narrow band's weak-fit count also says how often `fit_event` can't fit a band placed on a known tone (item 6).
 - **Sound speeds.** Each crossing is fitted at the three: 340.3 m/s, the authors' fitted c, and the nearest station's air
   temperature.
 - **The band.** 0.70–1.50 × the authors' best-determined tone. A band too narrow for `fit_event` gives a weak fit, recorded as

@@ -65,3 +65,17 @@ def test_the_user_data_has_no_unfilled_placeholder():
     for lt in T.find_resources("AWS::EC2::LaunchTemplate").values():
         ud = json.dumps(lt["Properties"]["LaunchTemplateData"].get("UserData", ""))
         assert "@@" not in ud
+
+
+def test_the_other_regions_hold_compute_only_and_use_the_home_bucket():
+    import app
+    for region in app.REGIONS:
+        if region == app.REGION:
+            continue
+        t = Template.from_stack(app.FleetStack(cdk.App(), f"T-{region}", home=False,
+                                               env=cdk.Environment(account="123456789012", region=region)))
+        t.resource_count_is("AWS::S3::Bucket", 0)
+        t.resource_count_is("AWS::EC2::Instance", 0)
+        t.resource_count_is("AWS::EC2::LaunchTemplate", 2)
+        assert "dopplertrack-123456789012-us-west-2" in json.dumps(t.find_resources("AWS::IAM::Policy"))
+        assert len(t.find_resources("AWS::EC2::Subnet")) == len(app.REGIONS[region])

@@ -408,14 +408,16 @@ def test_shards_split_the_cases_and_merge_into_one_run(tmp_path, fake_runs):
         runner.merge_runs(tmp_path / "all2", [tmp_path / "s1", other])
 
 
-def test_inputs_name_each_profiles_flight_data_and_cpa_table():
+def test_inputs_name_each_profiles_flight_data_and_cpa_table(monkeypatch):
     from bench import inputs
+    v3 = next(c for c in cases.load_cases()["cases"] if c["id"] == "oyster-bay" and c["version"] == 3)
+    monkeypatch.setattr(inputs, "latest_case", lambda cid: copy.deepcopy(v3))     # the version with locate_traces
     loc = inputs.run_inputs(["oyster-bay"], "locate")
     fit = inputs.run_inputs(["oyster-bay"], "saved-fit")
     for doc in (loc, fit):          # tools/data/shards.py's shape, which `runs launch` reads
         assert set(doc) == {"cases", "inputs", "cache_kinds", "cpa_tables", "detail"} and doc["cases"] == ["oyster-bay"]
         assert all(isinstance(p, str) and not p.startswith("raw/") for p in doc["inputs"])
-    v2 = cases.latest_case("oyster-bay")["flight_data"]["locate_traces"]
+    v2 = v3["flight_data"]["locate_traces"]
     assert v2 in loc["inputs"] and v2 not in fit["inputs"]
     assert any(p.endswith("-locate.npz") for p in loc["cpa_tables"])
     assert not any(p.endswith("-locate.npz") for p in fit["cpa_tables"])

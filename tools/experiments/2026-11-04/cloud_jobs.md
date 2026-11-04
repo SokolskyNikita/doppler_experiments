@@ -182,7 +182,7 @@ its search, so it never builds its table.
    - The 788 s run predates the nine background spans. With them, a cold Tier 1 took about 50 minutes under load
      (`docs/experiments/2026-11-04-cache-keys.md`), so the background spans are the bulk of a cold run.
 
-Jobs 1, 2 and 5 are independent of each other. Job 4 waits for the case bump and job 3.
+All five launch at once, one box per case or Tier 1 unit: `tools/experiments/2026-11-04/sde_b_cloud.sh launch`, then `... collect` pulls, merges the shards, compares (silence off against on; legacy against margin-padded cut) and renders the reports. Job 3 runs at the commit before the case bump, from a worktree, so it needs no wait.
 
 ## SDE-A
 

@@ -46,7 +46,8 @@ done
 LOCATE_DIR=$LOCATE_DIR${BOX_SUFFIX:-}
 RUNS=tools/aws/runs
 [ -z "$(git status --porcelain)" ] || { echo "commit first: the box runs a clean commit"; exit 1; }
-$RUNS launch --help | grep -q -- "--private" || { echo "runs has no private mode yet (SDE-E): not launching"; exit 1; }
+# RUNS_EXTRA passes extra runs flags through, e.g. RUNS_EXTRA="--check" or "--rehearse --rehearse-minutes 6" (AGENTS: both before a changed job's real launch).
+$RUNS launch ${RUNS_EXTRA:-} --help | grep -q -- "--private" || { echo "runs has no private mode yet (SDE-E): not launching"; exit 1; }
 APPROVED=()
 while IFS= read -r line; do
   case "$line" in ''|\#*) continue ;; esac

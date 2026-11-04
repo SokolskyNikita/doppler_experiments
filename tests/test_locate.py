@@ -122,3 +122,19 @@ def test_locate_never_emits_located(monkeypatch, spec, tmp_path):
     _detections(monkeypatch, [_event(1000, 5.0), _event(2000, 4.0)])
     _search_returning(monkeypatch, DAY0 + 72000.0)
     assert _run(spec, [_traces(tmp_path)], tmp_path, silence_d_m=6000.0)["outcome"] != "located"
+
+
+def test_a_ground_temperature_reaches_the_search_and_the_refinement(monkeypatch, spec, tmp_path):
+    _detections(monkeypatch, [_event(1000, 5.0), _event(2000, 4.0), _event(3000, 3.0)])
+    _search_returning(monkeypatch, DAY0 + 72000.0)
+    seen = {}
+
+    def spy(name, fn):
+        def wrapped(*args, **kw):
+            seen[name] = kw
+            return fn(*args, **kw)
+        return wrapped
+    monkeypatch.setattr(pipeline, "run_search", spy("search", pipeline.run_search))
+    monkeypatch.setattr(pipeline, "refine", spy("refine", pipeline.refine))
+    _run(spec, [_traces(tmp_path)], tmp_path, c=346.5, temperature_c=25.6)
+    assert all(seen[k]["temperature_c"] == 25.6 and seen[k]["c"] == 346.5 for k in ("search", "refine"))

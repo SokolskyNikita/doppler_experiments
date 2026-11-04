@@ -9,7 +9,8 @@ from dopplertrack.search import Grid, Segment
 
 
 def _brute_force(grid, segs, max_range_m, c, chunk):
-    """cpa_table before tile pruning and the process pool (commit 5c093cd), with the same chunks."""
+    """cpa_table before tile pruning and the process pool (commit 5c093cd), with the same chunks, comparing each
+    distinct position once as its earliest sample (CPA table v2)."""
     rows = []
     tree = cKDTree(grid.enu[:, :2])
     for si, s in enumerate(segs):
@@ -20,10 +21,12 @@ def _brute_force(grid, segs, max_range_m, c, chunk):
             idx = m[k:k + chunk]
             ctr = grid.enu[idx].mean(0)
             g = grid.enu[idx] - ctr
-            pts = s.enu - ctr
+            first = np.sort(np.unique(s.enu, axis=0, return_index=True)[1])
+            pts = s.enu[first] - ctr
             d2 = (g ** 2).sum(1)[:, None] + (pts ** 2).sum(1)[None, :] - 2.0 * (g @ pts.T)
-            j = np.argmin(d2, axis=1)
-            r = np.sqrt(np.maximum(d2[np.arange(len(idx)), j], 0.0))
+            jf = np.argmin(d2, axis=1)
+            j = first[jf]
+            r = np.sqrt(np.maximum(d2[np.arange(len(idx)), jf], 0.0))
             ok = (r <= max_range_m) & (j > 0) & (j < len(s.t) - 1)
             rows.append(pd.DataFrame({"gidx": idx[ok].astype(np.int32), "seg": np.int32(si),
                                       "t_emit": s.t[j[ok]], "t_heard": s.t[j[ok]] + r[ok] / c,
@@ -55,3 +58,20 @@ def test_pruned_pooled_table_equals_brute_force():
     for workers in (1, 2):
         got = search.cpa_table(grid, segs, 7000.0, 340.0, chunk=500, workers=workers)
         pd.testing.assert_frame_equal(got, ref, check_exact=True)
+
+
+def test_samples_at_one_position_resolve_to_the_earliest():
+    """An aircraft that stops at the end of its segment: its last samples tie exactly at every grid point, and the
+    CPA is their earliest sample, an interior one, on every platform. BLAS rounding of the tied columns used to
+    pick a different sample on Linux than on macOS (the eagle-cam table's one-row difference, 2026-11-04)."""
+    xy = np.meshgrid(np.arange(-3000, 3001, 500.0), np.arange(-3000, 3001, 500.0))
+    enu = np.stack([xy[0].ravel(), xy[1].ravel(), np.zeros(xy[0].size)], -1)
+    grid = Grid(np.zeros(len(enu)), np.zeros(len(enu)), enu[:, 2], enu, 40.0, -74.0)
+    t = 1e9 + np.arange(30.0)
+    pos = np.stack([-4000.0 + 150.0 * np.minimum(np.arange(30), 24), np.full(30, 700.0), np.full(30, 132.0)], -1)
+    seg = Segment(0, "a9010c", t, pos, np.r_[np.full(24, 150.0), np.zeros(6)])   # stopped from sample 24 to 29
+    cpa = search.cpa_table(grid, [seg], 5000.0, 340.0, workers=1)
+    assert len(cpa) == 168            # fixed: all 169 points but the corner 5,025 m from the stop, beyond range
+    stopped = cpa[cpa.t_emit >= t[24]]
+    assert len(stopped) > 0 and (stopped.t_emit == t[24]).all()      # the earliest of the tied samples
+    assert cpa.equals(search.cpa_table(grid, [seg], 5000.0, 340.0, workers=1, chunk=7))

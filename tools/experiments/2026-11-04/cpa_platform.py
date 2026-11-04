@@ -7,6 +7,7 @@ usage:
   cpa_platform.py build CASE OUT.npz [VERSION]   build the table of CASE's VERSION (default 1, the version
                                          event_pairs_z.py's variants copy) as the benchmark runner does (its grid, DEM,
                                          flight data, max range, default sound speed), saved with its fingerprint
+  cpa_platform.py chunks CASE A B        the table at chunk sizes A and B: the same rows and emission times?
   cpa_platform.py explain CASE GIDX SEG   one grid point and segment: the segment's nearest samples, exactly
   cpa_platform.py diff A.npz B.npz       the rows only one table has, and how the rows both have differ, with each
                                          differing row's distance against max range"""
@@ -43,6 +44,21 @@ def build(cid: str, out: Path, version: int = 1):
     cpa = search.cpa_table(grid, segs, r, c)
     search.save_cpa_table(out, cpa, search.cpa_fingerprint(grid, segs, r, c))
     print(json.dumps({"case": cid, "rows": len(cpa), "max_range_m": r, "out": str(out)}))
+
+
+def chunks(cid: str, a: int, b: int, version: int = 1):
+    """The table at two chunk sizes. The chunk sets each block's centre and so every matmul's rounding: the row
+    set and the emission times must not depend on it, which is what decides rows on different platforms too."""
+    grid, segs, r, c = inputs(cid, version)
+    ta, tb = (search.cpa_table(grid, segs, r, c, chunk=k) for k in (a, b))
+    ka = ta.seg.to_numpy().astype(np.int64) << 32 | ta.gidx.to_numpy()
+    kb = tb.seg.to_numpy().astype(np.int64) << 32 | tb.gidx.to_numpy()
+    same_rows = len(ka) == len(kb) and bool(np.array_equal(ka, kb))
+    row = ta[(ta.gidx == 286222) & (ta.seg == 899)] if cid == "eagle-cam-clip-18000s" and version == 1 else None
+    print(json.dumps({"case": cid, "chunks": [a, b], "rows": [len(ta), len(tb)], "same_rows": same_rows,
+                      "same_t_emit": same_rows and bool(np.array_equal(ta.t_emit.to_numpy(), tb.t_emit.to_numpy())),
+                      "max_abs_d_diff_m": float(np.abs(ta.d.to_numpy() - tb.d.to_numpy()).max()) if same_rows else None,
+                      "row_286222_899": None if row is None else row.to_dict("records")}, indent=1, default=float))
 
 
 def explain(cid: str, gidx: int, seg: int, version: int = 1):
@@ -88,6 +104,8 @@ def diff(a: Path, b: Path, max_range_m: float | None = None):
 if __name__ == "__main__":
     if sys.argv[1] == "build":
         build(sys.argv[2], Path(sys.argv[3]), int(sys.argv[4]) if len(sys.argv) > 4 else 1)
+    elif sys.argv[1] == "chunks":
+        chunks(sys.argv[2], int(sys.argv[3]), int(sys.argv[4]))
     elif sys.argv[1] == "explain":
         explain(sys.argv[2], int(sys.argv[3]), int(sys.argv[4]))
     elif sys.argv[1] == "diff":

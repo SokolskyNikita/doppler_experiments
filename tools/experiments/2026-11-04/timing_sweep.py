@@ -70,11 +70,13 @@ def main():
         for label in units.todo():
             profile, sp, case_ids = cc[label]
             d = units.dir(label)
+            started = (d / "run.json").exists()     # stopped mid-cell: bench keeps its finished cases
             d.mkdir(parents=True, exist_ok=True)
             cmd = [sys.executable, "-m", "bench", "run", "--tier", "t2", "--run-dir", str(d), "--profile", profile,
-                   "--parallel", str(len(case_ids)), *[x for p in sp for x in ("--search-param", p)], *case_ids]
+                   "--parallel", str(len(case_ids)), *(["--resume"] if started else []),
+                   *[x for p in sp for x in ("--search-param", p)], *case_ids]
             t0 = time.time()
-            with open(run / f"sweep_{label}.log", "w") as log:
+            with open(run / f"sweep_{label}.log", "a") as log:
                 code = subprocess.run(cmd, cwd=REPO, stdout=log, stderr=subprocess.STDOUT, env=os.environ).returncode
             print(f"{label}: exit {code} in {time.time() - t0:.0f} s", flush=True)
             if code == 0 and (d / "results.json").exists():

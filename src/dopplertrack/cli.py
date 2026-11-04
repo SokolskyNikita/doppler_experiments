@@ -7,7 +7,7 @@ import json
 import numpy as np
 
 from . import pipeline
-from .adsb import load_trace_metadata, load_traces
+from .adsb import join_days
 from .audio import FFmpegNotFoundError, Spectrogram
 from .coverage import DEFAULT_MAX_RANGE_M, report_coverage
 from .parallel import JOBS_ENV
@@ -88,7 +88,7 @@ def main(argv=None):
     r = sub.add_parser("search", help="rank candidate locations for a two-event recording")
     r.add_argument("spec"); r.add_argument("--events", nargs="+", required=True, metavar="JSON")
     r.add_argument("--pick", nargs=2, type=int, metavar=("RANK1", "RANK2"), help="two 1-based ranks from one detect JSON list")
-    r.add_argument("--traces", required=True); r.add_argument("--out", required=True)
+    r.add_argument("--traces", nargs="+", required=True, metavar="NPZ", help="trace file(s); consecutive day files of one box are joined across midnight"); r.add_argument("--out", required=True)
     r.add_argument("--bbox", nargs=4, type=float, metavar=("LATMIN", "LATMAX", "LONMIN", "LONMAX"))
     r.add_argument("--point", nargs=2, type=float, metavar=("LAT", "LON"), help="score a single known point instead of a grid")
     r.add_argument("--spacing", type=float, default=200.0); r.add_argument("--harmonics", nargs=2, type=int, default=(1, 1))
@@ -110,7 +110,7 @@ def main(argv=None):
     rf.add_argument("spec"); rf.add_argument("results", help="CSV written by search")
     rf.add_argument("--events", nargs="+", required=True, metavar="JSON")
     rf.add_argument("--pick", nargs=2, type=int, metavar=("RANK1", "RANK2"), help="two 1-based ranks from one detect JSON list")
-    rf.add_argument("--traces", required=True); rf.add_argument("--out", required=True)
+    rf.add_argument("--traces", nargs="+", required=True, metavar="NPZ", help="trace file(s); consecutive day files of one box are joined across midnight"); rf.add_argument("--out", required=True)
     rf.add_argument("--bbox", nargs=4, type=float, required=True, metavar=("LATMIN", "LATMAX", "LONMIN", "LONMAX"), help="the bbox the search used")
     rf.add_argument("--rank", type=int, default=1, help="which flight pair to refine, by rank in the results (1 = best)")
     rf.add_argument("--spacing", type=float, default=50.0); rf.add_argument("--half", type=float, default=600.0, help="half-width of the fine grid, m")
@@ -120,7 +120,7 @@ def main(argv=None):
     rf.add_argument("--no-dem", action="store_true")
 
     g = sub.add_parser("search-single", help="rank locations for ONE event whose absolute time is known")
-    g.add_argument("spec"); g.add_argument("--event", required=True); g.add_argument("--traces", required=True)
+    g.add_argument("spec"); g.add_argument("--event", required=True); g.add_argument("--traces", nargs="+", required=True, metavar="NPZ", help="trace file(s); consecutive day files of one box are joined across midnight")
     g.add_argument("--utc", required=True, help="heard CPA time of the event, unix seconds or ISO-8601 UTC")
     g.add_argument("--tol", type=float, default=30.0); g.add_argument("--out", required=True)
     g.add_argument("--bbox", nargs=4, type=float, required=True, metavar=("LATMIN", "LATMAX", "LONMIN", "LONMAX"))
@@ -192,7 +192,7 @@ def main(argv=None):
         pipeline.fetch_region(a.date, tuple(a.bbox), a.out, prop_only=not a.keep_jets, pod=a.pod, max_range_m=a.max_range)
     elif a.cmd == "search":
         sp = Spectrogram.load(a.spec)
-        traces = load_traces(a.traces)
+        traces, trace_meta = join_days(a.traces)
         elev = None if a.no_dem else Terrain().elevation
         if a.point:
             el = elev(np.array([a.point[0]]), np.array([a.point[1]])) if elev else np.zeros(1)
@@ -201,7 +201,7 @@ def main(argv=None):
             grid = Grid.make(*a.bbox, a.spacing, elev)
         res, segs = pipeline.run_search(sp, ev1, ev2, traces, grid, harmonics=tuple(a.harmonics),
                                         silence_d_m=None if a.no_silence else 6000.0, tol_s=a.tol, cpa_cache=a.cpa_cache,
-                                        max_range_m=a.max_range, trace_metadata=load_trace_metadata(a.traces),
+                                        max_range_m=a.max_range, trace_metadata=trace_meta,
                                         search_bbox=tuple(a.bbox) if a.bbox else (a.point[0], a.point[0], a.point[1], a.point[1]),
                                         workers=a.jobs, time_convention=a.convention, sf_tol_s=a.sf_tol,
                                         sf_smooth_s=a.sf_smooth, sf_window_s=a.sf_window, sf_flat_ratio=a.sf_flat_ratio,
@@ -220,8 +220,8 @@ def main(argv=None):
         res = pd.read_csv(a.results)
         best = res.sort_values("score", ascending=False).drop_duplicates(["icao1", "icao2"]).reset_index(drop=True)
         row = best.iloc[a.rank - 1]
-        traces = load_traces(a.traces)
-        report_coverage(load_trace_metadata(a.traces), tuple(a.bbox), a.max_range, pipeline.log)
+        traces, trace_meta = join_days(a.traces)
+        report_coverage(trace_meta, tuple(a.bbox), a.max_range, pipeline.log)
         elev = None if a.no_dem else Terrain().elevation
         segs = pipeline.segments_for_search(traces, tuple(a.bbox), float(row.lat0), float(row.lon0), max_range_m=a.max_range)
         row = pipeline.relocate_row(row, segs, ev2.t_cpa - ev1.t_cpa)
@@ -237,7 +237,7 @@ def main(argv=None):
         from datetime import datetime, timezone
         sp = Spectrogram.load(a.spec)
         ev = EventFit(**json.load(open(a.event)))
-        traces = load_traces(a.traces)
+        traces, trace_meta = join_days(a.traces)
         try:
             t_unix = float(a.utc)
         except ValueError:
@@ -245,7 +245,7 @@ def main(argv=None):
         elev = None if a.no_dem else Terrain().elevation
         grid = Grid.make(*a.bbox, a.spacing, elev)
         res, segs = pipeline.run_single_search(sp, ev, traces, grid, t_unix, tol_s=a.tol, harmonics=a.harmonics,
-                                               max_range_m=a.max_range, trace_metadata=load_trace_metadata(a.traces),
+                                               max_range_m=a.max_range, trace_metadata=trace_meta,
                                                search_bbox=tuple(a.bbox), workers=a.jobs)
         res["lat0"] = grid.lat0; res["lon0"] = grid.lon0
         res.to_csv(a.out, index=False)

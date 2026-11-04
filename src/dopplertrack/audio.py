@@ -226,8 +226,8 @@ def _band(sr, nfft, fmin, fmax):
     return f[band], band
 
 
-def _stft_db(seg, sr, nperseg, hop, band, nfft=None):
-    _, _, Z = ss.stft(seg, sr, nperseg=nperseg, noverlap=nperseg - hop, window="hann", nfft=nfft,
+def _stft_db(seg, sr, nperseg, hop, band, nfft=None, window="hann"):
+    _, _, Z = ss.stft(seg, sr, nperseg=nperseg, noverlap=nperseg - hop, window=window, nfft=nfft,
                       boundary=None, padded=False)
     return (10 * np.log10(np.abs(Z[band]) ** 2 + 1e-20)).astype(np.float32)
 
@@ -235,16 +235,17 @@ def _stft_db(seg, sr, nperseg, hop, band, nfft=None):
 def compute_spectrogram(x: np.ndarray, sr: int, nperseg: int = 8192, hop_s: float = 0.25,
                         fmin: float = 40.0, fmax: float = 450.0,
                         whiten_window_s: float | None = 600.0, chunk_frames: int = 16384,
-                        nfft: int | None = None, whiten: str = "time", bg_hz: float = 10.0) -> Spectrogram:
+                        nfft: int | None = None, whiten: str = "time", bg_hz: float = 10.0,
+                        window: str = "hann") -> Spectrogram:
     """High-resolution STFT in the low band, converted to dB and whitened.
 
     Whitening subtracts, per frequency bin, the running median over
     `whiten_window_s` (or the global median if None). This flattens mains
     hum and stationary machinery so only *changing* tones stand out.
 
-    The Hann window is `nperseg` samples long and is zero-padded to `nfft` (default nperseg), so
-    windows of different lengths can share one frequency grid; padding only interpolates the
-    spectrum, and the resolution stays sr / nperseg.
+    The window (Hann unless `window` names another scipy window, e.g. "boxcar") is `nperseg` samples
+    long and is zero-padded to `nfft` (default nperseg), so windows of different lengths can share
+    one frequency grid; padding only interpolates the spectrum, and the resolution stays sr / nperseg.
 
     whiten="frequency" replaces the median over time with each frame's median across frequency
     within +-bg_hz (Spectrogram.whitening); whiten_window_s is then unused.
@@ -259,7 +260,7 @@ def compute_spectrogram(x: np.ndarray, sr: int, nperseg: int = 8192, hop_s: floa
     parts = []
     for k0 in range(0, K, chunk_frames):
         k1 = min(k0 + chunk_frames, K)
-        parts.append(_stft_db(x[k0 * hop:(k1 - 1) * hop + nperseg], sr, nperseg, hop, band, nfft))
+        parts.append(_stft_db(x[k0 * hop:(k1 - 1) * hop + nperseg], sr, nperseg, hop, band, nfft, window))
     L = np.concatenate(parts, axis=1)
     t = (nperseg / 2 + np.arange(K) * hop) / sr
     if whiten == "frequency":

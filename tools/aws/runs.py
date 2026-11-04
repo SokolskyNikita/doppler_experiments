@@ -160,11 +160,19 @@ def launch_all(a) -> list[str]:
     and DOPPLERTRACK_SHARDS=n set."""
     if a.shards <= 1:
         return [launch(a)]
-    jobs = []
-    for k in range(1, a.shards + 1):
+    a.only_shard = getattr(a, "only_shard", None)
+    jobs, failed = [], []
+    for k in (a.only_shard or range(1, a.shards + 1)):
         b = argparse.Namespace(**vars(a))
         b.topic, b.shard = f"{a.topic}-s{k}of{a.shards}", [k, a.shards]
-        jobs.append(launch(b))
+        try:
+            jobs.append(launch(b))
+        except SystemExit as e:      # one shard without capacity doesn't stop the others
+            print(f"shard {k}/{a.shards} not launched: {e}", file=sys.stderr)
+            failed.append(k)
+    if failed:
+        sys.exit(f"{len(failed)} of {a.shards} shards not launched: {failed}; relaunch them with "
+                 f"`--shards {a.shards} --only-shard K` once capacity frees")
     return jobs
 
 
@@ -707,6 +715,8 @@ def main(argv=None) -> None:
     la.add_argument("topic", nargs="?", help="the run folder's topic, as for new_run.py")
     la.add_argument("--resume", metavar="JOB", help="continue JOB's run folder on a fresh box (after an "
                     "interruption): its partial folder is brought in first; command, inputs and caches as before")
+    la.add_argument("--only-shard", type=int, action="append", metavar="K", help="with --shards, launch only "
+                    "shard K (repeatable), e.g. the ones that found no capacity")
     la.add_argument("--shards", type=int, default=1, help="launch n boxes, each with DOPPLERTRACK_SHARD=k "
                     "(1..n) and DOPPLERTRACK_SHARDS=n, as jobs <topic>-s<k>of<n>")
     la.add_argument("--case", action="append", default=[], help="a bench case whose inputs the box needs")

@@ -186,3 +186,17 @@ def test_both_input_listings_become_cases_paths_and_cache_kinds():
              "repo": [{"path": "bench/cases.json"}],
              "cache": [{"path": "terrarium/10/301/385.png"}, {"path": "cpa/bench/oyster-bay_200m_dem.npz"}]}
     assert runs.listed_inputs(bench) == ([], ["derived/oyster_bay/rec.npz"], ["terrarium"])
+
+
+def test_a_shard_without_capacity_doesnt_stop_the_others(monkeypatch):
+    def launch(a):
+        if a.shard[0] == 2:
+            raise SystemExit("no capacity")
+        return a.topic
+    monkeypatch.setattr(runs, "launch", launch)
+    with pytest.raises(SystemExit, match=r"1 of 3 shards not launched: \[2\]"):
+        runs.launch_all(runs.argparse.Namespace(topic="t", shards=3, shard=None))
+    got = []
+    monkeypatch.setattr(runs, "launch", lambda a: got.append(a.shard) or a.topic)
+    runs.launch_all(runs.argparse.Namespace(topic="t", shards=3, shard=None, only_shard=[2]))
+    assert got == [[2, 3]]

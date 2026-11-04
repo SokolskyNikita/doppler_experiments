@@ -11,7 +11,10 @@ usage, from the repo root:
   verdict_null_days.py [RUN] [--shard K/N] [--resume DIR ...] [--merge] [--inputs]
                                          cut the planned days (units of tools/data/shards.py), one stream at a time
   verdict_null_days.py publish DIR ...   copy the pulled shards' boxes into derived/traces/<day>/, never over a file
-                                         already there, read-only, and print the manifest lines"""
+                                         already there, read-only, and print the manifest lines
+
+NULL_SET picks the recordings, in every mode: saved-fit (default; the saved-fit arm, plan verdict_null_days.json) or
+essex (SDE-D's jets-only negative xenocanto-xc990819, plan verdict_null_days-essex.json)."""
 import argparse
 import datetime
 import json
@@ -32,11 +35,14 @@ import shards                                                      # noqa: E402
 from bench import cases                                            # noqa: E402
 
 DATA = Path(os.environ.get("DOPPLERTRACK_DATA", Path.home() / "data" / "dopplertrack"))
-PLAN = Path(__file__).with_name("verdict_null_days.json")
 SEED = 20261104
-# the saved-fit arm's recordings: each group's cases share a date and are cut from one stream per day
-GROUPS = {"2026-09-08": ["oyster-bay", "oyster-bay-moved-wsw150", "oyster-bay-moved-north150"],
-          "2024-12-28": ["eagle-cam-clip-18000s"]}
+# each group's cases share a date and are cut from one stream per day
+SETS = {"saved-fit": {"2026-09-08": ["oyster-bay", "oyster-bay-moved-wsw150", "oyster-bay-moved-north150"],
+                      "2024-12-28": ["eagle-cam-clip-18000s"]},
+        "essex": {"2025-04-20": ["xenocanto-xc990819"]}}
+SET = os.environ.get("NULL_SET", "saved-fit")
+GROUPS = SETS[SET]
+PLAN = Path(__file__).with_name("verdict_null_days.json" if SET == "saved-fit" else f"verdict_null_days-{SET}.json")
 
 
 def box_of(cid: str) -> tuple[str, str, float]:
@@ -76,7 +82,7 @@ def run():
         shards.print_inputs([], [], [], ())
         return
     units = {d: g for g in p["groups"] for d in g["days"]}
-    run_dir = shards.open_run(a.run, "verdict-null-days", {"script": "tools/experiments/2026-11-04/verdict_null_days.py",
+    run_dir = shards.open_run(a.run, "verdict-null-days" + ("" if SET == "saved-fit" else f"-{SET}"), {"script": "tools/experiments/2026-11-04/verdict_null_days.py",
                                                           "params": p, "invocation": {"shard": "%d/%d" % a.shard,
                                                           "resume": [str(r) for r in a.resume], "merge": a.merge}})
     u = shards.Units(run_dir, list(units), p, a.shard, a.resume)

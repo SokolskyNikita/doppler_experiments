@@ -7,13 +7,12 @@ trace at the known microphone; Livermore: the audit's emission CPA at the recons
   the window on each side), and the horizontal distance from each source's positions to the reference
   track's, linearly interpolated between reference points at most 25 s apart.
 References: our adsb.lol tar cut (derived/oyster_bay/traces_ny.npz, derived/swfl/traces_swfl.npz) and,
-for Livermore, the author's KML (positions only). Traces are rebuilt from the bodies adsbfetch cached
-(tools/data/adsbfetch_to_npz.py), so times keep their fractions.
+for Livermore, the author's KML (positions only). Traces come from the fixed adsbfetch's rows in traces2/
+(fetched per source into separate caches; tools/data/adsbfetch_to_npz.from_fixed_rows), to the millisecond.
 
 usage: uv run python tools/experiments/2026-11-04/adsbfetch_compare.py "$RUN"
 """
 import csv
-import hashlib
 import importlib.util
 import json
 import sys
@@ -22,7 +21,7 @@ from pathlib import Path
 
 import numpy as np
 
-from dopplertrack.adsb import load_traces, parse_trace_bytes
+from dopplertrack.adsb import load_traces
 from dopplertrack.geo import haversine_m, lla_to_enu
 
 HERE = Path(__file__).resolve().parent
@@ -32,7 +31,6 @@ conv = importlib.util.module_from_spec(spec); spec.loader.exec_module(conv)
 spec = importlib.util.spec_from_file_location("audit", HERE / "livermore_audit.py")
 audit = importlib.util.module_from_spec(spec); spec.loader.exec_module(audit)
 DATA = Path.home() / "data" / "dopplertrack"
-CACHE = Path.home() / ".cache" / "adsbfetch"
 MIRRORS = ("adsbfi", "airplaneslive", "adsblol")
 HALF = 60.0
 DEV = [("ob", "a1dfeb", date(2026, 9, 8), DATA / "derived/oyster_bay/traces_ny.npz", (40.876466, -73.524951)),
@@ -41,9 +39,11 @@ DEV = [("ob", "a1dfeb", date(2026, 9, 8), DATA / "derived/oyster_bay/traces_ny.n
        ("swfl", "a336e4", date(2024, 12, 28), DATA / "derived/swfl/traces_swfl.npz", (26.702359, -81.847766))]
 
 
-def mirror(hex_, day, src):
-    body = CACHE / hashlib.sha256(conv.trace_url(conv.ORIGINS[src], hex_, day).encode()).hexdigest()
-    return parse_trace_bytes(body.read_bytes(), hex_) if body.exists() else None
+def mirror(hex_, day, src, folder):
+    """One source's trace from the fixed adsbfetch's rows (traces2/<tag>_<hex>_<source>.jsonl), or None."""
+    files = list(folder.glob(f"*_{hex_}_{src}.jsonl"))
+    rows = [json.loads(line) for f in files for line in open(f) if line.strip()]
+    return conv.from_fixed_rows(rows, hex_) if rows else None
 
 
 def stats(t, lat, lon, tc, ref=None):
@@ -81,7 +81,7 @@ def main(run: Path):
         rows.append(dict(site=site, hex=hex_, source="adsblol-tar (our cut)", tc=tc, **stats(ct, clat, clon, tc)))
         got = []
         for src in MIRRORS:
-            tr = mirror(hex_, day, src)
+            tr = mirror(hex_, day, src, run / "traces2")
             if tr is None:
                 rows.append(dict(site=site, hex=hex_, source=src, tc=tc, points=0, error="no track")); continue
             got.append(tr)
@@ -103,7 +103,7 @@ def main(run: Path):
         rows.append(dict(site="livermore", hex=hex_, id=pid, source="KML (author)", tc=tc, **stats(kt, klat, klon, tc)))
         got = []
         for src in MIRRORS:
-            tr = mirror(hex_, day, src)
+            tr = mirror(hex_, day, src, run / "traces2")
             if tr is None:
                 rows.append(dict(site="livermore", hex=hex_, id=pid, source=src, tc=tc, points=0, error="no track")); continue
             got.append(tr)

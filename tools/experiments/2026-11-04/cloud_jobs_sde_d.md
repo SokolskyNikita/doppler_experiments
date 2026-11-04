@@ -138,7 +138,8 @@ The branch is `claude/sde-c-pm-coordination-cbbe43`. Every change is committed. 
 
 **Next step:**
 1. Pull every fine job.
-2. Merge each case over both stages from a checkout at 80599d3: `collective_run.py <new run> --fine-from tools/experiments/2026-11-04/collective_kept_rest.json --merge --resume <the 20 rest folders> --extra-units <the 19 OB folders> runs/2026-11-04-collective-coarse-v2-merge-inputs…`.
-   - Simpler: give `--extra-units` the 8 coarse folders and the 19 OB fine folders; `--resume` takes the 20 rest folders.
+2. Merge each case over both stages, from a checkout at 80599d3:
+   `collective_run.py <new run> --fine-from tools/experiments/2026-11-04/collective_kept_rest.json --merge --resume <the 20 …-s*of20 folders> --extra-units <the 8 collective-coarse-v2-s*of8 folders> <the 19 …-s*of19 folders>`.
+   Each case takes its best cell over the coarse stage's cell 0 and every fine cell.
 3. Report each case's best cell.
 4. Then the denser coarse sampler (1 s shift, 1 % f0, 120 samples), cost measured first, and ace391's window checked against the find test.

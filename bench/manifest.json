@@ -101,6 +101,174 @@
    "licence": null
   },
   {
+   "path": "raw/audio/a2o/site-137/1648376.flac",
+   "bytes": 213184796,
+   "sha256": "eacd537be2732ccd6e64dfcad03d695e285cfef1ea835ec917fe91b6ffcec9c7",
+   "source": "https://api.acousticobservatory.org/audio_recordings/1648376",
+   "licence": "https://creativecommons.org/licenses/by/4.0/"
+  },
+  {
+   "path": "raw/audio/a2o/site-137/1648376.json",
+   "bytes": 1046,
+   "sha256": "f5562601fb5be4c6be129647e961f49f18b84024f4f9cd358062bf87f255133f",
+   "source": "https://api.acousticobservatory.org/audio_recordings/1648376",
+   "licence": "https://creativecommons.org/licenses/by/4.0/"
+  },
+  {
+   "path": "raw/audio/a2o/site-137/site.json",
+   "bytes": 1877,
+   "sha256": "e983ded1e3181ac9a91b22469e25ca1fc9fb2f98b8498d2412ca01e314b548b8",
+   "source": "https://api.acousticobservatory.org/sites/137",
+   "licence": "https://creativecommons.org/licenses/by/4.0/"
+  },
+  {
+   "path": "raw/audio/a2o/site-426/1774101.flac",
+   "bytes": 119527128,
+   "sha256": "612ce3af18d097c958b63e393c1f2861559ab725d3811a4612c5f38c7bc5b3a0",
+   "source": "https://api.acousticobservatory.org/audio_recordings/1774101",
+   "licence": "https://creativecommons.org/licenses/by/4.0/"
+  },
+  {
+   "path": "raw/audio/a2o/site-426/1774101.json",
+   "bytes": 933,
+   "sha256": "a10a672cd02a6a8d824fcb41e06ed4a544548546fa7d2d4a0792f7bb9d1abb46",
+   "source": "https://api.acousticobservatory.org/audio_recordings/1774101",
+   "licence": "https://creativecommons.org/licenses/by/4.0/"
+  },
+  {
+   "path": "raw/audio/a2o/site-426/site.json",
+   "bytes": 1361,
+   "sha256": "355c7812e25fc45b242a480e7c143599a1aaea3f7129657c845e3147d4acaa21",
+   "source": "https://api.acousticobservatory.org/sites/426",
+   "licence": "https://creativecommons.org/licenses/by/4.0/"
+  },
+  {
+   "path": "raw/audio/a2o/site-91/1948795.flac",
+   "bytes": 158193144,
+   "sha256": "2da492f2680d8ac6c5b56e744124a5fc8ccf591498d9c578796dba4082d7a543",
+   "source": "https://api.acousticobservatory.org/audio_recordings/1948795",
+   "licence": "https://creativecommons.org/licenses/by/4.0/"
+  },
+  {
+   "path": "raw/audio/a2o/site-91/1948795.json",
+   "bytes": 937,
+   "sha256": "b0a9971c7cb09cd2ffeba2e2c99dca59f76826f8ef630950c43ac251edd569cb",
+   "source": "https://api.acousticobservatory.org/audio_recordings/1948795",
+   "licence": "https://creativecommons.org/licenses/by/4.0/"
+  },
+  {
+   "path": "raw/audio/a2o/site-91/site.json",
+   "bytes": 1473,
+   "sha256": "d4fab6acc5e5b14ede499182be9675930b3a822e3d7ebd629fec990fcb8698aa",
+   "source": "https://api.acousticobservatory.org/sites/91",
+   "licence": "https://creativecommons.org/licenses/by/4.0/"
+  },
+  {
+   "path": "raw/audio/aerosonicdb/zenodo-10215080/LICENSE.txt",
+   "bytes": 277,
+   "sha256": "ea32e18bcf1e8eadc961cba90d923d090ad9468e3fa7a2c6636dd79c4292b823",
+   "source": "https://zenodo.org/records/10215080",
+   "licence": "https://creativecommons.org/licenses/by-nc/4.0/"
+  },
+  {
+   "path": "raw/audio/aerosonicdb/zenodo-10215080/README.md",
+   "bytes": 13334,
+   "sha256": "cd7ddfbbceccb45978ac0586f84d3082351c66eb9a918e00b3fff763b82f829b",
+   "source": "https://zenodo.org/records/10215080",
+   "licence": "https://creativecommons.org/licenses/by-nc/4.0/"
+  },
+  {
+   "path": "raw/audio/aerosonicdb/zenodo-10215080/aircraft_meta.csv",
+   "bytes": 57419,
+   "sha256": "9fcb22ca0283974317384ad416fa738552354e5428c2b32f93c506d5c704b6bb",
+   "source": "https://zenodo.org/records/10215080",
+   "licence": "https://creativecommons.org/licenses/by-nc/4.0/"
+  },
+  {
+   "path": "raw/audio/aerosonicdb/zenodo-10215080/aircraft_meta.json",
+   "bytes": 154351,
+   "sha256": "7c668de8c7bf3eb797488b87776e9732ce708b69b902e18e71fdb72ced08b023",
+   "source": "https://zenodo.org/records/10215080",
+   "licence": "https://creativecommons.org/licenses/by-nc/4.0/"
+  },
+  {
+   "path": "raw/audio/aerosonicdb/zenodo-10215080/audio.zip",
+   "bytes": 1169017090,
+   "sha256": "520a08beb11bcfe8e6db2af175e24dfb4370cfe7c5c49ccd9c848282226a6bc0",
+   "source": "https://zenodo.org/records/10215080",
+   "licence": "https://creativecommons.org/licenses/by-nc/4.0/"
+  },
+  {
+   "path": "raw/audio/aerosonicdb/zenodo-10215080/env_audio.zip",
+   "bytes": 495276974,
+   "sha256": "7ebfb4aec3ec41a64db326b7b28789c0d6346a6439182ceb1e9d22f401f3438a",
+   "source": "https://zenodo.org/records/10215080",
+   "licence": "https://creativecommons.org/licenses/by-nc/4.0/"
+  },
+  {
+   "path": "raw/audio/aerosonicdb/zenodo-10215080/environment_class_mappings.csv",
+   "bytes": 11966,
+   "sha256": "2f6d8a352462ef54778295ef608a15dba5cbc06da8606a249576c97942b4c42f",
+   "source": "https://zenodo.org/records/10215080",
+   "licence": "https://creativecommons.org/licenses/by-nc/4.0/"
+  },
+  {
+   "path": "raw/audio/aerosonicdb/zenodo-10215080/environment_mappings_raw.csv",
+   "bytes": 9373,
+   "sha256": "9cc7c8bcae60aba5b08e074c303a781b34077a24d2e7c370add342e2bd848805",
+   "source": "https://zenodo.org/records/10215080",
+   "licence": "https://creativecommons.org/licenses/by-nc/4.0/"
+  },
+  {
+   "path": "raw/audio/aerosonicdb/zenodo-10215080/locations.json",
+   "bytes": 203,
+   "sha256": "7c9517bbb6b993d1d001fba15fc6ba2eee4a239ff0ee27122d790c75a8fe72a7",
+   "source": "https://zenodo.org/records/10215080",
+   "licence": "https://creativecommons.org/licenses/by-nc/4.0/"
+  },
+  {
+   "path": "raw/audio/aerosonicdb/zenodo-10215080/sample_meta.csv",
+   "bytes": 307055,
+   "sha256": "4dced5bcd953bc97a39cf54d2b585a7875ef7d9c43f3660951560869b009090c",
+   "source": "https://zenodo.org/records/10215080",
+   "licence": "https://creativecommons.org/licenses/by-nc/4.0/"
+  },
+  {
+   "path": "raw/audio/aerosonicdb/zenodo-10215080/zenodo-record.json",
+   "bytes": 21983,
+   "sha256": "bdd1dd86230dfc88e21c53c6d1c4b6f0fc16b892e31afb5a65a13226483eb9e9",
+   "source": "https://zenodo.org/records/10215080",
+   "licence": "https://creativecommons.org/licenses/by-nc/4.0/"
+  },
+  {
+   "path": "raw/audio/datasec/zenodo-23097290/DATASEC.zip",
+   "bytes": 4572906250,
+   "sha256": "36d919beb0674e6b3798802ab5e9f6fd38d3ff1b76ce3b57c44c0affb05253f5",
+   "source": "https://zenodo.org/records/23097290",
+   "licence": "https://creativecommons.org/licenses/by-nc-sa/4.0/"
+  },
+  {
+   "path": "raw/audio/datasec/zenodo-23097290/zenodo-record.json",
+   "bytes": 7934,
+   "sha256": "255a8994abe92f765d5038982bc66c271d4e030e41f2c605cf5971c5f34b8eab",
+   "source": "https://zenodo.org/records/23097290",
+   "licence": "https://creativecommons.org/licenses/by-nc-sa/4.0/"
+  },
+  {
+   "path": "raw/audio/datased/zenodo-15346092/DataSED - Dataset for Sound Event Detection of environmental noise.zip",
+   "bytes": 4510378259,
+   "sha256": "13fb1c7d5a0fb8200f87ef5bdf115893f93fe7e8bfa87fd68bb16d6eb9209105",
+   "source": "https://zenodo.org/records/15346092",
+   "licence": "https://creativecommons.org/licenses/by-nc-sa/4.0/"
+  },
+  {
+   "path": "raw/audio/datased/zenodo-15346092/zenodo-record.json",
+   "bytes": 9449,
+   "sha256": "fbae2282175a717b4d02e7dbabd49bcc356412657c4484ccb3ffed44051d6eb8",
+   "source": "https://zenodo.org/records/15346092",
+   "licence": "https://creativecommons.org/licenses/by-nc-sa/4.0/"
+  },
+  {
    "path": "raw/audio/eclipse/ESID_375/2024_total_eclipse_data_data_dict.csv",
    "bytes": 4564,
    "sha256": "231e56f3d8c5e834cc48fa1c31406e0a35810590bb8275f639561f2294a3ea0a",
@@ -393,6 +561,69 @@
    "sha256": "d35897251afb0cf1c97c6080137dd8c4d0dab34492fab603c458e5e38159a9fd",
    "source": "Eclipse Soundscapes site list compiled from Zenodo",
    "licence": null
+  },
+  {
+   "path": "raw/audio/livermore/zenodo-23424278/Raw data_V_constant_H_constant.zip",
+   "bytes": 23096453,
+   "sha256": "9c4b5500561dc97d69ff06e79d4aea313d663afd2b77f1f0ceeefc8d9a19b4d0",
+   "source": "https://zenodo.org/records/23424278",
+   "licence": "https://creativecommons.org/licenses/by/4.0/"
+  },
+  {
+   "path": "raw/audio/livermore/zenodo-23424278/Raw data_V_constant_H_varying.zip",
+   "bytes": 78526572,
+   "sha256": "2a1a7e2ca361fbf22c24ecb65cc5f17ee55732580f443d12f6c00a5e854b0dc8",
+   "source": "https://zenodo.org/records/23424278",
+   "licence": "https://creativecommons.org/licenses/by/4.0/"
+  },
+  {
+   "path": "raw/audio/livermore/zenodo-23424278/Raw data_V_varying_H_constant.zip",
+   "bytes": 9914340,
+   "sha256": "436f70a9a55ba4bf5e4a5d3df2ea19c176e39262f408624f3a3c9a3cabb10c3a",
+   "source": "https://zenodo.org/records/23424278",
+   "licence": "https://creativecommons.org/licenses/by/4.0/"
+  },
+  {
+   "path": "raw/audio/livermore/zenodo-23424278/Raw data_V_varying_H_varying.zip",
+   "bytes": 20903858,
+   "sha256": "99b4296e5770cdefbfb6e5f5f0fd67ab9d25efd97fca7d0c3f8ced72c5fdc5c6",
+   "source": "https://zenodo.org/records/23424278",
+   "licence": "https://creativecommons.org/licenses/by/4.0/"
+  },
+  {
+   "path": "raw/audio/livermore/zenodo-23424278/final_results_40_cases.csv",
+   "bytes": 22047,
+   "sha256": "4bb2d3f5bd9055eb102a6ed7bf2610d6e0ca2141fea04fe7c6e13b683427474a",
+   "source": "https://zenodo.org/records/23424278",
+   "licence": "https://creativecommons.org/licenses/by/4.0/"
+  },
+  {
+   "path": "raw/audio/livermore/zenodo-23424278/frequency_extraction_tool.html",
+   "bytes": 241257,
+   "sha256": "3eb16c89da79b091625b2b1995155c5e33e74881205309d0b2efd97ac3bfea45",
+   "source": "https://zenodo.org/records/23424278",
+   "licence": "https://creativecommons.org/licenses/by/4.0/"
+  },
+  {
+   "path": "raw/audio/livermore/zenodo-23424278/frequency_vs_time_40_cases.pdf",
+   "bytes": 1309932,
+   "sha256": "a391ce8824b46bc26009a4fa974eb6e327059373c1a72b825122c25fd48f75a9",
+   "source": "https://zenodo.org/records/23424278",
+   "licence": "https://creativecommons.org/licenses/by/4.0/"
+  },
+  {
+   "path": "raw/audio/livermore/zenodo-23424278/results_for_all40_flights.pdf",
+   "bytes": 2296805,
+   "sha256": "5313ea39ea7263ae35c9afc1cbeae0681d6af4317a5d7e2f2edddf266523fdb9",
+   "source": "https://zenodo.org/records/23424278",
+   "licence": "https://creativecommons.org/licenses/by/4.0/"
+  },
+  {
+   "path": "raw/audio/livermore/zenodo-23424278/zenodo-record.json",
+   "bytes": 7317,
+   "sha256": "db42176412645a6eac9fa5776dd2b3ea7177cb43850e18f57abff7f6d077b4bd",
+   "source": "https://zenodo.org/records/23424278",
+   "licence": "https://creativecommons.org/licenses/by/4.0/"
   },
   {
    "path": "raw/audio/xenocanto/XC1008818_2025-06-15_1100.wav",

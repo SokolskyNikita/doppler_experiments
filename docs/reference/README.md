@@ -1,11 +1,13 @@
 # Reference documents
 
-Papers and books behind the technical choices in [PLAN.md](../../PLAN.md). Collected 2026-11-03.
+Papers, books, and video references behind the technical choices in [PLAN.md](../../PLAN.md). Collected 2026-11-03.
 
 The files themselves live outside the repo, in `$DOPPLERTRACK_DATA/reference/` (by default `~/data/dopplertrack/reference/`). This README and the conversion scripts in `tools/reference/` are tracked.
 
 - `pdf/`: the originals. These are the source of truth, especially for equations, figures and tables.
 - `md/`: Markdown conversions for fast searching and reading. Each page starts with a marker like `{149}------`, the **0-based** PDF page index: `{149}` is page 150 of the PDF (`pdftoppm -f 150 -l 150`). Printed book page numbers differ: in Kay I, book page = PDF page − 8; in Kay II, book page = PDF page − 13. Figures sit next to each file in `<name>_images/`.
+- `youtube/<video-id>/`: downloaded video, annotated Markdown transcript, subtitles, captions, ASR/OCR output, visual evidence, provenance, validation report, and artifact checksums.
+- `youtube/tooling/`: acquisition/review scripts and configuration; logs and temporary previews live under `work/<video-id>/`. The local `youtube/README.md` indexes the videos and `youtube/tooling/README.md` explains rebuilding them.
 
 The material is copyrighted and the upstream repo is public, so it stays on this machine and never goes into git.
 
@@ -18,6 +20,14 @@ Open-source projects on the same problem, the commits inspected and what PLAN.md
 3. Cite by author, year and equation or page, e.g. "Ferguson & Quinn 1994, eq. 15".
 
 **Read first for the next development cycle:** Ferguson & Lo 2000 §I (the model, eqs. 1–14), Ferguson 2016, then Golub & Pereyra 2003. Take the reduced objective from Ferguson & Quinn 1994 eq. 20: Ferguson 2016's eq. 14 is misprinted. [PLAN.md](../../PLAN.md) section 6.3 lists these caveats.
+
+## Video walkthrough
+
+[colsto, *I discovered a sound that leaks your exact location (and it's everywhere)*](https://www.youtube.com/watch?v=UytYrhYLOKI), published 2026-11-02, 29 min 12 s. The local annotated transcript is `$DOPPLERTRACK_DATA/reference/youtube/UytYrhYLOKI/transcript.md`.
+
+It documents the national candidate search, manual event-fit bounds, the silence filter, emission-time Doppler modeling, locked two-event scoring, and a separate single-flight search using a hand-traced ridge. The transcript distinguishes narration from on-screen values and editorial checks; the full audio was compared with an independent Whisper pass, and sampled frames and selected full-resolution stills were reviewed. Ambiguous speech and source discrepancies remain marked. In particular, the two displayed winning coordinates differ by about 610 m, and the one-flight example supplies a nominal time in narration but a one-hour window in its comparison slide.
+
+The source recording linked in the description, [4CxVxuMVkMc](https://www.youtube.com/watch?v=4CxVxuMVkMc), is already archived as `raw/audio/youtube/oyster_bay.webm` and `.m4a`; no duplicate was downloaded. It is our Oyster Bay **development** recording, not independent evaluation evidence. The walkthrough's thresholds and scores describe that demonstration and should not be substituted for this fork's measured results or current defaults.
 
 ## What's here
 

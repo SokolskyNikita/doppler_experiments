@@ -26,7 +26,7 @@ Doppler curves of propeller aircraft. `README.md` explains the method; `PLAN.md`
   - detector: `uv run pytest -q tests/test_phase0_cli.py`, or add
     `-k "merge_breaks or worker_pool"` for just the tie and process-pool tests;
   - CPA cache: `uv run pytest -q tests/test_cache.py`.
-- `uv run pytest -q`: about 45 s, no data or network needed. CI runs the same on Ubuntu.
+- `uv run pytest -q`: about a minute, no data or network needed. CI runs the same on Ubuntu.
 - Real data, opt-in, about 2 min:
   `DOPPLERTRACK_OYSTER_BAY="$DOPPLERTRACK_DATA/derived/oyster_bay" uv run pytest -q tests/test_oyster_bay.py`.
   It downloads terrain tiles the first time, so it needs the network on a cold cache.

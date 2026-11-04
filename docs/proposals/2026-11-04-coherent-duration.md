@@ -5,8 +5,7 @@ From the outside reviewer's advice (2026-11-04), as the PM adopted it. This is a
 **decision:** whether a 6 s or 18 s coherent scorer earns a test on the locator's shortlist, in the collective find's
 weak-window case (the eagle cam's event 2, at 6 dB on half its frames). Otherwise the shortlist keeps today's scorer.
 
-**Prior work.** Codex's doppler-integration-coverage (`runs/2026-11-04-codex-worktrees-archive/60b9/untracked/docs/experiments/2026-11-04-doppler-integration-coverage.md`, to land on dev)
-record.
+**Prior work.** Codex's [doppler-integration-coverage](../experiments/2026-11-04-doppler-integration-coverage.md) record.
 - With the true flight and clock supplied, 18 s of coherent integration against nine 2 s power blocks on eight real
   Livermore passes won 3, tied 2 and lost 3.
 - On 28 passes, the 18 s phase concentration had a median of 0.36 with a ±2 Hz constant-offset search, and 0.11
@@ -59,11 +58,18 @@ the true one).
   - **Win:** a C method wins if its L80 on the test set is at least 3 dB below the better of C1's and T's.
   - **Report:** the record also gives each pass's lowest recovering level, paired across methods; the spread across
     passes; and how often a wrong flight wins.
-- **Verification first, then frozen.**
-  - On an exact synthetic tone, C9 must gain within 1 dB of theory over C1 (+4.8 dB) and C3 (+3.0 dB).
-  - On the eight verification passes, with the true flight and clock supplied, the methods' order must agree with
-    Codex's.
-  - Only then are the settings frozen and the test set run. There is one counted retune.
+- **Two gates first, each pass or fail.** Both must pass before the settings freeze. If either fails, the record says
+  so and nothing else runs until it is fixed.
+  - **Gate 1, synthetic.** On an exact synthetic tone (the injected shape and trajectory, true flight and clock
+    supplied, on development background), C9's threshold gain must be within 1 dB of theory: +4.8 dB over C1 and
+    +3.0 dB over C3.
+  - **Gate 2, the eight passes.** On the eight verification passes, on development background with the true flight
+    and clock supplied, the median paired difference in recovering level, C9 − C1, must lie within ±1 dB, as
+    Codex's did (3 wins, 2 ties, 3 losses, medians 0.5 dB apart).
+  - The Seattle background stays untouched.
+- **Then frozen.** The test set runs blind, with the flight and pitch chosen by the search. There is one counted retune.
+- **Caveat on wrong flights.** The other 26 passes' trajectories at the same recorder are real curves, but they aren't
+  that day's traffic. So the wrong-flight rate measured here is a lower bound on what a live search faces.
 
 ## On the fleet
 

@@ -94,50 +94,120 @@ def build_segments(traces: list[Trace], lat0: float, lon0: float, dt: float = 1.
     return segs
 
 
-def cpa_table(grid: Grid, segs: list[Segment], max_range_m: float = 10000.0, c: float | None = None,
-              chunk: int = 20000) -> pd.DataFrame:
-    """For every (grid point, segment) within max_range: CPA emission time, heard time,
-    slant distance and ground-track speed at CPA."""
-    c = speed_of_sound() if c is None else c
-    rows = []
-    tree = cKDTree(grid.enu[:, :2])
-    for si, s in enumerate(segs):
-        # grid points within max_range (horizontally) of the track polyline, via a KD-tree
-        # on track samples spaced <= max_range/4 apart (so the union of balls covers the corridor)
-        step = max(1, int(max_range_m / 4 / max(np.median(s.speed), 1.0)))
-        probes = s.enu[::step, :2]
-        hits = tree.query_ball_point(probes, r=max_range_m * 1.05)
-        m = np.unique(np.concatenate([np.asarray(h, int) for h in hits])) if len(hits) else np.array([], int)
-        if len(m) == 0:
+CPA_TILE_M = 4000.0      # side of the tiles a chunk's grid points are split into to prune track samples
+
+
+def _corridor(tree: cKDTree, s: Segment, max_range_m: float) -> np.ndarray:
+    """Grid points within max_range (horizontally) of the track polyline, via a KD-tree on track
+    samples spaced <= max_range/4 apart (so the union of balls covers the corridor). Sorted."""
+    step = max(1, int(max_range_m / 4 / max(np.median(s.speed), 1.0)))
+    hits = tree.query_ball_point(s.enu[::step, :2], r=max_range_m * 1.05, return_sorted=False)
+    mask = np.zeros(tree.n, bool)
+    for h in hits:
+        mask[h] = True
+    return np.flatnonzero(mask)
+
+
+def _nearest_samples(g, gg, p, pp, max_range_m, tile_m):
+    """For each centred grid point g (G,3), the smallest squared distance to the centred samples p (n,3)
+    and the first sample index attaining it, wherever that distance can be <= max_range_m.
+
+    The points are split into tiles of tile_m metres, and each tile is compared only with the samples
+    within max_range_m + 1 m (horizontally) of its bounding box. A sample left out is farther than
+    max_range_m from every point of the tile, so it can't be the nearest one for a point whose CPA is
+    kept; points with no sample in reach get best = inf. The kept entries use the same expression as
+    comparing every point with every sample, so the kept CPAs are bit for bit the same."""
+    best = np.full(len(g), np.inf)
+    j = np.zeros(len(g), int)
+    key = np.floor(g[:, :2] / tile_m).astype(np.int64)
+    order = np.lexsort((key[:, 1], key[:, 0]))
+    ks = key[order]
+    cuts = np.flatnonzero(np.any(ks[1:] != ks[:-1], axis=1)) + 1
+    reach2 = (max_range_m + 1.0) ** 2
+    for pos in np.split(order, cuts):
+        gt = g[pos]
+        lo, hi = gt[:, :2].min(0), gt[:, :2].max(0)
+        out = np.maximum(np.maximum(lo - p[:, :2], p[:, :2] - hi), 0.0)
+        near = np.flatnonzero((out ** 2).sum(1) <= reach2)
+        if len(near) == 0:
             continue
-        for k in range(0, len(m), chunk):
-            idx = m[k:k + chunk]
-            # |g-p|^2 = |g|^2 + |p|^2 - 2 g.p as one BLAS matmul per block; coordinates are
-            # centred on the chunk so the cancellation stays harmless in float64
-            ctr = grid.enu[idx].mean(0)
-            g = grid.enu[idx] - ctr                                   # (G,3)
-            gg = (g ** 2).sum(1)
-            nstep = max(1, int(1e7 // max(len(idx), 1)))
-            best = np.full(len(idx), np.inf); j = np.zeros(len(idx), int)
-            for n0 in range(0, len(s.t), nstep):
-                pts = s.enu[n0:n0 + nstep] - ctr
-                d2 = gg[:, None] + (pts ** 2).sum(1)[None, :] - 2.0 * (g @ pts.T)    # (G,n)
-                jj = np.argmin(d2, axis=1)
-                dd = d2[np.arange(len(idx)), jj]
-                upd = dd < best
-                best[upd] = dd[upd]; j[upd] = jj[upd] + n0
-            r = np.sqrt(np.maximum(best, 0.0))
-            ok = (r <= max_range_m) & (j > 0) & (j < len(s.t) - 1)     # interior CPA only
-            if not ok.any():
-                continue
-            rows.append(pd.DataFrame({
-                "gidx": idx[ok].astype(np.int32), "seg": np.int32(si),
-                "t_emit": s.t[j[ok]], "t_heard": s.t[j[ok]] + r[ok] / c,
-                "d": r[ok].astype(np.float32), "v": s.speed[j[ok]].astype(np.float32),
-            }))
-    if not rows:
+        nstep = max(1, int(1e7 // len(pos)))
+        for n0 in range(0, len(near), nstep):
+            k = near[n0:n0 + nstep]
+            d2 = gg[pos][:, None] + pp[k][None, :] - 2.0 * (gt @ p[k].T)       # (G,n)
+            jj = np.argmin(d2, axis=1)
+            dd = d2[np.arange(len(pos)), jj]
+            upd = dd < best[pos]
+            best[pos[upd]] = dd[upd]; j[pos[upd]] = k[jj[upd]]
+    return best, j
+
+
+def _segment_cpa(enu: np.ndarray, tree: cKDTree, s: Segment, max_range_m: float, c: float, chunk: int,
+                 tile_m: float = CPA_TILE_M):
+    """CPA rows for one segment, in grid-index order: (gidx, t_emit, t_heard, d, v) arrays, or None."""
+    m = _corridor(tree, s, max_range_m)
+    out = []
+    for k in range(0, len(m), chunk):
+        idx = m[k:k + chunk]
+        # |g-p|^2 = |g|^2 + |p|^2 - 2 g.p with one BLAS matmul per block; coordinates are centred on
+        # the chunk so the cancellation stays harmless in float64. The centre is the chunk's mean, so
+        # which points share a chunk is part of the result's bits.
+        ctr = enu[idx].mean(0)
+        g = enu[idx] - ctr                                        # (G,3)
+        p = s.enu - ctr
+        best, j = _nearest_samples(g, (g ** 2).sum(1), p, (p ** 2).sum(1), max_range_m, tile_m)
+        r = np.sqrt(np.maximum(best, 0.0))
+        ok = (r <= max_range_m) & (j > 0) & (j < len(s.t) - 1)     # interior CPA only
+        if ok.any():
+            out.append((idx[ok].astype(np.int32), s.t[j[ok]], s.t[j[ok]] + r[ok] / c,
+                        r[ok].astype(np.float32), s.speed[j[ok]].astype(np.float32)))
+    if not out:
+        return None
+    return tuple(np.concatenate(col) for col in zip(*out))
+
+
+_WORKER: dict = {}
+
+
+def _init_cpa_worker(enu):
+    _WORKER["enu"], _WORKER["tree"] = enu, cKDTree(enu[:, :2])
+
+
+def _cpa_task(args):
+    s, max_range_m, c, chunk = args
+    return _segment_cpa(_WORKER["enu"], _WORKER["tree"], s, max_range_m, c, chunk)
+
+
+def cpa_table(grid: Grid, segs: list[Segment], max_range_m: float = 10000.0, c: float | None = None,
+              chunk: int = 20000, workers: int | None = None) -> pd.DataFrame:
+    """For every (grid point, segment) within max_range: CPA emission time, heard time,
+    slant distance and ground-track speed at CPA.
+
+    Rows are ordered by segment, then grid index. Segments run in `workers` processes
+    (parallel.default_jobs() by default); the table is the same, byte for byte, for any number."""
+    from .parallel import process_pool, resolve_jobs
+    c = speed_of_sound() if c is None else c
+    workers = resolve_jobs(workers)
+    if workers == 1 or len(segs) <= 1:
+        tree = cKDTree(grid.enu[:, :2])
+        parts = [_segment_cpa(grid.enu, tree, s, max_range_m, c, chunk) for s in segs]
+    else:
+        # longest segments first, so no long one starts last and keeps the others waiting
+        order = sorted(range(len(segs)), key=lambda i: -len(segs[i].t))
+        parts = [None] * len(segs)
+        with process_pool(workers, _init_cpa_worker, (grid.enu,)) as ex:
+            for i, part in zip(order, ex.map(_cpa_task, ((segs[i], max_range_m, c, chunk) for i in order))):
+                parts[i] = part
+    cols: dict[str, list[np.ndarray]] = {"gidx": [], "seg": [], "t_emit": [], "t_heard": [], "d": [], "v": []}
+    for si, part in enumerate(parts):
+        if part is None:
+            continue
+        for k, a in zip(("gidx", "t_emit", "t_heard", "d", "v"), part):
+            cols[k].append(a)
+        cols["seg"].append(np.full(len(part[0]), si, np.int32))
+    if not cols["gidx"]:
         return empty_cpa_table()
-    return pd.concat(rows, ignore_index=True)
+    return pd.DataFrame({k: np.concatenate(v) for k, v in cols.items()})
 
 
 CPA_COLUMNS = ["gidx", "seg", "t_emit", "t_heard", "d", "v"]

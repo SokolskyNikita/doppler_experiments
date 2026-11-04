@@ -39,11 +39,12 @@ def _file_lock(path):
             fcntl.flock(f, fcntl.LOCK_UN)
 
 
-def cached_cpa_table(grid: Grid, segs: list[Segment], max_range_m: float, c: float, path=None) -> pd.DataFrame:
+def cached_cpa_table(grid: Grid, segs: list[Segment], max_range_m: float, c: float, path=None,
+                     workers: int | None = None) -> pd.DataFrame:
     """cpa_table(), reusing the table saved at `path` if it was built from identical inputs (cpa_fingerprint).
     A lock file next to it makes a second process wait for the first instead of computing the same table."""
     if not path:
-        return cpa_table(grid, segs, max_range_m=max_range_m, c=c)
+        return cpa_table(grid, segs, max_range_m=max_range_m, c=c, workers=workers)
     fp = cpa_fingerprint(grid, segs, max_range_m, c)
     with _file_lock(f"{path}.lock"):
         if os.path.exists(path):
@@ -52,7 +53,7 @@ def cached_cpa_table(grid: Grid, segs: list[Segment], max_range_m: float, c: flo
                 log(f"loaded CPA table from {path}")
                 return cpa
             log(f"{path} was built from other inputs; recomputing")
-        cpa = cpa_table(grid, segs, max_range_m=max_range_m, c=c)
+        cpa = cpa_table(grid, segs, max_range_m=max_range_m, c=c, workers=workers)
         save_cpa_table(path, cpa, fp)
         return cpa
 
@@ -136,13 +137,14 @@ def relocate_row(row, segs: list[Segment], dt_s: float):
 def run_search(sp: Spectrogram, ev1: EventFit, ev2: EventFit, traces: list[Trace], grid: Grid,
                harmonics=(1, 1), tol_s=6.0, v_tol=0.35, d_tol=(0.4, 2.5), silence_d_m=6000.0,
                max_range_m=DEFAULT_MAX_RANGE_M, c=None, top_pairs=None, progress=True,
-               cpa_cache=None, trace_metadata=None, search_bbox=None) -> tuple[pd.DataFrame, list[Segment]]:
+               cpa_cache=None, trace_metadata=None, search_bbox=None,
+               workers: int | None = None) -> tuple[pd.DataFrame, list[Segment]]:
     """Rank grid points for a two-event recording.
 
     cpa_cache: optional .npz path. The (grid point, flight) CPA table depends only on the grid
     (with its elevations), the traces, max_range and the speed of sound, not on the events, and is
     the slow part; with a path given it is reused when those inputs are identical, else computed
-    and saved (see cached_cpa_table)."""
+    and saved (see cached_cpa_table). workers: processes for building the table (see cpa_table)."""
     c = speed_of_sound() if c is None else c
     bbox = search_bbox if search_bbox is not None else (grid.lat.min(), grid.lat.max(), grid.lon.min(), grid.lon.max())
     log(f"{len(traces)} loaded traces")
@@ -152,7 +154,7 @@ def run_search(sp: Spectrogram, ev1: EventFit, ev2: EventFit, traces: list[Trace
     n0, n1 = grid.enu[:, 1].min() - max_range_m, grid.enu[:, 1].max() + max_range_m
     segs = build_segments(traces, grid.lat0, grid.lon0, clip_enu=(e0, e1, n0, n1))
     log(f"{len(segs)} airborne segments; grid of {len(grid)} points")
-    cpa = cached_cpa_table(grid, segs, max_range_m, c, cpa_cache)
+    cpa = cached_cpa_table(grid, segs, max_range_m, c, cpa_cache, workers=workers)
     log(f"{len(cpa)} (point, flight) CPA records")
     dt = ev2.t_cpa - ev1.t_cpa
     pairs = pair_candidates(cpa, dt, tol_s=tol_s,
@@ -251,9 +253,10 @@ def refine(sp, ev1, ev2, segs, res_row, spacing_m=50.0, half_m=400.0, harmonics=
 def run_single_search(sp: Spectrogram, ev: EventFit, traces: list[Trace], grid: Grid, t_cpa_unix: float,
                       tol_s: float = 30.0, harmonics: int = 1, v_tol=0.35, d_tol=(0.4, 2.5),
                       max_range_m=DEFAULT_MAX_RANGE_M, c=None, trace_metadata=None,
-                      search_bbox=None) -> tuple[pd.DataFrame, list[Segment]]:
+                      search_bbox=None, workers: int | None = None) -> tuple[pd.DataFrame, list[Segment]]:
     """One event whose absolute time is known (±tol_s): rank grid points by how well the
-    curve they would hear from each nearby flight matches the spectrogram."""
+    curve they would hear from each nearby flight matches the spectrogram. workers: processes
+    for the CPA table (see cpa_table)."""
     from .score import single_score
     c = speed_of_sound() if c is None else c
     bbox = search_bbox if search_bbox is not None else (grid.lat.min(), grid.lat.max(), grid.lon.min(), grid.lon.max())
@@ -265,7 +268,7 @@ def run_single_search(sp: Spectrogram, ev: EventFit, traces: list[Trace], grid: 
     # only segments alive around the event time
     keep = [s for s in segs if s.t[0] - 300 <= t_cpa_unix <= s.t[-1] + 300]
     log(f"{len(keep)} of {len(segs)} segments overlap the event time")
-    cpa = cpa_table(grid, keep, max_range_m=max_range_m, c=c)
+    cpa = cpa_table(grid, keep, max_range_m=max_range_m, c=c, workers=workers)
     m = cpa[(cpa.t_heard - t_cpa_unix).abs() <= tol_s]
     m = m[m.v.between(ev.v * (1 - v_tol), ev.v * (1 + v_tol)) & m.d.between(ev.d * d_tol[0], ev.d * d_tol[1])]
     log(f"{len(m)} candidate (point, flight) pairs")

@@ -105,6 +105,22 @@ Inputs:
 
 Split: by pass, for example 15 and 14 passes on two boxes, with the dev events on either of them.
 
+## 4. Item 3 round 3, the likelihood tracker (`ll_box.sh`: `ll_roc.py`, then `ll_livermore.py`)
+
+decision: whether item 3's tracker becomes the likelihood tracker (`lltrack`), or stays `ridge()` with `hmmtrack`
+retired.
+
+| Step | Units | Command |
+|---|---|---|
+| constants | one file, from the development events | `ll_roc.py "$RUN" constants` |
+| roc | one per (a, β, noise window or weak-pass case): 4 × 11 × 18 | `ll_roc.py "$RUN" roc [A ...]` |
+| pick | — | `ll_roc.py "$RUN" pick` |
+| livermore, dev | one per pass (40) and per event (6) | `ll_livermore.py "$RUN" livermore\|dev [PASS or EVENT ...]` |
+| merge | — | `ll_livermore.py "$RUN" merge` |
+
+Inputs: the same as job 3. The box runs the steps in order, so the knobs are picked on synthetic data before any
+Livermore pass is read.
+
 ## SDE-B
 
 # SDE-B's benchmark jobs for the fleet (2026-11-04)

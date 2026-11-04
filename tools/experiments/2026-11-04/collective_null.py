@@ -17,7 +17,11 @@ Per case:
 - The null block uses result schema v3's names. verdicts.json is written and hashed before any label is read; then
   reveal.json gives each case's expected outcome and, for a located positive, the distance from the reference.
 
-usage: collective_null.py OUT_RUN OWN.json DIR [DIR ...]"""
+oyster-bay-sources-removed takes oyster-bay's draws (ALIASES): it differs from oyster-bay only in its own day's traces
+(the true pair removed), so on another day its search is the same computation (SDE-D, 2026-11-04).
+
+usage: collective_null.py OUT_RUN OWN.json OWN_COMMIT DRAWS_COMMIT DIR [DIR ...]
+(the commits are recorded; SDE-D showed 40454ae and 661c10f run the same search)"""
 import hashlib
 import importlib.util
 import json
@@ -36,6 +40,7 @@ P_FA = 0.01
 RESOLUTION_M = 2000.0
 FIELDS = ["day", "max_S", "second_S", "lat", "lon", "n_matched", "clock_audio_minus_utc_s"]
 M = "10"                      # the statistic's m key: k = 10 windows
+ALIASES = {"oyster-bay-sources-removed": "oyster-bay"}
 
 
 def draws(dirs):
@@ -78,9 +83,13 @@ def null_block(case, rows, own, seed):
 
 
 def main():
-    out, own_path, dirs = Path(sys.argv[1]), Path(sys.argv[2]), [Path(x) for x in sys.argv[3:]]
+    out, own_path = Path(sys.argv[1]), Path(sys.argv[2])
+    own_commit, draws_commit, dirs = sys.argv[3], sys.argv[4], [Path(x) for x in sys.argv[5:]]
     own = json.loads(own_path.read_text())
     alld = draws(dirs)
+    for case, src in ALIASES.items():
+        if case in own and src in alld and case not in alld:
+            alld[case] = alld[src]
     verdicts, arrays = {}, {}
     for k, case in enumerate(sorted(alld)):
         rows = [alld[case][d] for d in sorted(alld[case])]
@@ -93,6 +102,9 @@ def main():
         above = [s for s in (o["max_S"], o.get("second_S")) if s is not None and np.isfinite(s) and s > gam]
         outcome = "located" if len(above) == 1 and o["max_S"] > gam else "ambiguous"
         codes = [] if outcome == "located" else ["competing_mode" if len(above) > 1 else "below_null_threshold"]
+        nb["commits"] = {"own_day": own_commit, "draws": draws_commit}
+        if case in ALIASES:
+            nb["draws_from"] = ALIASES[case]
         verdicts[case] = {"null": nb, "outcome": outcome, "reason_codes": codes,
                           "winner": {"m": int(M), "S_m": o["max_S"], "gamma_m": gam, "margin": o["max_S"] - gam,
                                      "lat": o.get("lat"), "lon": o.get("lon")}}

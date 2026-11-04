@@ -402,6 +402,58 @@ Stage B's A1/A3 must run the first run's hypotheses (`45d0bd8`), not the retune'
 
 The other jobs launch from `dev`.
 
+### Handoff (2026-11-04, end of day)
+
+**On the fleet:** nothing of SDE-A's is running. Every job above is merged and recorded:
+[comparable-score](../../../docs/experiments/2026-11-04-comparable-score.md),
+[hypotheses](../../../docs/experiments/2026-11-04-hypotheses.md),
+[timing-convention](../../../docs/experiments/2026-11-04-timing-convention.md),
+[parallel-cpa](../../../docs/experiments/2026-11-04-parallel-cpa.md),
+[verdict-null](../../../docs/experiments/2026-11-04-verdict-null.md) and
+[coherent-duration](../../../docs/experiments/2026-11-04-coherent-duration.md).
+
+**Waiting on another session's jobs:** SDE-D's collective-find null, jobs `2026-11-04-collective-null-s<k>of24`.
+- **The draws:** SDE-D's, at `661c10f`, one unit "`<case>--null--<day>`" per case and day. The cases are oyster-bay,
+  oyster-bay-moved-wsw150, oyster-bay-moved-north150 and eagle-cam-clip-18000s × 50 days
+  (`verdict_null_days.json`), plus xenocanto-xc990819 × 45 (`verdict_null_days-essex.json`; five days have no
+  adsb.lol release).
+- **The own days:** SDE-D's, at `40454ae`, the same search. SDE-D sends them as `OWN.json` (case → max_S, second_S,
+  lat, lon, clock_audio_minus_utc_s).
+- **To judge:**
+  1. `runs pull` each shard.
+  2. Run `uv run python tools/experiments/2026-11-04/collective_null.py OUT_RUN OWN.json 40454ae 661c10f <shard
+     run folders>`, with OUT_RUN made by `tools/data/new_run.py collective-null-judge`.
+  - It writes each case's schema v3 `verdict.null` block and verdict, hashed in `verdicts.json` before labels are
+    read, and then `reveal.json`.
+  - oyster-bay-sources-removed takes oyster-bay's draws (`ALIASES`).
+- **The criterion, fixed before any draw:**
+  - The estimator is a Gumbel at P_FA = 0.01, unless its KS exceeds 1.36/√n; then the empirical 1 % point.
+  - "Located" iff the own day's max_S > γ and its second_S ≤ γ.
+  - The positives (oyster-bay, eagle-cam-clip-18000s) must be located within 2 km of the reference.
+  - The negatives (wsw150, north150, sources-removed, xc990819) must not be.
+- **Where the result goes:** SDE-D's collective-find record, as its null section. The verdict decides whether
+  anything the pipeline makes can be called "located" against a realistic null: the saved-fit arm here found that
+  per-pair Z can't.
+
+**Half-built, waiting:** [the coherent-duration successor](../../../docs/proposals/2026-11-04-coherent-duration-2.md),
+which the PM approved to run after the collective verdict.
+- **First step:** write the white-noise Monte Carlo that sets gate 1's target. Its specification is in the proposal:
+  the same detectors, pitch grid and empirical 1/200 threshold, and P_D = 0.8. It doesn't exist yet. Hash it before
+  the synthetic gate runs.
+- **Then:** rerun the gates with `coherent_duration.py --stage gates`, with `LEVELS` extended to +12 dB and the judge's
+  gate-1 target read from the Monte Carlo. Reuse the bands in `runs/2026-11-04-coherent-duration-bands/`.
+- **If both gates pass:** the test, `--stage test`. The Livermore traffic for set A is in
+  `derived/traces/<day>/livermore_margin12.npz`.
+
+**Data made today:**
+- 200 + 199 null-day cuts, 45 Essex days and 6 Livermore days, all in `derived/traces/`, the bucket and the data root's
+  MANIFEST.
+- `raw/aux/opensky/doc8643AircraftTypes.csv`, because boxes can't reach OpenSky.
+
+**The next step I'd take:** judge SDE-D's draws the moment they land. If the collective Z locates the positives
+against the null, write `locate`'s v3 verdict from it (SDE-B owns the schema). If it doesn't, Phase 3's locator has
+no statistic yet that beats other days' traffic, and that is the drawing-board finding to report.
+
 ## SDE-E
 
 - **Box sizing per job, from `runs fleet --util`.** Each job's box is sized from its measured CPU use: a job under

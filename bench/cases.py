@@ -172,11 +172,10 @@ def validate_case(case: dict, manifest_files: dict[str, str]) -> None:
                     problems.append(f"{where}: weather.{k} is needed with a temperature")
             if not (_num(w.get("station_distance_km")) and w["station_distance_km"] >= 0):
                 problems.append(f"{where}: weather.station_distance_km is needed with a temperature")
-            h = w.get("aircraft_height_m")
-            if h is not None and not (_num(h) and h >= 0):
-                problems.append(f"{where}: weather.aircraft_height_m must be metres above the ground")
-        elif w.get("aircraft_height_m") is not None:
-            problems.append(f"{where}: weather.aircraft_height_m needs a temperature")
+        if w.get("aircraft_height_m") is not None:
+            # each flight's own height sets its speed now (atmosphere.point_sound_speed), so a per-case height is
+            # superseded; older versions carry the field as null
+            problems.append(f"{where}: weather.aircraft_height_m is superseded by the per-flight sound speed")
     lab = case.get("labels") or {}
     ref = lab.get("reference")
     if ref is not None and not (isinstance(ref, dict) and _num(ref.get("lat")) and _num(ref.get("lon"))):

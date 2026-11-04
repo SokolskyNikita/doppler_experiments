@@ -3,7 +3,7 @@
     tools/aws/runs launch <topic> [--case ID] [--input PATH] [--cache KIND] [--jobs N] [--size 16xlarge]
                           [--on-demand] [--shards N] [--repo CHECKOUT] [--max-hours H] [--wait] -- <command>
     tools/aws/runs launch --resume JOB      (the same run folder, continued on a fresh box)
-    tools/aws/runs status [JOB]      tools/aws/runs wait JOB      tools/aws/runs pull JOB
+    tools/aws/runs status [JOB]      tools/aws/runs wait JOB      tools/aws/runs pull JOB      tools/aws/runs fleet
     tools/aws/runs log JOB           tools/aws/runs cancel JOB    tools/aws/runs interrupt JOB
     tools/aws/runs seed-tools        tools/aws/runs seed [--dry-run] [--run FOLDER ...]
     tools/aws/runs fetch-sources [--dry-run]
@@ -117,7 +117,9 @@ def case_inputs(case_ids: list[str]) -> list[str]:
         if cid not in cases:
             sys.exit(f"no case {cid!r} in bench/cases.json")
         c = cases[cid]
-        paths = [c.get("audio", {}).get("path"), c.get("spectrogram"), c.get("flight_data", {}).get("traces")]
+        traces = c.get("flight_data", {}).get("traces")          # one file, or one per UTC day
+        paths = [c.get("audio", {}).get("path"), c.get("spectrogram"),
+                 *([traces] if isinstance(traces, str) else traces or [])]
         paths += [d["path"] for d in c.get("derived", [])]
         for p in paths:
             if p and p not in out:
@@ -251,16 +253,24 @@ def launch(a) -> str:
     # spot in each region in turn; then on demand in each only with --fallback-on-demand, so a job never eats
     # the on-demand quota that deciding runs (--on-demand) count on
     markets = [True] if a.on_demand else [False, True] if a.fallback_on_demand else [False]
-    ids, errs, region = [], [], None
-    for od in markets:
-        for region in (a.region or JOB_REGIONS):
-            ec2 = session(region).client("ec2")
-            ids, err = start_box(ec2, outputs(region), job, a.size, od)
+    deadline = time.time() + 60 * (getattr(a, "wait_for_capacity", 0) or 0)
+    while True:      # every region and market in turn; while all are full, wait for capacity rather than fail
+        ids, errs, region = [], [], None
+        for od in markets:
+            for region in (a.region or JOB_REGIONS):
+                ec2 = session(region).client("ec2")
+                ids, err = start_box(ec2, outputs(region), job, a.size, od)
+                if ids:
+                    break
+                errs.append(f"{region} {'on-demand' if od else 'spot'}: {err}")
             if ids:
                 break
-            errs.append(f"{region} {'on-demand' if od else 'spot'}: {err}")
-        if ids:
+        if ids or time.time() > deadline:
             break
+        put_status(s3, bucket, job, {"job": job, "state": "submitted", "stage": "waiting for capacity",
+                                     "error": " | ".join(errs), "updated": now()})
+        print(f"{job}: every region full ({' | '.join(errs)}); retrying in 60 s", flush=True)
+        time.sleep(60)
     if errs and ids:
         print(f"{job}: " + "; ".join(e.split(':')[0] + ' full' for e in errs), flush=True)
     errs = " | ".join(errs)
@@ -288,7 +298,8 @@ JOB_EBS_USD_PER_HOUR = 0.063
 def start_box(ec2, out: dict, job: str, size: str, on_demand: bool) -> tuple[list[str], str]:
     resp = ec2.create_fleet(**fleet_request(out, job, size, on_demand))
     ids = [i for inst in resp.get("Instances", []) for i in inst.get("InstanceIds", [])]
-    return ids, "; ".join(f"{e.get('ErrorCode')}: {e.get('ErrorMessage')}" for e in resp.get("Errors", []))
+    codes = sorted({e.get("ErrorCode") for e in resp.get("Errors", [])})     # one per code, not per type and AZ
+    return ids, ", ".join(c for c in codes if c)
 
 
 def hourly_price(itype: str, az: str, market: str, region: str = REGION) -> float:
@@ -361,8 +372,48 @@ def status(a) -> None:
     for page in pages:
         for p in page.get("CommonPrefixes", []):
             job = p["Prefix"].split("/")[1]
+            if job.startswith("dev-"):       # dev-box syncs from before they moved to dev/: not jobs
+                continue
             st = get_status(s3, bucket, job)
             print(f"{job:45s} {st.get('state', '?'):12s} {st.get('updated', ''):26s} {job_cost(s3, bucket, job, st)}")
+
+
+def fleet(a) -> None:
+    """Every project box running now, by region, with its job and hourly price; the jobs whose launch failed
+    for capacity or quota in the last day; and the hourly total."""
+    total, rows, launches = 0.0, [], {}
+    for region in JOB_REGIONS:
+        ec2 = session(region).client("ec2")
+        r = ec2.describe_instances(Filters=[{"Name": "tag:project", "Values": ["dopplertrack"]},
+                                            {"Name": "instance-state-name", "Values": ["pending", "running"]}])
+        for res in r["Reservations"]:
+            for i in res["Instances"]:
+                tags = {t["Key"]: t["Value"] for t in i.get("Tags", [])}
+                market = i.get("InstanceLifecycle", "on-demand")
+                key = (i["InstanceType"], i["Placement"]["AvailabilityZone"], market)
+                if key not in launches:
+                    launches[key] = hourly_price(*key, region)
+                total += launches[key]
+                rows.append((region, i["InstanceType"], market, launches[key], tags.get("dopplertrack-job", tags.get("Name", "")),
+                             i["LaunchTime"].strftime("%H:%M")))
+    for row in sorted(rows):
+        print(f"{row[0]:10s} {row[1]:14s} {row[2]:9s} ${row[3]:.3f}/h  {row[5]}  {row[4]}")
+    by = {}
+    for row in rows:
+        by[(row[0], row[2])] = by.get((row[0], row[2]), 0) + 1
+    print("boxes: " + ", ".join(f"{r} {m} {n}" for (r, m), n in sorted(by.items())) + f"; ${total:.2f}/h in all")
+    s3 = session().client("s3")
+    bucket = outputs()["Bucket"]
+    since = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=1)
+    failed = []
+    for page in s3.get_paginator("list_objects_v2").paginate(Bucket=bucket, Prefix="jobs/"):
+        for o in page.get("Contents", []):
+            if o["Key"].endswith("/status.json") and o["LastModified"] > since:
+                st = json.loads(s3.get_object(Bucket=bucket, Key=o["Key"])["Body"].read())
+                if st.get("state") == "failed" and st.get("stage") == "launch":
+                    failed.append((st.get("updated", ""), st["job"], st.get("error", "")[:160]))
+    for f in sorted(failed):
+        print(f"launch failed {f[0]} {f[1]}: {f[2]}")
 
 
 def wait(a) -> dict:
@@ -607,7 +658,7 @@ def fetch_sources(a) -> None:
     s3.put_object(Bucket=bucket, Key=key, Body=json.dumps({"files": plan}, indent=1).encode())
     a.topic, a.case, a.input, a.cache, a.jobs = "aws-fetch-sources", [], [], [], None
     a.on_demand, a.fallback_on_demand, a.max_hours, a.checkpoint_minutes, a.wait = False, False, 6, 5, False
-    a.resume, a.repo, a.shards, a.shard, a.region = None, None, 1, None, None
+    a.resume, a.repo, a.shards, a.shard, a.region, a.wait_for_capacity = None, None, 1, None, None, 90
     a.command = ["python3", "tools/aws/box/fetch_sources.py", f"s3://{bucket}/{key}", bucket]
     launch(a)
 
@@ -730,6 +781,10 @@ def main(argv=None) -> None:
     la.add_argument("--on-demand", action="store_true", help="on-demand instead of spot, for deciding runs")
     la.add_argument("--region", action="append", choices=JOB_REGIONS, help="only this region (repeatable; "
                     f"default: {', '.join(JOB_REGIONS)}, in that order)")
+    la.add_argument("--queue-minutes", "--wait-for-capacity", dest="wait_for_capacity", type=float, default=90,
+                    metavar="MIN", help="when every region is full (MaxSpotInstanceCountExceeded, VcpuLimitExceeded, "
+                    "no capacity), keep the job submitted and retry every 60 s, cycling the regions, for this long "
+                    "(default: 90; 0: fail at once)")
     la.add_argument("--fallback-on-demand", action="store_true", help="if no region has spot capacity, start "
                     "an on-demand box rather than fail (off by default: it uses the on-demand quota)")
     la.add_argument("--max-hours", type=float, default=12, help="stop the command after this long (default: 12)")
@@ -743,6 +798,7 @@ def main(argv=None) -> None:
                         ("cancel", "terminate a job's box"), ("interrupt", "send a job's spot box a real interruption")):
         p = sub.add_parser(name, help=help_)
         p.add_argument("job", nargs="?" if name == "status" else None)
+    sub.add_parser("fleet", help="every box running now, by region, with its price, and failed launches")
     sub.add_parser("seed-tools", help="put uv and ffmpeg for each architecture in the bucket")
     fs = sub.add_parser("fetch-sources", help="fetch the public raw files the bucket lacks on a box")
     fs.add_argument("--size", default="4xlarge", help="instance size (default: 4xlarge; the job is network-bound)")
@@ -771,7 +827,7 @@ def main(argv=None) -> None:
                 pull(a)
             sys.exit(0 if all(st == "done" for st in states) else 1)
     else:
-        {"status": status, "wait": wait, "pull": pull, "log": log, "cancel": cancel, "interrupt": interrupt,
+        {"status": status, "fleet": fleet, "wait": wait, "pull": pull, "log": log, "cancel": cancel, "interrupt": interrupt,
          "seed-tools": seed_tools, "seed": seed, "fetch-sources": fetch_sources,
          "dev": dev}[a.cmd](a)
 

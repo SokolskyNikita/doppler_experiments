@@ -1,6 +1,8 @@
 """What a benchmark run reads, for a box that starts with nothing but the repo at a pinned commit.
 
-`bench inputs [--profile P] [case ...]` and `bench inputs --tier1` print three lists:
+`bench inputs [--profile P] [case ...]` and `bench inputs --tier1` print tools/data/shards.py's shape, which `runs launch`
+reads: {cases, inputs (data-root paths), cache_kinds, cpa_tables}, plus `detail`, each file with its kind, role,
+SHA-256 and the cases or spans that read it, in three lists:
 - data: files under $DOPPLERTRACK_DATA, each with its SHA-256 when the manifest records one: spectrograms,
   trace files and anything else a case or span reads. A box copies these; raw audio is listed only as a source
   of the derived files, which `bench build` could remake from it.
@@ -31,8 +33,14 @@ class _Lists:
         if who not in e["used_by"]:
             e["used_by"].append(who)
 
-    def doc(self, **head) -> dict:
-        return {**head, **{k: sorted(getattr(self, k).values(), key=lambda e: e["path"]) for k in ("data", "repo", "cache")}}
+    def doc(self, case_ids: list[str], **head) -> dict:
+        detail = {k: sorted(getattr(self, k).values(), key=lambda e: e["path"]) for k in ("data", "repo", "cache")}
+        # raw sources are listed only to rebuild derived files, so a box doesn't need them to run
+        paths = [e["path"] for e in detail["data"] if not e["role"].startswith("raw source")]
+        kinds = list(dict.fromkeys(e["path"].split("/", 1)[0] for e in detail["cache"] if not e["path"].startswith("cpa/")))
+        cpa = [e["path"] for e in detail["cache"] if e["path"].startswith("cpa/")]
+        return {"cases": case_ids, "inputs": paths, "cache_kinds": kinds, "cpa_tables": cpa,
+                "detail": {**head, **detail}}
 
 
 def _case_files(out: _Lists, case: dict, profile: str, who: str, cpa: bool = True):
@@ -61,7 +69,7 @@ def run_inputs(case_ids: list[str], profile: str) -> dict:
         out.add("repo", "bench/cases.json", "cases and their labels", cid)
     for c in SMALL_CACHES[:1]:
         out.add("cache", c["path"], c["role"], "all")
-    return out.doc(kind="bench run", profile=profile, cases=case_ids)
+    return out.doc(case_ids, kind="bench run", profile=profile)
 
 
 def tier1_inputs(sets=("development",)) -> dict:
@@ -83,4 +91,4 @@ def tier1_inputs(sets=("development",)) -> dict:
     for c in SMALL_CACHES:
         out.add("cache", c["path"], c["role"], "all")
     out.add("repo", "bench/tier1.json", "spans", "all")
-    return out.doc(kind="tier1", sets=list(sets), spans=[s["id"] for s in spans], known_point=doc["known_point"])
+    return out.doc(list(doc["known_point"]), kind="tier1", sets=list(sets), spans=[s["id"] for s in spans])

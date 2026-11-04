@@ -153,8 +153,11 @@ SCHEMA_V1 = {
 # codes, and pair_rules records how each event-pair rule chose and what it found. "located" is reserved for Phase 4
 # and step B: step A never emits it. Version 1 records still validate under their own schema.
 VERDICT_OUTCOMES = ("located", "ambiguous", "insufficient_evidence")
+# competing_mode and below_null_threshold are Phase 4's (docs/proposals/2026-11-04-verdict-null.md): two or more
+# distinct modes clear the null threshold, or none does; both mean "ambiguous". Nothing emits them yet.
 REASON_CODES = ("no_usable_flyovers", "flight_data_missing_box", "flight_data_missing_time", "past_utc_midnight",
-                "no_surviving_candidate", "winner_only_refined", "silence_filter_off")
+                "no_surviving_candidate", "winner_only_refined", "silence_filter_off", "competing_mode",
+                "below_null_threshold")
 SCHEMA_V2 = {**SCHEMA_V1,
              "verdict": Maybe({"outcome": OneOf(*VERDICT_OUTCOMES), "reason_codes": ListOf(OneOf(*REASON_CODES)),
                                "reasons": ListOf(str)}),

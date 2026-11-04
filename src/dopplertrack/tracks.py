@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import contextlib
+import dataclasses
 from collections.abc import Iterator
 from dataclasses import dataclass, asdict
 
@@ -507,6 +508,46 @@ def merge_candidates(cands: list[Candidate], min_sep_s: float, keep: int) -> lis
     return out
 
 
+OFF_CURVE = (-0.20, -0.16, -0.12, -0.08, 0.08, 0.12, 0.16, 0.20)    # S1's null: the curve moved off itself
+
+
+def overlap_weight(hop_s: float, window_s: float = 2.048, n: int = 8192) -> float:
+    """Harris's overlap weight 1 / (1 + 2 sum_m rho(m hop)^2) of a Hann window: the share of a frame's evidence that
+    is its own (0.254 for the package's 2.048 s window at 0.25 s)."""
+    w = np.hanning(n)
+    h = max(1, int(round(n * hop_s / window_s)))
+    e = float(np.dot(w, w))
+    rho = [float(np.dot(w[:-m * h], w[m * h:])) / e for m in range(1, (n - 1) // h + 1)]
+    return 1.0 / (1.0 + 2.0 * sum(r * r for r in rho))
+
+
+def curve_zscore(sp: Spectrogram, ef: EventFit, c: float, harmonics: int = 1, frame_weight: float | None = None
+                 ) -> tuple[float, float]:
+    """S1 for a fitted curve: sum_k a_k c_k / (sigma_c sqrt(sum_k a_k^2 / w)) over the valid frames k of sp (whitened)
+    in [t_start, t_end], with c_k the ridge contrast on the curve (averaged over harmonics), a_k its sweep weights,
+    w the frames' overlap weight and sigma_c the robust spread (MAD) of the same contrast along the curve moved off
+    itself in frequency (OFF_CURVE). A z-score: unit spread in noise whatever the curve's length or the overlap.
+    Returns (S1, sigma_c)."""
+    k = (sp.t >= ef.t_start) & (sp.t <= ef.t_end) & sp.valid
+    t = sp.t[k]
+    if len(t) < 3 or not np.isfinite(ef.f0):
+        return float("nan"), float("nan")
+    dto, ratio = _shape(ef.v, ef.d, c)
+    rat = np.interp(t - ef.t_cpa_emit, dto, ratio, left=np.nan, right=np.nan)
+    a = np.where(np.isnan(rat), 0.0, sweep_weights(rat, t))
+    rat = np.nan_to_num(rat, nan=1.0)
+
+    def contrast(scale):
+        return np.mean([curve_contrast(sp, t, h * ef.f0 * rat * scale) for h in range(1, harmonics + 1)], axis=0)
+    on = np.nan_to_num(contrast(1.0))
+    off = np.concatenate([contrast(1.0 + s) for s in OFF_CURVE])
+    off = off[np.isfinite(off)]
+    sigma = 1.4826 * float(np.median(np.abs(off - np.median(off)))) if len(off) else float("nan")
+    w = overlap_weight(float(np.median(np.diff(sp.t)))) if frame_weight is None else frame_weight
+    den = sigma * np.sqrt(float(np.sum(a * a)) / w)
+    return (float(np.sum(a * on) / den) if den > 0 else float("nan")), sigma
+
+
 def detect_events(sp: Spectrogram, f_lo: float, f_hi: float, c: float | None = None, harmonics: int = 1,
                   window_s: float = 240.0, step_s: float = 120.0, v_grid=None, d_grid=None,
                   f0_step: float = 2.0, t0_step: float = 2.0, n_curve: int = 80, top: int = 20,
@@ -520,7 +561,7 @@ def detect_events(sp: Spectrogram, f_lo: float, f_hi: float, c: float | None = N
     Nelder-Mead, and the best `top` after refinement are returned, sorted by score
     (sweep-weighted ridge contrast, dB). Only finite scores strictly above
     min_score are returned, so the result may be empty. The default rejects zero
-    evidence; a useful false-alarm threshold still needs calibration."""
+    evidence; a useful false-alarm threshold still needs calibration. rescore_z puts the result on S1's scale."""
     if top < 1:
         raise ValueError("top must be at least 1")
     if not np.isfinite(min_score):
@@ -571,3 +612,59 @@ def detect_events(sp: Spectrogram, f_lo: float, f_hi: float, c: float | None = N
         if len(final) >= top:
             break
     return final
+
+
+def rescore_z(sp: Spectrogram, events: list[EventFit], f_lo: float, f_hi: float, c: float | None = None,
+              harmonics: int = 1, min_sep_s: float = 60.0, top: int | None = None, min_score: float = 0.0,
+              diagnostics: list | None = None) -> list[EventFit]:
+    """detect_events' fits rescored by S1 (curve_zscore, PLAN item 6), re-ranked, one event per min_sep_s, the best
+    `top` above min_score. The fits are unchanged; only the score is S1's. Kept apart from detect_events so that
+    detect's code, and the detections cache keyed on it, don't change before item 6 is decided. With a
+    `diagnostics` list, each event's sigma_c is appended beside the median over the events (the cross-window
+    estimate)."""
+    c = speed_of_sound() if c is None else c
+    pad = 0.3 * (f_hi - f_lo)
+    scored, rows = [], []
+    for ef in events:
+        win = local_whiten(sp.crop(ef.t_start - 30, ef.t_end + 30, max(f_lo - pad, sp.f[0]),
+                                   min(f_hi * harmonics + pad, sp.f[-1])))
+        z, sigma = curve_zscore(win, ef, c, harmonics)
+        rows.append(dict(t_cpa=ef.t_cpa, s0=ef.score, s1=z, sigma_c=sigma))
+        if np.isfinite(z) and z > min_score:
+            scored.append(dataclasses.replace(ef, score=z))
+    sig = [r["sigma_c"] for r in rows if np.isfinite(r["sigma_c"])]
+    if diagnostics is not None:
+        med = float(np.median(sig)) if sig else float("nan")
+        diagnostics.extend({**r, "sigma_c_cross_window": med} for r in rows)
+    scored.sort(key=lambda e: -e.score)
+    final: list[EventFit] = []
+    for e in scored:
+        if all(abs(e.t_cpa - f.t_cpa) >= min_sep_s for f in final):
+            final.append(e)
+        if top is not None and len(final) >= top:
+            break
+    return final
+
+
+
+def rescore_null(sp: Spectrogram, events: list[EventFit], f_lo: float, f_hi: float, c: float | None = None,
+                 harmonics: int = 1, diagnostics: list | None = None) -> list[EventFit]:
+    """detect_events' fits with D = S0 - (fit_event's maximum S0 on the event's window and band reversed in time) as
+    the score (PLAN item 6, retune 1). Reversal keeps every steady tone, burst and level of the window, while a
+    falling Doppler curve becomes a rising one the model can't fit, so D measures the event against its own
+    window's clutter, with the search's best-of-many tail in the null. S2 = D / sigma_null, with sigma_null the
+    spread of D on null data (set by the caller, since one window gives one null sample). Same order and fits as
+    `events`; kept apart from detect_events so detect's code and the detections cache don't change."""
+    c = speed_of_sound() if c is None else c
+    pad = 0.3 * (f_hi - f_lo)
+    out = []
+    for ef in events:
+        win = sp.crop(ef.t_start - 30, ef.t_end + 30, max(f_lo - pad, sp.f[0]), min(f_hi * harmonics + pad, sp.f[-1]))
+        rev = dataclasses.replace(win, S=win.S[:, ::-1], valid=win.valid[::-1])
+        nf = fit_event(rev, ef.t_start, ef.t_end, f_lo, f_hi, c=c, harmonics=harmonics,
+                       v_bounds=(35.0, 200.0), d_bounds=(200.0, 15000.0))
+        d = ef.score - nf.score if np.isfinite(nf.score) else float("nan")
+        if diagnostics is not None:
+            diagnostics.append(dict(t_cpa=ef.t_cpa, s0=ef.score, s0_reversed=nf.score, d=d))
+        out.append(dataclasses.replace(ef, score=d))
+    return out

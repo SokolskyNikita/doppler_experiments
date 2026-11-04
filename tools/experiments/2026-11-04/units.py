@@ -16,7 +16,8 @@ def jobs() -> int:
 
 
 def path(root: Path, *parts: str) -> Path:
-    p = Path(root).joinpath(*parts).with_suffix(".json")
+    p = Path(root).joinpath(*parts)
+    p = p.with_name(p.name + ".json")                                    # not with_suffix: a name may hold dots (0.03)
     p.parent.mkdir(parents=True, exist_ok=True)
     return p
 

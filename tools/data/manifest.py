@@ -7,8 +7,11 @@ Sources and licences are assigned below, from what the data root's MANIFEST.md r
 xeno-canto (from its selected.json) and Eclipse Soundscapes (one Zenodo record per site), by path prefix
 for the rest. null means not recorded, not "unrestricted".
 
+Private recordings (PLAN 5.6: the owner's household audio) never reach the repo, not even by name: files under a
+PRIVATE prefix are hashed into $DOPPLERTRACK_DATA/private/manifest.json instead of bench/manifest.json.
+
 usage (from the repo root): uv run python tools/data/manifest.py [--check]
---check re-hashes raw/ and lists files that are missing, new or changed (exit status 1 if any)."""
+--check re-hashes raw/ and lists files that are missing, new or changed in either manifest (exit status 1 if any)."""
 import hashlib
 import json
 import os
@@ -17,6 +20,8 @@ from pathlib import Path
 
 ROOT = Path(os.environ.get("DOPPLERTRACK_DATA", Path.home() / "data" / "dopplertrack"))
 OUT = Path(__file__).resolve().parents[2] / "bench" / "manifest.json"
+PRIVATE = ("raw/seattle-home/",)                  # the owner's private recordings: hashed outside the repo
+PRIVATE_OUT = ROOT / "private" / "manifest.json"
 
 SOURCES = [   # (path prefix, source, licence)
     ("raw/adsb/", "adsb.lol globe_history day archive, planes-readsb-prod-0 (github.com/adsblol)",
@@ -88,15 +93,29 @@ def scan() -> list[dict]:
     return files
 
 
+def is_private(rel: str) -> bool:
+    return rel.startswith(PRIVATE)
+
+
 if __name__ == "__main__":
     files = scan()
+    public = [f for f in files if not is_private(f["path"])]
+    private = [f for f in files if is_private(f["path"])]
+    for f in private:
+        f["source"], f["licence"] = "the owner's own recorder", "owner's private recording: never leaves this Mac"
     if "--check" in sys.argv:
-        want = {f["path"]: f["sha256"] for f in json.load(open(OUT))["files"]}
-        got = {f["path"]: f["sha256"] for f in files}
-        bad = sorted(set(want) ^ set(got)) + sorted(k for k in set(want) & set(got) if want[k] != got[k])
+        bad = []
+        for path, got_files in ((OUT, public), (PRIVATE_OUT, private)):
+            want = {f["path"]: f["sha256"] for f in json.load(open(path))["files"]} if path.exists() else {}
+            got = {f["path"]: f["sha256"] for f in got_files}
+            bad += sorted(set(want) ^ set(got)) + sorted(k for k in set(want) & set(got) if want[k] != got[k])
         for k in bad:
             print("missing, new or changed:", k)
         sys.exit(1 if bad else 0)
     OUT.parent.mkdir(exist_ok=True)
-    json.dump({"schema": 1, "root": "$DOPPLERTRACK_DATA", "files": files}, open(OUT, "w"), indent=1)
-    print(f"{len(files)} files, {sum(f['bytes'] for f in files) / 1e9:.1f} GB -> {OUT}")
+    json.dump({"schema": 1, "root": "$DOPPLERTRACK_DATA", "files": public}, open(OUT, "w"), indent=1)
+    print(f"{len(public)} files, {sum(f['bytes'] for f in public) / 1e9:.1f} GB -> {OUT}")
+    if private:
+        PRIVATE_OUT.parent.mkdir(exist_ok=True)
+        json.dump({"schema": 1, "root": "$DOPPLERTRACK_DATA", "files": private}, open(PRIVATE_OUT, "w"), indent=1)
+        print(f"{len(private)} private files -> {PRIVATE_OUT} (not in the repo)")

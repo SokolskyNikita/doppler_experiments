@@ -44,3 +44,13 @@ def test_whitening_survives_the_npz(tmp_path):
     plain.save(tmp_path / "t.npz")
     assert "whitening" not in np.load(tmp_path / "t.npz").files                 # today's files are unchanged
     assert audio.Spectrogram.load(tmp_path / "t.npz").whitening == "time"
+
+
+def test_a_rectangular_window_is_a_named_option():
+    t = np.arange(0, 20, 1 / 4000)
+    x = (np.sin(2 * np.pi * 150.3 * t) + 0.1 * np.random.default_rng(0).standard_normal(len(t))).astype(np.float32)
+    hann = audio.compute_spectrogram(x, 4000, nperseg=4096, hop_s=1.024, nfft=8192, whiten="frequency")
+    box = audio.compute_spectrogram(x, 4000, nperseg=4096, hop_s=1.024, nfft=8192, whiten="frequency", window="boxcar")
+    assert hann.S.shape == box.S.shape and not np.allclose(hann.S, box.S)
+    k = int(np.argmin(np.abs(hann.f - 150.3)))
+    assert abs(int(np.argmax(box.S[:, 5])) - k) <= 1                       # the line sits on the same bin

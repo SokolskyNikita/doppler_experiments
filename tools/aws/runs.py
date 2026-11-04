@@ -56,6 +56,61 @@ CACHE_ROOT = Path(os.environ.get("DOPPLERTRACK_CACHE", Path.home() / ".cache" / 
 SEED_DATA = ("derived", "raw/audio/youtube", "raw/audio/xenocanto", "raw/aux", "raw/models", "raw/audio/a2o",
              "raw/seismic")
 TOOLS = "tools.json"
+# Never on the fleet or in the bucket: the owner's home recordings and anything derived from them (household
+# audio, exact home coordinates, the ADS-B the recorder fetches for a circle around the home). Paths are relative
+# to the data root (PM and SDE-B, 2026-11-04):
+# - these prefixes, any path with a "private" folder in it, and each prefix listed in private/fleet-exclude.txt;
+# - under derived/traces/, everything but the date-named day traces (YYYY-MM-DD/, YYYY-MM-DD.log): the recorder
+#   writes its sessions there (20261104-ha-pilot, -coexist, ...), so only the public day archives' cuts go up.
+PRIVATE_PREFIXES = ("private/", "incoming/", "raw/seattle-home/")
+DAY_TRACE = re.compile(r"derived/traces/\d{4}-\d{2}-\d{2}(\.log|/.*)?")
+
+
+# the owner's recorder sessions, by name: seed refuses to run while one sits under derived/traces/ outside the
+# allow list (private/seed-allow.txt), even though the day-trace rule already keeps it out
+RECORDER_SESSION = re.compile(r"2026\d{4}-(ha-)?(pilot|selftest|speakertest|subtest|coexist|latency)")
+
+
+def listed(name: str) -> list[str]:
+    """Lines of a file under private/ (comments and blanks dropped); a missing file is an empty list."""
+    f = DATA_ROOT / "private" / name
+    return [l.strip() for l in f.read_text().splitlines() if l.strip() and not l.startswith("#")] if f.exists() else []
+
+
+def private_prefixes() -> tuple[str, ...]:
+    """PRIVATE_PREFIXES plus the owner's deny list, private/exclude.txt (one data-root prefix per line; read at
+    every upload, so a prefix needs no code change; fleet-exclude.txt is read too)."""
+    extra = tuple(p.strip("/") + "/" for p in listed("exclude.txt") + listed("fleet-exclude.txt"))
+    return PRIVATE_PREFIXES + extra
+
+
+def is_private(rel: str) -> bool:
+    rel = rel.strip("/")
+    if (rel + "/").startswith(private_prefixes()) or "/private/" in f"/{rel}/":
+        return True
+    return rel.startswith("derived/traces/") and not DAY_TRACE.fullmatch(rel)
+
+
+def refuse_private(paths, what: str) -> None:
+    bad = [p for p in paths if is_private(p)]
+    if bad:
+        sys.exit(f"{what} {bad[0]}: private data (the owner's home recordings and what is derived from them) never "
+                 "goes to the fleet or the bucket; it is processed on the Mac only")
+
+
+def seed_excludes(sub: str) -> list[str]:
+    """aws s3 sync filters that keep every private path out of a sync of data-root folder sub. The CLI applies
+    them in order, the last match winning, so the day-trace includes come before the private excludes."""
+    sub = sub.strip("/")
+    out = []
+    if sub == "derived":
+        out += ["--exclude", "traces/*", "--include", "traces/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/*",
+                "--include", "traces/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9].log"]
+    out += ["--exclude", "*/private/*", "--exclude", "private/*"]
+    for pre in private_prefixes():
+        if pre.startswith(sub + "/"):
+            out += ["--exclude", pre[len(sub) + 1:] + "*"]
+    return out
 
 
 def profile() -> str:
@@ -132,6 +187,9 @@ def case_inputs(case_ids: list[str]) -> list[str]:
         if cid not in cases:
             sys.exit(f"no case {cid!r} in bench/cases.json")
         c = cases[cid]
+        if c.get("private") or c.get("site"):
+            sys.exit(f"--case {cid}: a private case (its site's coordinates and audio stay on the Mac) never goes to "
+                     "the fleet")
         traces = c.get("flight_data", {}).get("traces")          # one file, or one per UTC day
         paths = [c.get("audio", {}).get("path"), c.get("spectrogram"),
                  *([traces] if isinstance(traces, str) else traces or [])]
@@ -224,6 +282,7 @@ def check_run_input(p: str) -> str:
 def seed_run_inputs(s3, bucket: str, inputs: list[str]) -> None:
     """Inputs under runs/ (small reference files from earlier runs) go up from here when the bucket lacks
     them or they changed; data/ inputs come from the seed."""
+    refuse_private(inputs, "input")
     for rel in inputs:
         if rel.startswith("runs/"):
             src = DATA_ROOT / rel
@@ -281,6 +340,7 @@ def launch(a) -> str:
     a.input = a.input + [check_run_input(p) for p in getattr(a, "input_run", None) or []]
     inputs = case_inputs(a.case) + [p for p in a.input if p not in case_inputs(a.case)]
     inputs = list(dict.fromkeys(inputs))
+    refuse_private(inputs, "input")
     for p in inputs:
         if is_run_path(p):
             check_run_input(p)
@@ -659,23 +719,35 @@ def seed_tools(a) -> None:
                         data = t.extractfile(m).read()
                         s3.put_object(Bucket=bucket, Key=f"tools/{arch}/{member}", Body=data)
                         print(f"tools/{arch}/{member} from {item['name']} ({len(data) / 1e6:.0f} MB)")
+    for name in ("devbox-idle.sh", "devbox-idle-install.sh"):       # the dev box's idle stop
+        s3.upload_file(str(HERE / "box" / name), bucket, f"tools/{name}")
     s3.upload_file(str(HERE / TOOLS), bucket, f"tools/{TOOLS}")
 
 
 def seed(a) -> None:
     """Uploads SEED_DATA and the caches a job can use. Only new or changed files are sent; nothing in the
     bucket is deleted."""
+    sessions = [d.name for d in (DATA_ROOT / "derived" / "traces").glob("*")
+                if RECORDER_SESSION.match(d.name) and d.name not in listed("seed-allow.txt")]
+    if sessions:
+        sys.exit(f"derived/traces/ holds recorder sessions ({', '.join(sorted(sessions))}): they derive from the home "
+                 "point and belong under private/. Move them there, or name each in private/seed-allow.txt to "
+                 "confirm it stays excluded, before seeding")
     bucket = outputs()["Bucket"]
     dry = ["--dryrun"] if a.dry_run else []
     if a.run:        # only these run folders, for jobs that read them (--input runs/<folder>)
         for name in a.run:
             name = name.removeprefix("runs/").strip("/")
+            refuse_private([f"runs/{name}"], "--run")
             aws_cli("s3", "sync", "--only-show-errors", *dry, str(DATA_ROOT / "runs" / name),
                     f"s3://{bucket}/data/runs/{name}")
             print(f"data/runs/{name}", flush=True)
         return
+    print("uploading: " + ", ".join(f"data/{x}/" for x in SEED_DATA) + ", " + ", ".join(f"cache/{k}/" for k in CACHE_KINDS))
+    print("excluded: " + ", ".join(private_prefixes()) + ", any */private/*, derived/traces/ except YYYY-MM-DD day traces",
+          flush=True)
     for sub in SEED_DATA:
-        aws_cli("s3", "sync", "--only-show-errors", "--exclude", ".DS_Store", *dry, str(DATA_ROOT / sub),
+        aws_cli("s3", "sync", "--only-show-errors", "--exclude", ".DS_Store", *seed_excludes(sub), *dry, str(DATA_ROOT / sub),
                 f"s3://{bucket}/data/{sub}")
         print(f"data/{sub}", flush=True)
     for kind in CACHE_KINDS:
@@ -720,7 +792,7 @@ def fetch_plan(s3, bucket: str) -> tuple[list[dict], list[dict]]:
     have = bucket_sizes(s3, bucket, "data/raw/")
     plan, rest, zenodo = [], [], {}
     for f in manifest_files():
-        if not f["path"].startswith("raw/") or have.get(f"data/{f['path']}") == f["bytes"]:
+        if not f["path"].startswith("raw/") or have.get(f"data/{f['path']}") == f["bytes"] or is_private(f["path"]):
             continue
         if any(f["path"].startswith(p + "/") for p in SEED_DATA):
             continue       # `runs seed` sends these from here

@@ -108,10 +108,10 @@ Three open-source projects attack the same problem, all started in November 2026
 | `spectrogram`, 1 h of audio | 9 s | 45 MB |
 | `detect`, 1 h | 1.5 min | – |
 | `fetch-day`, one day, 100 × 150 km box | 4.8 min (3.9 GB streamed) | 29 MB |
-| `search`, 200 m grid over that box | 7.6 min, 5.5 of them building the CPA table | 874 MB CPA cache, 10 MB results |
+| `search`, 200 m grid over that box | 7.6 min, 5.5 of them building the CPA table, before Phase 1; with `--jobs 10` the cold-cache build is about 27 s and the search from a cached table 64 s | 874 MB CPA cache compressed, 2.76 GB since the cache is written uncompressed (the compressed save alone took 69 s); 10 MB results |
 | `refine`, 50 m grid | 4 s | – |
 
-The CPA table depends only on the grid and the flight data, not on the events. So once a case has its table, re-running the search with different fits, pairing rules or scoring takes about 2 minutes instead of 8, and all clips from one day and box share a table. That is what makes fast iteration possible. Plan on about 1 GB of CPA tables per case-day; the data root holds about 47 GB.
+The CPA table depends only on the grid and the flight data, not on the events. So once a case has its table, re-running the search with different fits, pairing rules or scoring takes about a minute at 10 jobs instead of 8 minutes serial, and all clips from one day and box share a table. That is what makes fast iteration possible. Plan on about 3 GB of CPA tables per case-day (uncompressed; dropping the derivable `t_heard` column at the next cache-version bump would save a third); the data root holds about 47 GB and the cache is regenerable.
 
 ## 3. What stands in the way
 

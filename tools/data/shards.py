@@ -7,10 +7,14 @@ parameters, the commit and whether the tree was dirty.
 
 Common options (`add_args`):
   RUN                the run folder (default $RUN, which the AWS box sets; else a new one from new_run.py)
-  --shard K/N        run every N-th unit starting at the K-th, 1-based (default 1/1)
+  --shard K/N        run every N-th unit starting at the K-th, 1-based (default $DOPPLERTRACK_SHARD_SPEC, else 1/1)
   --resume DIR ...   earlier run folders of the same experiment: their finished units are kept, not rerun
   --merge            run nothing: check every unit is finished in RUN or the --resume folders, then merge
   --inputs           print the case ids, data-root paths, cache kinds and CPA tables the job reads, as JSON, and exit
+
+The --inputs schema, which `runs launch --inputs-from` reads and every job's listing follows (`bench inputs` too):
+  {"cases": [case id, ...], "inputs": [path under $DOPPLERTRACK_DATA, ...], "cache_kinds": [kind, ...],
+   "cpa_tables": [path under $DOPPLERTRACK_CACHE, ...]}
 
 Merging refuses units whose parameters or commit differ from this invocation's, so a merged result is the one a
 single run on one machine would have given. Worker counts come from $DOPPLERTRACK_JOBS (parallel.default_jobs)
@@ -33,7 +37,9 @@ UNIT_FILE = "unit.json"
 
 def add_args(ap: argparse.ArgumentParser) -> None:
     ap.add_argument("run", nargs="?", type=Path, help="run folder (default $RUN, else a new one)")
-    ap.add_argument("--shard", default="1/1", type=parse_shard, help="K/N: every N-th unit from the K-th")
+    ap.add_argument("--shard", default=os.environ.get("DOPPLERTRACK_SHARD_SPEC", "1/1"), type=parse_shard,
+                    help="K/N: every N-th unit from the K-th (default $DOPPLERTRACK_SHARD_SPEC, which "
+                         "`runs launch --shards` sets on each box, else 1/1)")
     ap.add_argument("--resume", nargs="+", type=Path, default=[], metavar="DIR",
                     help="earlier run folders whose finished units are kept")
     ap.add_argument("--merge", action="store_true", help="only merge finished units")

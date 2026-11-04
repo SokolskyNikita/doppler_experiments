@@ -23,8 +23,14 @@ unit whose file already exists is skipped:
 
 Every process pool sizes itself from `DOPPLERTRACK_JOBS` (`--jobs`), defaulting to the box's physical cores.
 
-The jobs depend on each other in order: job 1 decides `WHITEN`, job 2 decides `THETA_CONT` and `THETA_BIRTH`,
-and job 3 uses both.
+All three run at once, on six boxes ([`fleet_launch.sh`](fleet_launch.sh)):
+- job 1 on four boxes, one per arm (time, frequency) and tier;
+- jobs 2 and 3 under each whitening, one box per whitening ([`hmm_box.sh`](hmm_box.sh)). Each box derives θ on
+  synthetic data, picks the pair, and only then tracks the real recordings at that pair.
+
+So whichever whitening job 1 adopts, its tracker result already exists, and the records report both settings
+side by side. [`fleet_merge.py`](fleet_merge.py) `JOB ...` collects the pulled job folders into one new run
+folder, runs every merge step and writes `side_by_side.txt`.
 
 ## 1. Whitening across frequency (`whiten_frequency.py`)
 
@@ -75,7 +81,7 @@ pass.
 | Step | Units | Command |
 |---|---|---|
 | references | one file | `hmm_livermore.py "$RUN" references` |
-| livermore | one per primary pass (29) | `hmm_livermore.py "$RUN" livermore WHITEN TC TB [PASS ...]` |
+| livermore | one per pass (40: the 29 primary and the 11 flagged) | `hmm_livermore.py "$RUN" livermore WHITEN TC TB [PASS ...]` |
 | dev | one per event (6) | `hmm_livermore.py "$RUN" dev WHITEN TC TB [EVENT ...]` |
 | merge | — | `hmm_livermore.py "$RUN" merge WHITEN TC TB` |
 
@@ -84,8 +90,10 @@ then copy `dev_references.json` to every dev box.
 
 Inputs:
 - `derived/livermore/`, the unpacked corpus.
-- `runs/2026-11-04-livermore-audit/`: its `passes.csv` and `sites.json`. `--input` reads from the bucket's
-  `data/`, and `runs/` isn't seeded there, so this folder has to be seeded once before the job can run.
+- `runs/2026-11-04-livermore-audit/`: its `passes.csv` and `sites.json`. `runs launch` sends a `runs/` input
+  up from this machine.
+- `raw/audio/livermore/zenodo-23424278/final_results_40_cases.csv`.
+- Cache: `--cache terrarium`, for the development events' terrain.
 - `raw/audio/youtube/oyster_bay.webm` and `raw/audio/youtube/swfl_2024-12-28.webm`.
 - `derived/oyster_bay/traces_ny.npz` and `derived/swfl/traces_swfl.npz`.
 
@@ -230,20 +238,35 @@ Splitting a job across boxes can't bring it under its longest unit.
 
 **Null draws.** These run inside the units above. Each comparable-score search draws each event's null, and each
 B1/B2 case draws its events' nulls. Each draw is seeded from the event's fit, so a unit gives the same null on any
-box. N is fixed at `pipeline.NULL_N` = 1,000. A larger-N job would first need N as a search parameter. That only
-happens if stage B's retune is spent on N, which hasn't happened.
+box. The pairs driver keeps each search's nulls in `null.json`, beside its record. N is `run_search`'s `null_n`,
+1,000 by default; `--null-n` changes it. The follow-up runs at N = 250,000, the PM's cap.
 
-### For SDE-E's wrapper
+### Launching, and after
 
-- **The baseline detections live in a run folder.** All the pairs and B1/B2 jobs read `detected.json` from
-  `runs/2026-11-04-bench-5314396-raw-audio-t2/`. `seed` uploads only `raw/` and `derived/`, so `--input` needs
-  that run's files in the bucket, or a job that remakes them first.
-- **Merging shards.** Each `runs launch` makes its own `$RUN`, so a sharded job is N launches with `--shard k/N`.
-  After `runs pull`, the merge is the same command on the Mac:
-  `--merge RUN_1 --resume RUN_2 ... RUN_N`.
-  - A spot interruption is resumed the same way: a new launch with `--resume` pointing at the interrupted
-    folder, once it has been pulled.
-- **The pinned code.** Stage B's A1/A3 must run the first run's hypotheses (`45d0bd8`), not the retune's. The
-  drivers' shard support is newer, so that job launches from `claude/sde-stageb-pairs-45d0bd8` (`1702067`):
-  `45d0bd8` with the shard commit cherry-picked, keeping B1/B2's `event_hypotheses` call as it was at
-  `45d0bd8`. The other jobs launch from `dev`.
+[`launch_sde_a.sh`](launch_sde_a.sh) has every step as one command:
+- `launch PINNED` starts five jobs at once, each sharded over its own boxes. Each box takes its shard from
+  `$DOPPLERTRACK_SHARD_SPEC`.
+  - Stage B's A1/A3 runs on 10 boxes, on demand.
+  - Its null-N follow-up, N = 250,000, runs on 30 boxes, on demand, with 64 workers per search. It runs now and is
+    read only if A1 needs it.
+  - Stage A runs on 5 boxes, B1/B2 on 3, and the timing sweep on 15.
+  - That is 63 .16xlarge boxes. `SHARDS_B`, `SHARDS_N`, `SHARDS_A`, `SHARDS_B12` and `SHARDS_SWEEP` change the
+    counts.
+  - A launch that fails, for example on a vCPU quota, is reported and the others go on.
+- `merge KIND S1 S2 ...` merges a job's pulled shards into a new run folder, from a checkout at the job's commit
+  (`PINNED=` for the two stage B jobs). A merge refuses units from another commit or other settings.
+- `a1 MERGED_B [MERGED_N]` judges A1 with [`a1_noise.py`](a1_noise.py), and reads the N run only when the record's
+  rule says to.
+
+A spot interruption is `runs launch --resume JOB`. It continues the same run folder, and finished units are skipped.
+
+### The pinned code
+
+Stage B's A1/A3 must run the first run's hypotheses (`45d0bd8`), not the retune's. So that job launches from
+`claude/sde-stageb-pairs-45d0bd8` (`6f0ce38`), as does its N follow-up:
+- `45d0bd8`, plus the shard commit;
+- `run_search`'s `null_n`, which defaults to 1,000, as before;
+- the pairs driver's kept nulls and `--null-n`, and `a1_noise.py`;
+- B1/B2's `event_hypotheses` call, kept as it was at `45d0bd8`.
+
+The other jobs launch from `dev`.

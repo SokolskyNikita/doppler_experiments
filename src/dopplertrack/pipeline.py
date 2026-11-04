@@ -301,7 +301,7 @@ def run_search(sp: Spectrogram, ev1: EventFit, ev2: EventFit, traces: list[Trace
                workers: int | None = None, time_convention: str = "heard", sf_tol_s: float | None = None,
                sf_smooth_s: float = 3.0, sf_window_s: float = 60.0, sf_flat_ratio: float = SF_FLAT_RATIO,
                clock_anchor: str = "heard", triples: dict | None = None,
-               comparable: bool = False, hypotheses: bool = False,
+               comparable: bool = False, hypotheses: bool = False, null_n: int = NULL_N,
                temperature_c: float | None = None) -> tuple[pd.DataFrame, list[Segment]]:
     """Rank grid points for a two-event recording.
 
@@ -325,7 +325,8 @@ def run_search(sp: Spectrogram, ev1: EventFit, ev2: EventFit, traces: list[Trace
       and ranks by Z = z1 + z2, so that scores from different event pairs are on one scale and a loud event
       doesn't win by being loud. "score" then holds Z, "raw_score" the old s1 + s2, and res.attrs["null"]
       each event's null (median, sigma, n, seed, sample hash). Event 2 is scored at event 1's shift, while
-      its null maximises over shifts, so z2 errs low.
+      its null maximises over shifts, so z2 errs low. null_n is the null's number of draws per event (also the
+      null hypotheses=True scales its thresholds by).
 
     Hypotheses (PLAN Phase 2, item 7, stage B); off by default:
     - hypotheses=True replaces the speed and distance gates with each event's hypotheses (hypotheses.py): up to
@@ -387,7 +388,7 @@ def run_search(sp: Spectrogram, ev1: EventFit, ev2: EventFit, traces: list[Trace
         if hypotheses:
             if sf_tol_s is not None or clock_anchor == "steepest":
                 raise ValueError("hypotheses=True doesn't combine with the steepest-fall check or anchor yet")
-            nulls = [event_null(w, cpa, segs, grid.enu, c, workers=workers, temperature_c=temperature_c) for w in (w1, w2)]
+            nulls = [event_null(w, cpa, segs, grid.enu, c, n=null_n, workers=workers, temperature_c=temperature_c) for w in (w1, w2)]
             hyps = [event_hypotheses(sp, w, ev, c, nl["sigma"], h, v_tol=v_tol, d_tol=d_tol)
                     for w, ev, nl, h in zip((w1, w2), (ev1, ev2), nulls, harmonics)]
             pairs = _pair_hypotheses(cpa, hyps, tol_s, emission, silence_d_m, funnel, triples)
@@ -433,10 +434,10 @@ def run_search(sp: Spectrogram, ev1: EventFit, ev2: EventFit, traces: list[Trace
         res = pd.DataFrame(out, columns=cols)
         if comparable:      # PLAN Phase 2 item 7, stage A: each event's score against its own null
             if hypotheses:  # the wrong flights get the same widened f0 sweep the candidates got
-                nulls = [event_null(w, cpa, segs, grid.enu, c, workers=workers, f0_scales=sw, temperature_c=temperature_c)
+                nulls = [event_null(w, cpa, segs, grid.enu, c, n=null_n, workers=workers, f0_scales=sw, temperature_c=temperature_c)
                          for w, sw in zip((w1, w2), state["f0_scales"])]
             elif nulls is None:
-                nulls = [event_null(w, cpa, segs, grid.enu, c, workers=workers, temperature_c=temperature_c) for w in (w1, w2)]
+                nulls = [event_null(w, cpa, segs, grid.enu, c, n=null_n, workers=workers, temperature_c=temperature_c) for w in (w1, w2)]
             res["raw_score"] = res["score"]
             for k, nl in ((1, nulls[0]), (2, nulls[1])):
                 res[f"z{k}"] = (res[f"s{k}"] - nl["median"]) / nl["sigma"] if nl["sigma"] > 0 else np.nan

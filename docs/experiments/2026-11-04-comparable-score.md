@@ -102,3 +102,26 @@ in its search, against 10th by raw score. The other nine pairs don't hold the tr
 - **The size of the eagle-cam miss.** At 0.03 in Z, it is well inside the run's noise. A different null
   draw of the same size would move each event's median by about 1.25σ/√1000 ≈ 0.04σ, which is enough to
   swap the two pairs.
+- **Not spent.** The one retune is kept, by the PM's decision. `comparable=True` stays as off-by-default library
+  code (`a440f85`).
+
+**A2 is withdrawn as a pass/fail criterion. This is a criterion change, made after seeing the result,
+2026-11-04.** From stage B on, A2 is a reported quantity, not a test.
+- It asked event choice to make a wrong location less decisive. The WSW result shows that is the verdict's
+  job: Z picks Oyster Bay's two true flyovers there for the right reason, and the busy box then supplies a
+  wrong flight pair that explains them.
+- A criterion that only a worse event score could meet was wrong as written.
+
+**Stage B re-runs A1 and A3** under the same criterion, with stage B's hypotheses and N kept at 1,000 so the
+two stages compare. If A1 is still inside the null's sampling noise after stage B, the record will say the
+test can't decide at this N, and the retune, if spent, goes on N.
+
+## What this says for PLAN
+
+- **Event choice (items 6 and 7).** Normalising each event by its own null removes most of the loudness
+  advantage, so event pairs can be compared. Whether it picks the right pair on the eagle cam can't be told
+  at N = 1,000.
+- **Phase 4's verdict.** The look-elsewhere correction belongs there, not in the event score: subtract the
+  expected maximum of Z over the triples each search scored (about √(2 ln n) per event, Gumbel). A busier box
+  tries more wrong flight pairs, so its best wrong answer scores higher by chance. That is the WSW result, and
+  only a verdict that accounts for how many hypotheses were tried can make it less confident.

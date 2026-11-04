@@ -20,6 +20,15 @@ pulled folder.
 |---|---|---|---|
 | Turn model, bootstrap (`turn-model-boot`) | `tools/experiments/2026-11-04/turn_model.py boot --replicates 200` | 40 passes × 200 replicates = 8,000 | `boot.csv`, `boot_summary.csv` (per pass: SDs of R, Q and the turn rate, and their correlations) |
 | Alaska, all crossings (`model-error-alaska`) | `tools/experiments/2026-11-04/model_error_alaska.py --band narrow --band-factors 0.70 1.50` | 789 crossings (one per FR24-matched crossing) | `alaska.csv`; then `model_error_alaska_summary.py` on it |
+| Collective find, other-day null (`collective-null`) | `tools/experiments/2026-11-04/collective_run.py --null` | 245 (case, day) draws: four NY and SWFL cases × 50, Essex × 45 | `null_draws.json`; then A's `collective_null.py` on the units |
+
+**Collective find, other-day null.**
+- **decision:** the collective find's criterion 3 and its decision line ([proposal](../../../docs/proposals/2026-11-04-collective-find.md) §5–6).
+  - Each case's own-day maximum Z is judged against γ, the 1 % point of the maximum Z over other days' traffic. γ is fitted by A's `collective_null.py`, Gumbel or the empirical tail by KS.
+  - If the negatives stay below γ and the positives clear it, `locate`'s step B becomes the collective find. If a negative clears it, the floor's design (§6's last line) is what changes.
+- **Pinned.** Commit 661c10f, from a detached checkout. Its `collective.py` is 40454ae's, so the draws use the own-day units' statistic: the top-5 coarse cells, ±10 % f0 for every case, k = 10 windows, and the same detection.
+- **Launch.** 35 × 8xlarge (Oyster Bay's units need more than 32 GB); shard 1 first as the smoke shard.
+- **Inputs** (`--null --inputs`): the five cases' locate inputs, plus each null day's cut of the case's box, `derived/traces/<day>/<box>.npz`. That's 253 paths in all. CPA tables are built per day on the box, under `cpa/collective/null/<day>/`.
 
 **Turn model, bootstrap.**
 - **decision: none, so cancelled.** It would inform PLAN Phase 2 item 2's turn-model sentence. That sentence rejects the model on slant range (criteria 1–4) whatever the bootstrap shows, so no outcome changes it. Launched on 2026-11-04 as 8 × 4xlarge and cancelled under the PM's rule that a run which changes no PLAN sentence is stopped. One shard had already finished (`runs/2026-11-04-turn-model-boot-s1of8` in the bucket); its 1,000 replicates are kept, not merged.

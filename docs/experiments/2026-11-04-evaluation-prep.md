@@ -38,7 +38,7 @@ profiles `locate` and `raw-audio`. All three stay blocked: evaluation cases run 
 
 **The CPA tables are not stored.** `runs` doesn't bring `cpa/` back from a box, by design, since a table rebuilds on
 any box in seconds; these took 7–8 s at 1 km. So the tables were built and timed, and a run on the fleet rebuilds each
-in about 8 s.
+in about 8 s. That is the design (PM, 2026-11-04): nothing is carried home.
 
 ## Cost
 

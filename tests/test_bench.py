@@ -154,3 +154,52 @@ def test_a_blocked_case_needs_a_reason_and_is_never_run(tmp_path):
     assert cases.case_ids(path) == [] and cases.case_ids(path, runnable_only=False) == ["blocked"]
     with pytest.raises(cases.CaseError, match="not runnable"):
         cases.blind_case("blocked", path)
+
+
+def test_pick_detected_takes_the_two_best_scores_in_time_order():
+    det = [{"t_cpa": 300.0, "score": 5.0}, {"t_cpa": 100.0, "score": 9.0}, {"t_cpa": 200.0, "score": 7.0}]
+    assert [d["t_cpa"] for d in runner.pick_detected(det)] == [100.0, 200.0]
+    with pytest.raises(ValueError):
+        runner.pick_detected(det[:1])
+
+
+def test_an_export_that_differs_from_its_commit_is_refused(tmp_path):
+    import subprocess
+    from bench import revisions
+    commit = revisions._git("rev-parse", "HEAD")
+    rev = revisions.Revision(commit, revisions._git("rev-parse", "HEAD^{tree}"), tmp_path / "rev")
+    (rev.src).mkdir(parents=True)
+    archive = subprocess.run(["git", "-C", str(cases.REPO), "archive", commit, "bench", "tests"],
+                             capture_output=True, check=True).stdout
+    subprocess.run(["tar", "-x", "-C", str(rev.src)], input=archive, check=True)
+    # a partial tree stands in for a full export: its own tree hash is what verify compares
+    rev.tree = revisions.tree_on_disk(rev.src)
+    with pytest.raises(revisions.RevisionError, match="unfinished"):
+        revisions.verify(rev)
+    (rev.root / "export.json").write_text(json.dumps({"commit": commit}))
+    revisions.verify(rev)
+    (rev.src / "bench" / "cases.json").write_text("{}")
+    with pytest.raises(revisions.RevisionError, match="changed after it was made"):
+        revisions.verify(rev)
+    (rev.root / "export.json").write_text(json.dumps({"commit": "0" * 40}))
+    with pytest.raises(revisions.RevisionError, match="exported from"):
+        revisions.verify(rev)
+
+
+def test_a_revision_that_fails_verification_yields_an_error_not_a_result(tmp_path):
+    from bench import revisions
+
+    class Stale:
+        short = "deadbee"
+        def provenance(self):
+            return {"package_version": "0", "git_commit": "d" * 40, "git_dirty": False}
+
+    def stale_verify(rev):
+        raise revisions.RevisionError("stale export")
+
+    orig, revisions.verify = revisions.verify, stale_verify
+    try:
+        rec = runner.execute_case_at(cases.blind_case("oyster-bay"), tmp_path, Stale(), log=lambda m: None)
+    finally:
+        revisions.verify = orig
+    assert rec["candidates"] == [] and any("stale export" in e for e in rec["execution"]["errors"])

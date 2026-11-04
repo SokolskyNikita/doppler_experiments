@@ -19,6 +19,10 @@ def main(argv=None):
     r.add_argument("case", nargs="*", help="case ids (default: all)")
     r.add_argument("--tier", default="t2", help="tier label for the run folder name (default: t2)")
     r.add_argument("--run-dir", type=Path, help="an empty folder made by tools/data/new_run.py (default: make one)")
+    r.add_argument("--revision", help="run this commit-ish through its own CLI in its own environment, e.g. a16b700 "
+                   "(default: this checkout, in-process)")
+    r.add_argument("--profile", choices=sorted(runner.PROFILES), default="saved-fit",
+                   help="saved-fit: the case's committed fits; raw-audio: detect's top two by score, earlier first")
     c = sub.add_parser("compare", help="print the difference between two benchmark runs")
     c.add_argument("a", type=Path); c.add_argument("b", type=Path)
     a = ap.parse_args(argv)
@@ -37,7 +41,8 @@ def main(argv=None):
             sys.exit("\n".join(bad))
         print("every derived file matches its recorded hash")
     elif a.cmd == "run":
-        run_dir = runner.run_bench(a.case or cases.case_ids(), tier=a.tier, run_dir=a.run_dir)
+        run_dir = runner.run_bench(a.case or cases.case_ids(), tier=a.tier, run_dir=a.run_dir,
+                                   revision=a.revision, profile=a.profile)
         print(run_dir)
     elif a.cmd == "compare":
         print(runner.compare_runs(a.a, a.b))

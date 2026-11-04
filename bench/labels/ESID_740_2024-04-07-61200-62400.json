@@ -5,7 +5,8 @@
   "source": "raw/audio/eclipse/ESID_740/ESID_740_2024_04_07.zip",
   "sha256": "0d7bba2ef829e8fc30ed1db45def9deb961ad6e773066b655742450e1b9ab3bc",
   "t0_utc": "2024-04-07T00:00:00Z",
-  "case": null
+  "case": "eclipse-esid740",
+  "case_note": "recording seconds here count from 2024-04-07T00:00:00Z; the case timeline starts at its first file, 00:00:46Z, so case seconds = these seconds - 46 (case ids from SDE-B's bench/cases.json at f5ccdfe, not yet on dev)"
  },
  "span": [
   61200,

@@ -15,7 +15,8 @@ from .coverage import (DEFAULT_MAX_RANGE_M, ScanReport, extraction_metadata, pad
 from .doppler import ideal_curve, speed_of_sound
 from .parallel import ordered_map, resolve_jobs
 from .score import SF_FLAT_RATIO, EventWindow, locked_score, modelled_curve, steepest_fall
-from .search import Grid, Segment, build_segments, cpa_fingerprint, cpa_table, pair_candidates, save_cpa_table, load_cpa_table
+from .search import (Grid, Segment, build_segments, cpa_fingerprint, cpa_table, pair_candidates, save_cpa_table,
+                     load_cpa_table, stage_triples)
 from .tracks import EventFit
 
 
@@ -203,7 +204,7 @@ def run_search(sp: Spectrogram, ev1: EventFit, ev2: EventFit, traces: list[Trace
                cpa_cache=None, trace_metadata=None, search_bbox=None,
                workers: int | None = None, time_convention: str = "heard", sf_tol_s: float | None = None,
                sf_smooth_s: float = 3.0, sf_window_s: float = 60.0, sf_flat_ratio: float = SF_FLAT_RATIO,
-               clock_anchor: str = "heard") -> tuple[pd.DataFrame, list[Segment]]:
+               clock_anchor: str = "heard", triples: dict | None = None) -> tuple[pd.DataFrame, list[Segment]]:
     """Rank grid points for a two-event recording.
 
     Timing (PLAN Phase 2, item 1); the defaults are the original behaviour:
@@ -231,7 +232,12 @@ def run_search(sp: Spectrogram, ev1: EventFit, ev2: EventFit, traces: list[Trace
       (triples whose heard-time gap matches the events' within tol_s), "silence" (left after the
       silence filter; equal to "time_join" when it is off) and "scored". The emission convention reports
       "emission_gate" in place of "time_join". With sf_tol_s set or the steepest anchor, "steepest_fall"
-      counts the triples the check kept (unplaceable ones included) and "unplaceable" those it couldn't test."""
+      counts the triples the check kept (unplaceable ones included) and "unplaceable" those it couldn't test.
+
+    triples: if a dict is given, it receives the triples surviving each stage under the funnel's keys
+    ("time_join" or "emission_gate", "silence", and "steepest_fall" when the check runs), as
+    {"gidx", "seg1", "seg2"} int32 arrays; seg indexes the returned segments. The rows of the returned
+    frame are the triples that reached scoring."""
     if time_convention not in ("heard", "emission"):
         raise ValueError(f"time_convention must be heard or emission, got {time_convention!r}")
     if clock_anchor not in ("heard", "steepest"):
@@ -257,7 +263,7 @@ def run_search(sp: Spectrogram, ev1: EventFit, ev2: EventFit, traces: list[Trace
         pairs = pair_candidates(cpa, dt, tol_s=tol_s, time_col="t_emit" if emission else "t_heard",
                                 v1=(ev1.v * (1 - v_tol), ev1.v * (1 + v_tol)), d1=(ev1.d * d_tol[0], ev1.d * d_tol[1]),
                                 v2=(ev2.v * (1 - v_tol), ev2.v * (1 + v_tol)), d2=(ev2.d * d_tol[0], ev2.d * d_tol[1]),
-                                silence_d_m=silence_d_m, funnel=funnel)
+                                silence_d_m=silence_d_m, funnel=funnel, triples=triples)
         log(f"{len(pairs)} candidate (point, flight1, flight2) triples after offset + silence filters")
         sf = None
         if sf_tol_s is not None or clock_anchor == "steepest":
@@ -285,6 +291,9 @@ def run_search(sp: Spectrogram, ev1: EventFit, ev2: EventFit, traces: list[Trace
         if sf is not None:
             funnel["steepest_fall"] = len(out)
             funnel["unplaceable"] = sum(u for _, u in scores)
+            if triples is not None:
+                kept = np.array([sc is not None for sc, _ in scores], bool)
+                triples["steepest_fall"] = stage_triples(pairs[kept])
         cols = ["gidx", "lat", "lon", "seg1", "seg2", "icao1", "icao2", "t_heard1", "d1", "v1", "d2", "v2", "score", "s1", "s2", "shift"]
         res = pd.DataFrame(out, columns=cols).sort_values("score", ascending=False).reset_index(drop=True)
         funnel["scored"] = len(res)

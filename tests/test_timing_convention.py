@@ -41,9 +41,13 @@ def test_emission_gate_pairs_on_t_emit():
     funnel = {}
     assert set(search.pair_candidates(cpa, 918.0, silence_d_m=None, funnel=funnel).gidx) == {1}
     assert "time_join" in funnel
-    funnel = {}
-    assert set(search.pair_candidates(cpa, 918.0, silence_d_m=None, funnel=funnel, time_col="t_emit").gidx) == {0}
+    funnel, triples = {}, {}
+    assert set(search.pair_candidates(cpa, 918.0, silence_d_m=None, funnel=funnel, time_col="t_emit",
+                                      triples=triples).gidx) == {0}
     assert funnel["emission_gate"] == 1 and "time_join" not in funnel
+    assert set(triples) == {"emission_gate", "silence"}
+    assert {k: v.tolist() for k, v in triples["emission_gate"].items()} == {"gidx": [0], "seg1": [1], "seg2": [2]}
+    assert triples["emission_gate"]["gidx"].dtype == np.int32
 
 
 def test_steepest_fall_check_in_run_search(monkeypatch):
@@ -64,8 +68,11 @@ def test_steepest_fall_check_in_run_search(monkeypatch):
     ev1 = EventFit(1008.8, 1000.0, 120, 100, 3000, 950, 1050, 5, 150, 90)
     ev2 = EventFit(1926.8, 1918.0, 120, 100, 3000, 1870, 1970, 5, 150, 90)
     run = dict(silence_d_m=None, progress=False, workers=1)
-    res, _ = pipeline.run_search(None, ev1, ev2, [], grid, sf_tol_s=4.0, **run)
+    triples = {}
+    res, _ = pipeline.run_search(None, ev1, ev2, [], grid, sf_tol_s=4.0, triples=triples, **run)
     assert sorted(res.gidx) == [0, 2]
+    assert sorted(triples["time_join"]["gidx"]) == [0, 1, 2] and sorted(triples["steepest_fall"]["gidx"]) == [0, 2]
+    assert sorted(triples["steepest_fall"]["seg2"]) == [2, 3]
     f = res.attrs["funnel"]
     assert (f["time_join"], f["steepest_fall"], f["unplaceable"], f["scored"]) == (3, 2, 1, 2)
     assert anchors == [None, None]                                  # the heard anchor

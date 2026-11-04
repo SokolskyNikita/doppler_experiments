@@ -2,7 +2,7 @@
 
 <!-- index
 question: What does the owner's indoor phone recorder hear of the propeller traffic around it, and what does locate make of a 2.3 h session?
-outcome: Indoors the phone carries passes within about 1 km, as harmonic lines (tonal 2, broadband 3 of the ear's 11); with the silence filter off, locate's top 4 km node is the site's (no verdict); box series pending
+outcome: Indoors the stored 40-450 Hz carries passes within about 1 km, as lines (tonal 2, broadband 3 of the ear's 11); the gap is placement, detection or the stored band; locate's top 4 km node is the site's (no verdict)
 -->
 
 ## Question
@@ -187,25 +187,38 @@ The tonal check scores propeller passes only, so the jets have broadband counts 
   km pass's ±15 s, so its broadband mark may be partly theirs.
 
 **What it settles:**
-- The gap to the ear is not a missing harmonic line that a broadband detector would catch. Where the recording
-  carries a pass, within about 1 km, it carries lines. Beyond 1 km, the band power in 40–450 Hz rises by a median
-  of 0.8 dB over the surrounding minutes of traffic, too little for either statistic.
-- Indoors, behind the walls, the phone's floor sets the range.
+- The gap to the ear is not a missing harmonic line that a broadband detector would catch within the stored band.
+  Where the recording carries a pass, within about 1 km, it carries lines.
+- Beyond 1 km the stored 40–450 Hz holds a median broadband rise of 0.8 dB over the surrounding minutes of traffic,
+  and faint or absent lines: too little for either statistic.
 
-**Two things the check can't separate:**
-- **The band.** The recorder keeps 40–450 Hz, and a listener's 1–3.5 km may rest on sound above 450 Hz. Whether the
-  owner judged audibility live or from the 1 kHz recording decides which.
-- **The window and the transients.** The ±15 s window averages over an 8–12 s audible pass, and household
-  transients add to both the pass and its background.
+**What it leaves open.** The owner judged audibility live, in the room, not from the 1 kHz recording. So the
+listener's reference includes sound above 450 Hz that the recorder never stored, and whether audibility at 1–3.5 km
+rests on that band is untested. The gap is therefore placement, detection or the stored band, and the stored band is
+the cheapest to test.
 
-**For the next session:**
-- **Placement:** a window or outdoor placement, to lower the floor.
-- **Band:** a wider stored band, which the phone already samples at 48 kHz. Even 4 kHz would let the band question be
-  answered.
-- **Stereo:** stereo capture, for the coherence cue between the two mics, which household self-noise and single-mic
-  transients can't fake.
-- **Algorithm:** on the algorithmic side, the collective find, which sums evidence over many weak passes instead of
-  needing two strong ones.
+Two further limits on the statistic: the ±15 s window averages over an 8–12 s audible pass, and household transients
+add to both the pass and its background.
+
+**Answering it for this session:** the owner re-listens to the band-limited listening copy at the audible passes'
+times. If they are still audible there, the content is in 40–450 Hz and the gap is detection. If not, the band above
+450 Hz carries them.
+
+**Next session's levers, in order:**
+1. **The stored band.** The recorder project is asked to store 4 kHz, flat to about 1.8 kHz; the phone already
+   samples 48 kHz.
+2. **Placement:** a window or outdoor placement, to lower the floor.
+3. **Stereo:** stereo capture, for the coherence cue between the two mics, which household self-noise and single-mic
+   transients can't fake.
+4. **Algorithm:** the collective find, which sums evidence over many weak passes instead of needing two strong ones.
+
+**Pre-registered test of the band, on the first session stored at 4 kHz:**
+- The known-point check (tonal, its sweep widened to the band's harmonics) and the broadband check both run twice on
+  the same passes and the same ear reference: once on the stored 40–450 Hz, once on 40–1800 Hz.
+- **The band is the lever if** the wide band marks at least half of the ear-audible propeller passes beyond 1 km, while
+  40–450 Hz marks no more of them than its null share.
+- **The band is not the lever if** the wide band marks no more of them than its null share.
+- Anything between is reported as it falls.
 
 ### Locate
 
@@ -342,8 +355,10 @@ So far, from runs 4, 5 and 7:
   and none of the 12 beyond the ear's range.
   - Where the indoor phone carries a pass, it carries harmonic lines. Beyond about 1 km it carries little in 40–450 Hz
     of either kind.
-  - The gap to the ear is sensitivity: the placement, and possibly the stored band. It is not the harmonic-line
-    assumption.
+  - The owner judged audibility live, so their reference includes sound above 450 Hz that the recorder never
+    stored. The gap is placement, detection or the stored band, and the band is the cheapest to test: store 4 kHz
+    next session, rerun the known-point and broadband checks on both bands (pre-registered above), and meanwhile
+    the owner re-listens to the band-limited copy.
 
 The box series (4, 8 and 12 km, then 20 km once the day's archive is out) looks for the limit.
 

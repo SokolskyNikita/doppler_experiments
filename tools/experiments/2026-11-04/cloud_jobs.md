@@ -23,8 +23,14 @@ unit whose file already exists is skipped:
 
 Every process pool sizes itself from `DOPPLERTRACK_JOBS` (`--jobs`), defaulting to the box's physical cores.
 
-The jobs depend on each other in order: job 1 decides `WHITEN`, job 2 decides `THETA_CONT` and `THETA_BIRTH`,
-and job 3 uses both.
+All three run at once, on six boxes ([`fleet_launch.sh`](fleet_launch.sh)):
+- job 1 on four boxes, one per arm (time, frequency) and tier;
+- jobs 2 and 3 under each whitening, one box per whitening ([`hmm_box.sh`](hmm_box.sh)). Each box derives θ on
+  synthetic data, picks the pair, and only then tracks the real recordings at that pair.
+
+So whichever whitening job 1 adopts, its tracker result already exists, and the records report both settings
+side by side. [`fleet_merge.py`](fleet_merge.py) `JOB ...` collects the pulled job folders into one new run
+folder, runs every merge step and writes `side_by_side.txt`.
 
 ## 1. Whitening across frequency (`whiten_frequency.py`)
 
@@ -75,7 +81,7 @@ pass.
 | Step | Units | Command |
 |---|---|---|
 | references | one file | `hmm_livermore.py "$RUN" references` |
-| livermore | one per primary pass (29) | `hmm_livermore.py "$RUN" livermore WHITEN TC TB [PASS ...]` |
+| livermore | one per pass (40: the 29 primary and the 11 flagged) | `hmm_livermore.py "$RUN" livermore WHITEN TC TB [PASS ...]` |
 | dev | one per event (6) | `hmm_livermore.py "$RUN" dev WHITEN TC TB [EVENT ...]` |
 | merge | — | `hmm_livermore.py "$RUN" merge WHITEN TC TB` |
 
@@ -84,8 +90,10 @@ then copy `dev_references.json` to every dev box.
 
 Inputs:
 - `derived/livermore/`, the unpacked corpus.
-- `runs/2026-11-04-livermore-audit/`: its `passes.csv` and `sites.json`. `--input` reads from the bucket's
-  `data/`, and `runs/` isn't seeded there, so this folder has to be seeded once before the job can run.
+- `runs/2026-11-04-livermore-audit/`: its `passes.csv` and `sites.json`. `runs launch` sends a `runs/` input
+  up from this machine.
+- `raw/audio/livermore/zenodo-23424278/final_results_40_cases.csv`.
+- Cache: `--cache terrarium`, for the development events' terrain.
 - `raw/audio/youtube/oyster_bay.webm` and `raw/audio/youtube/swfl_2024-12-28.webm`.
 - `derived/oyster_bay/traces_ny.npz` and `derived/swfl/traces_swfl.npz`.
 

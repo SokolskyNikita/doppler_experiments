@@ -391,9 +391,10 @@ def cut_rise(tr: Track, p: TrackParams, df: float, flag_only: bool = False) -> l
     return _split(tr, cut, p)
 
 
-def cut_hop(tr: Track, p: TrackParams, df: float) -> list[Track]:
+def cut_hop(tr: Track, p: TrackParams, df: float, flag_only: bool = False) -> list[Track]:
     """Cut at a step more than hop_factor times the track's own slope over the neighbouring
-    hop_window_s (and at least two bins): a jump onto another line."""
+    hop_window_s (and at least two bins): a jump onto another line. With flag_only, keep the
+    track whole and record the steps in tr.flags["hop"] instead."""
     m = np.nonzero(tr.measured)[0]
     if len(m) < 3:
         return [tr]
@@ -406,6 +407,9 @@ def cut_hop(tr: Track, p: TrackParams, df: float) -> list[Track]:
         if abs(fm[i + 1] - fm[i]) > max(2 * df, p.hop_factor * local * (tm[i + 1] - tm[i])):
             cut[m[i + 1]] = True
     if not cut.any():
+        return [tr]
+    if flag_only:
+        tr.flags["hop"] = tr.t[cut].tolist()
         return [tr]
     pieces, i = [], 0
     for j in [int(k) for k in np.nonzero(cut)[0]] + [len(tr.t)]:   # keep the cut point as the next piece's start
@@ -559,11 +563,16 @@ def harmonic_groups(tracks: list[Track], links: list[HarmonicLink]) -> list[dict
 
 # ---- the whole event ---------------------------------------------------------------------
 
+# Rise and hop both cut true curves on Livermore, where the 2.048 s window smears a pass's steep
+# part (docs/experiments/2026-11-04-freqtrack.md), so by default they flag instead.
+FLAG_ONLY = ("rise", "hop")
+
 def track_window(sp: Spectrogram, stft: SampleSTFT, t_start: float, t_end: float, f_lo: float, f_hi: float,
                  p: TrackParams = TrackParams(), rules: tuple[str, ...] = ("weak", "rise", "hop", "link", "crossing"),
-                 rise_flag_only: bool = False) -> EventTracks:
+                 flag: tuple[str, ...] = FLAG_ONLY) -> EventTracks:
     """Tracks between t_start and t_end with fundamentals or harmonics in [f_lo, f_hi], after the
-    segment rules named in `rules`, with harmonic links."""
+    segment rules named in `rules`, with harmonic links. The rules named in `flag` ("rise", "hop")
+    record where they fire in each track's flags instead of cutting it."""
     from .tracks import local_whiten
     win = local_whiten(sp.crop(t_start, t_end), floor=-np.inf)
     df, dt = win.df, win.dt
@@ -571,9 +580,9 @@ def track_window(sp: Spectrogram, stft: SampleSTFT, t_start: float, t_end: float
     if "weak" in rules:
         tracks = [q for tr in tracks for q in cut_weak(tr, p)]
     if "rise" in rules:
-        tracks = [q for tr in tracks for q in cut_rise(tr, p, df, flag_only=rise_flag_only)]
+        tracks = [q for tr in tracks for q in cut_rise(tr, p, df, flag_only="rise" in flag)]
     if "hop" in rules:
-        tracks = [q for tr in tracks for q in cut_hop(tr, p, df)]
+        tracks = [q for tr in tracks for q in cut_hop(tr, p, df, flag_only="hop" in flag)]
     if "link" in rules:
         tracks = link_gaps(tracks, p, df, dt)
     if "crossing" in rules:

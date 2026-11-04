@@ -31,10 +31,10 @@ def noise(hours=1.0, seed=0):
 
 
 def noise_rate(theta, sp, st, hours=1.0, band=(150.0, 250.0)):
-    p = ft.with_params(ft.TrackParams(), theta_db=theta)
+    p = ft.TrackParams(theta_db=theta, birth=6.0, death=6.0)                 # run 1's setting, every rule cutting
     n, t0 = 0, time.time()
     for a in np.arange(0, hours * 3600, 600.0):              # 10 min windows, as an event window would be
-        ev = ft.track_window(sp, st, a, a + 600, *band, p)
+        ev = ft.track_window(sp, st, a, a + 600, *band, p, flag=())
         n += len(ev.tracks)
     return n / hours, time.time() - t0
 

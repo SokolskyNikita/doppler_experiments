@@ -28,7 +28,7 @@ Metrics, per pass, on frames inside the reference span unless said otherwise:
 Criterion, on the 29 passes with audit fit RMS < 1.6 % of f0:
   median over passes of B's error < A's; B's total bridges <= A's; B's total fragments <= A's.
 
-usage: freqtrack_livermore.py RUN [rise-flag]"""
+usage: freqtrack_livermore.py RUN [rise-flag|run2]"""
 import csv
 import json
 import sys
@@ -49,6 +49,10 @@ AUDIT = LA.DATA / "runs/2026-11-04-livermore-audit"
 SR, N, HOP = 4000, 8192, 0.25
 TOLS = (0.01, 0.02, 0.04)
 GOOD_RMS = 1.6
+# Run 1 (the pre-registered run): theta 9.5 dB, birth 6, every rule cutting. Run 2 (the one recorded
+# retune): TrackParams()'s defaults, derived on noise and a synthetic weak pass, rise and hop as flags.
+RUN1 = ft.TrackParams(theta_db=9.5, birth=6.0, death=6.0, estimator="quinn2")
+MODES = {"": (RUN1, ()), "_rise_flag": (RUN1, ("rise",)), "_run2": (ft.TrackParams(), ("rise", "hop"))}
 
 
 def on_mask(f, fref, df, tol):
@@ -90,14 +94,16 @@ def score(tracks, t_span, fref_fn, df, tol, hop=HOP):
         k = np.nonzero(on_frames)[0]
         inner = ~on_frames[k[0]:k[-1] + 1]
         frags = sum(1 for a, b in runs(inner) if b - a >= need)
+        frags3 = sum(1 for a, b in runs(inner) if b - a >= 3 * need)
         tails = (k[0] + len(frames) - 1 - k[-1]) / len(frames)
     else:
-        frags, tails = 0, 1.0
-    return dict(error=err, bridges=bridges, fragments=frags, tails=float(tails), coverage=float(on_frames.mean()),
+        frags, frags3, tails = 0, 0, 1.0
+    return dict(error=err, bridges=bridges, fragments=frags, fragments_3s=frags3, tails=float(tails), coverage=float(on_frames.mean()),
                 n_tracks=len(tracks), n_pass_tracks=len(pass_pts))
 
 
-def main(run: Path, tag: str = "", rise_flag_only: bool = False):
+def main(run: Path, tag: str = ""):
+    params, flag = MODES[tag]
     import ssqueezepy
     passes = {p["id"]: p for p in LA.load_passes()}
     rows = {r["id"]: r for r in csv.DictReader(open(AUDIT / "passes.csv"))}
@@ -125,7 +131,7 @@ def main(run: Path, tag: str = "", rise_flag_only: bool = False):
         w = local_whiten(sp.crop(*span, *band)); trk["Astar"] = [(w.t, ridge(w))]
         res["time_Astar"] = time.perf_counter() - t0
         t0 = time.perf_counter()
-        ev = ft.track_window(sp, st, sp.t[0], sp.t[-1], *band, rise_flag_only=rise_flag_only)
+        ev = ft.track_window(sp, st, sp.t[0], sp.t[-1], *band, params, flag=flag)
         trk["B"] = [(tr.t, tr.f) for tr in ev.tracks]
         res["time_B"] = time.perf_counter() - t0
         t0 = time.perf_counter()
@@ -138,18 +144,22 @@ def main(run: Path, tag: str = "", rise_flag_only: bool = False):
         for name, tr in trk.items():
             for tol in TOLS:
                 res[f"{name}_{tol:g}"] = score(tr, span, fref, sp.df, tol)
-        # rise rule: flag instead of cut, and count flagged points that lie on the reference
-        evf = ft.track_window(sp, st, sp.t[0], sp.t[-1], *band, rise_flag_only=True)
-        flagged = on_flagged = 0
-        for tr in evf.tracks:
-            for tt in tr.flags.get("rise", []):
-                flagged += 1
-                fr = fref(tt); k = int(np.argmin(np.abs(tr.t - tt)))
-                on_flagged += int(np.isfinite(fr) and on_mask(tr.f[k], fr, sp.df, 0.02))
-        rise_report.append(dict(id=pid, flagged=flagged, on_reference=on_flagged))
+        # rise and hop rules as flags: count the flagged points, and those that lie on the reference
+        evf = ft.track_window(sp, st, sp.t[0], sp.t[-1], *band, params, flag=("rise", "hop"))
+        rep = dict(id=pid)
+        for rule in ("rise", "hop"):
+            flagged = on_flagged = 0
+            for tr in evf.tracks:
+                for tt in tr.flags.get(rule, []):
+                    flagged += 1
+                    fr = fref(tt); k = int(np.argmin(np.abs(tr.t - tt)))
+                    on_flagged += int(np.isfinite(fr) and on_mask(tr.f[k], fr, sp.df, 0.02))
+            rep[rule] = dict(flagged=flagged, on_reference=on_flagged)
+        rep["points"] = int(sum(tr.measured.sum() for tr in evf.tracks))
+        rise_report.append(rep)
         # B over the package band, no oracle
         t0 = time.perf_counter()
-        ev450 = ft.track_window(sp, st, sp.t[0], sp.t[-1], 40, 450, rise_flag_only=rise_flag_only)
+        ev450 = ft.track_window(sp, st, sp.t[0], sp.t[-1], 40, 450, params, flag=flag)
         res["time_B450"] = time.perf_counter() - t0
         grp = ev450.event_track()
         contains = None
@@ -164,7 +174,8 @@ def main(run: Path, tag: str = "", rise_flag_only: bool = False):
         print(f"{pid:12s} {'good' if res['good'] else 'flag'} err A {a['error']:.4f} B {b['error']:.4f} "
               f"C {res['C_0.02']['error']:.4f} | bridges A {a['bridges']} B {b['bridges']} | frags A {a['fragments']} "
               f"B {b['fragments']} | cov A {a['coverage']:.2f} B {b['coverage']:.2f} | B {res['time_B']:.2f}s "
-              f"| rise {flagged}/{on_flagged} | 450 {contains}", flush=True)
+              f"| rise {rep['rise']['flagged']}/{rep['rise']['on_reference']} hop {rep['hop']['flagged']}/{rep['hop']['on_reference']} "
+              f"| 450 {contains}", flush=True)
     (run / f"livermore_tracks{tag}.json").write_text(json.dumps(dict(passes=out, rise=rise_report), indent=1, default=float))
     summarise(run, out, rise_report, tag)
 
@@ -179,7 +190,7 @@ def summarise(run, out, rise_report, tag=""):
                 k = f"{name}_{tol:g}"
                 e = np.median([r[k]["error"] for r in rows])
                 lines.append(f"tol {tol:g} {name:5s} median error {e:.4f}  bridges {sum(r[k]['bridges'] for r in rows):3d}  "
-                             f"fragments {sum(r[k]['fragments'] for r in rows):3d}  coverage {np.median([r[k]['coverage'] for r in rows]):.2f}  "
+                             f"fragments {sum(r[k]['fragments'] for r in rows):3d}  (3 s: {sum(r[k]['fragments_3s'] for r in rows):3d})  coverage {np.median([r[k]['coverage'] for r in rows]):.2f}  "
                              f"tails {np.median([r[k]['tails'] for r in rows]):.2f}")
             wins = sum(r[f"B_{tol:g}"]["error"] < r[f"A_{tol:g}"]["error"] for r in rows)
             lines.append(f"tol {tol:g}: B beats A on {wins} of {len(rows)} passes")
@@ -190,8 +201,9 @@ def summarise(run, out, rise_report, tag=""):
             sum(x["bridges"] for x in b) <= sum(r["A_0.02"]["bridges"] for r in a),
             sum(x["fragments"] for x in b) <= sum(r["A_0.02"]["fragments"] for r in a))
     lines.append(f"CRITERION (error, bridges, fragments): {crit} -> {'MET' if all(crit) else 'NOT MET'}")
-    lines.append(f"rise rule: {sum(x['flagged'] for x in rise_report)} rises flagged, {sum(x['on_reference'] for x in rise_report)} on the reference, "
-                 f"in {sum(x['on_reference'] > 0 for x in rise_report)} passes")
+    for rule in ("rise", "hop"):
+        lines.append(f"{rule} rule: {sum(x[rule]['flagged'] for x in rise_report)} points flagged of {sum(x['points'] for x in rise_report)}, "
+                     f"{sum(x[rule]['on_reference'] for x in rise_report)} on the reference, in {sum(x[rule]['on_reference'] > 0 for x in rise_report)} passes")
     inb = [r for r in out if r["B450_contains_published"] is not None]
     lines.append(f"B450: published line within 40-450 Hz on {len(inb)} passes; strongest group contains it on "
                  f"{sum(r['B450_contains_published'] for r in inb)}, any track on it on {sum(r['B450_any_track_on_published'] for r in inb)}")
@@ -201,6 +213,6 @@ def summarise(run, out, rise_report, tag=""):
 
 
 if __name__ == "__main__":
-    # second argument "rise-flag": the rise rule flags instead of cutting (the agreed fallback if it cuts true curves)
-    flag = len(sys.argv) > 2 and sys.argv[2] == "rise-flag"
-    main(Path(sys.argv[1]), "_rise_flag" if flag else "", flag)
+    # second argument: "rise-flag" (run 1's knobs, the rise rule flagging: the agreed fallback) or "run2"
+    mode = {"rise-flag": "_rise_flag", "run2": "_run2"}.get(sys.argv[2] if len(sys.argv) > 2 else "", "")
+    main(Path(sys.argv[1]), mode)

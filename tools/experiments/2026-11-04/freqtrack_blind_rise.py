@@ -1,7 +1,7 @@
 """How often freqtrack's rise rule fires on the blind-labelled clear events (bench/labels on dev), which
-have no ADS-B reference: tracker B with the rise rule as a flag, over each event's window and the band
+have no ADS-B reference: tracker B with the rise and hop rules as flags, over each event's window and the band
 its labelled lines span (0.85x to 1.15x). Reports, per event, the tracks, the measured points, and the
-points the rise rule flags. Audio is decoded only around each event (from 60 s before to 60 s after).
+points each rule flags. Audio is decoded only around each event (from 60 s before to 60 s after).
 
 usage: freqtrack_blind_rise.py RUN LABELS.json..."""
 import json
@@ -43,7 +43,7 @@ def eclipse(zip_path, t0, dur, tmp):
     return np.concatenate(parts), first
 
 
-def main(run, labels):
+def main(run, labels, tag):
     rows = []
     tmp = run / "tmp_blind"; tmp.mkdir(exist_ok=True)
     for lf in labels:
@@ -61,15 +61,21 @@ def main(run, labels):
             st = ft.SampleSTFT(x, SR, N, HOP)
             fl = [f for line in w["lines"] for f in line]
             band = (0.85 * min(fl), 1.15 * max(fl))
-            ev = ft.track_window(sp, st, w["start"] - off, w["end"] - off, *band, rise_flag_only=True)
+            ev = ft.track_window(sp, st, w["start"] - off, w["end"] - off, *band, PARAMS, flag=("rise", "hop"))
             pts = sum(int(tr.measured.sum()) for tr in ev.tracks)
-            flagged = sum(len(tr.flags.get("rise", [])) for tr in ev.tracks)
-            rows.append(dict(event=w["id"], tracks=len(ev.tracks), points=pts, rise_flagged=flagged,
-                             tracks_with_rise=sum(bool(tr.flags.get("rise")) for tr in ev.tracks), band=band))
+            row = dict(event=w["id"], tracks=len(ev.tracks), points=pts, band=band)
+            for rule in ("rise", "hop"):
+                row[f"{rule}_flagged"] = sum(len(tr.flags.get(rule, [])) for tr in ev.tracks)
+                row[f"tracks_with_{rule}"] = sum(bool(tr.flags.get(rule)) for tr in ev.tracks)
+            rows.append(row)
             print(rows[-1], flush=True)
     tmp.rmdir()
-    (run / "freqtrack_blind_rise.json").write_text(json.dumps(rows, indent=1))
+    (run / f"freqtrack_blind_rise{tag}.json").write_text(json.dumps(rows, indent=1))
 
 
 if __name__ == "__main__":
-    main(Path(sys.argv[1]), sys.argv[2:])
+    # RUN1=1 in the environment: run 1's knobs (theta 9.5, birth 6); otherwise TrackParams()'s defaults
+    import os
+    run1 = os.environ.get("RUN1") == "1"
+    PARAMS = ft.TrackParams(theta_db=9.5, birth=6.0, death=6.0) if run1 else ft.TrackParams()
+    main(Path(sys.argv[1]), sys.argv[2:], "_run1" if run1 else "_run2")

@@ -59,5 +59,6 @@ happens if stage B's retune is spent on N, which hasn't happened.
   - A spot interruption is resumed the same way: a new launch with `--resume` pointing at the interrupted
     folder, once it has been pulled.
 - **The pinned code.** Stage B's A1/A3 must run the first run's hypotheses (`45d0bd8`), not the retune's. The
-  drivers' shard support is newer, so that job launches from a branch cut at `45d0bd8` with this commit
-  cherry-picked onto it. The other jobs launch from the branch tip.
+  drivers' shard support is newer, so that job launches from `claude/sde-stageb-pairs-45d0bd8` (`1702067`):
+  `45d0bd8` with the shard commit cherry-picked, keeping B1/B2's `event_hypotheses` call as it was at
+  `45d0bd8`. The other jobs launch from this branch's tip.

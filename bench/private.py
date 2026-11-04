@@ -59,7 +59,7 @@ def resolve_case(case: dict) -> dict:
         raise PrivateDataError(f"no private case file {path}")
     extra = json.loads(path.read_text())
     out = dict(case)
-    for key in ("spectrogram", "audio", "derived"):
+    for key in ("spectrogram", "spectrogram_wide", "audio", "derived"):
         if key in extra:
             out[key] = extra[key]
     for key in ("flight_data", "search"):

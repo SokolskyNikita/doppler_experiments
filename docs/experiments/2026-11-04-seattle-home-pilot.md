@@ -205,8 +205,10 @@ times. If they are still audible there, the content is in 40–450 Hz and the ga
 450 Hz carries them.
 
 **Next session's levers, in order:**
-1. **The stored band.** The recorder project is asked to store 4 kHz, flat to about 1.8 kHz; the phone already
-   samples 48 kHz.
+1. **The stored band.** This is the owner's privacy measure for a microphone in the home, not a pipeline setting, so
+   the test's session exists only if the owner chooses a wider band in the recorder project. Three options were put to
+   them: 2 kHz (flat to about 900 Hz, which covers Livermore's harmonics up to 868 Hz), 4 kHz (flat to about 1.8 kHz),
+   and the full band. The owner chose the full band for the next sessions.
 2. **Placement:** a window or outdoor placement, to lower the floor.
 3. **Stereo:** stereo capture, for the coherence cue between the two mics, which household self-noise and single-mic
    transients can't fake.
@@ -214,11 +216,26 @@ times. If they are still audible there, the content is in 40–450 Hz and the ga
 
 **Pre-registered test of the band, on the first session stored at 4 kHz:**
 - The known-point check (tonal, its sweep widened to the band's harmonics) and the broadband check both run twice on
-  the same passes and the same ear reference: once on the stored 40–450 Hz, once on 40–1800 Hz.
+  the same passes and the same ear reference: once on the stored 40–450 Hz, once on 40–1800 Hz. A session stored
+  narrower than 1.8 kHz uses its own passband edge, stated with the result.
 - **The band is the lever if** the wide band marks at least half of the ear-audible propeller passes beyond 1 km, while
   40–450 Hz marks no more of them than its null share.
 - **The band is not the lever if** the wide band marks no more of them than its null share.
 - Anything between is reported as it falls.
+
+**Ready before the session, so the test needs no new code** (2026-11-05):
+- **Wide spectrogram:** `tools/data/session_spectrogram.py --fmax HZ` builds it with the package's STFT. It keeps the
+  2.048 s Hann window, the 0.25 s hop and the 0.49 Hz bins, decodes at 4 kHz up to a 1.8 kHz edge (in 1 kHz steps above
+  it), and whitens with the same 600 s running median.
+- **Both checks take `--fmax` and `--spectrogram`:**
+  - The tonal check scores floor(fmax / 300) harmonics, every one of which stays in band for any 60–300 Hz tone: 6 at
+    1.8 kHz, 1 at 450 Hz.
+  - The broadband check marks on 40 Hz to fmax and adds 450–900 and 900–fmax to its sub-bands.
+- **Case builder:** `tools/data/home_session_case.py SESSION_ID --traces PATH` writes the session's private case (a
+  `spectrogram_wide` at the band's edge when the session stores more than 450 Hz) and its public entry. The box is the
+  series' off-node 4 km square.
+- **Launch:** the launch script's `--session ID bandtest` runs both checks on both bands. Like every launch, it ships
+  only the files the owner names.
 
 ### Locate
 

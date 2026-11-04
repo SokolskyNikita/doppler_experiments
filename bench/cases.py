@@ -181,7 +181,7 @@ def validate_case(case: dict, manifest_files: dict[str, str]) -> None:
         ref = (case.get("labels") or {}).get("reference")
         if ref != {"site": case.get("site")}:
             problems.append(f"{where}: a private case's labels.reference must be {{\"site\": <its site>}}, no coordinate")
-        for key in ("audio", "derived", "spectrogram"):
+        for key in ("audio", "derived", "spectrogram", "spectrogram_wide"):
             if case.get(key):
                 problems.append(f"{where}: a private case keeps its {key} in its private file, not here")
         if (case.get("search") or {}).get("bbox") is not None or (case.get("flight_data") or {}).get("traces"):

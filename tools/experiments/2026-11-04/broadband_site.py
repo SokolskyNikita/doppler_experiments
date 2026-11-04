@@ -1,15 +1,19 @@
 """Does a private case's recording carry each nearby pass as broadband energy, where the tonal check hears two?
 
 usage: broadband_site.py CASE SESSION_DIR KNOWN_POINT_DIR OUT_DIR [--max-ground-m 6000] [--null 200]
+                         [--fmax HZ --spectrogram PATH]
 
 The known-point check (known_point_site.py) scores each propeller pass by the brightness along its modelled
 harmonic curve, on the whitened spectrogram. A person indoors hears the passes as a roar, which a harmonic-line
 score need not see, and whitening removes part of a slow broadband rise. So here, for every airborne segment (any
 type, jets included) whose closest approach to the site is within --max-ground-m of ground range during the
-recording: the band power in 40-450 Hz and in 40-100, 100-200 and 200-450 Hz, on the UNWHITENED spectrogram (the
-session's FLACs, framed exactly as session_spectrogram.py frames them), over +-15 s of the predicted heard CPA,
-against the same 30 s power at every centre 30-150 s from it on either side: z = (centre - median) / (1.4826 MAD), and
-the rise in dB. A pass is marked when its 40-450 Hz z >= 3. The traffic is dense (about one aircraft within 6 km every
+recording: the band power in 40 Hz to --fmax (450 by default) and in 40-100, 100-200 and 200-450 Hz (with 450-900
+and 900-fmax for a wider band), on the UNWHITENED spectrogram (the session's FLACs, framed exactly as
+session_spectrogram.py frames them at that fmax), over +-15 s of the predicted heard CPA, against the same 30 s power at
+every centre 30-150 s from it on either side: z = (centre - median) / (1.4826 MAD), and the rise in dB. A pass is
+marked when its 40-fmax z >= 3. With a wider band, --spectrogram names the case's whitened spectrogram built at the
+same fmax (session_spectrogram.py --fmax), for the frame check and the pictures, and --known-point the known-point
+run at that band. The traffic is dense (about one aircraft within 6 km every
 80 s), so the same z at --null random times gives the share of times that are marked without any pass chosen; and
 each pass carries how many other aircraft have a heard CPA within 30 s and 150 s of its own.
 
@@ -31,6 +35,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "data"))
 from bench import private as priv  # noqa: E402
 from bench.cases import data_root, latest_case, resolve  # noqa: E402
 from bench.runner import trace_paths  # noqa: E402
@@ -40,12 +45,19 @@ from dopplertrack.doppler import speed_of_sound  # noqa: E402
 from dopplertrack.score import modelled_curve  # noqa: E402
 from dopplertrack.search import build_segments  # noqa: E402
 from known_point_site import F0_SCALES, F_REF, SHIFTS, window  # noqa: E402
-
-BANDS = {"40-450": (40.0, 450.0), "40-100": (40.0, 100.0), "100-200": (100.0, 200.0), "200-450": (200.0, 450.0)}
+from session_spectrogram import recipe, session_files  # noqa: E402
 HALF_S, NEAR_S, FAR_S = 15.0, 30.0, 150.0
 Z_MARK = 3.0
 EDGES = [0, 1000, 2000, 3500]
-NPERSEG, HOP_S, SR = 8192, 0.25, 4000
+
+
+def bands(fmax: float) -> dict:
+    """The marking band first (40 Hz to fmax), then the sub-bands that fit under fmax."""
+    out = {f"40-{fmax:g}": (40.0, fmax)}
+    for lo, hi in ((40.0, 100.0), (100.0, 200.0), (200.0, 450.0), (450.0, 900.0), (900.0, fmax)):
+        if hi <= fmax and lo < hi and (lo, hi) != (40.0, fmax):
+            out[f"{lo:g}-{hi:g}"] = (lo, hi)
+    return out
 
 
 
@@ -57,19 +69,18 @@ def _json_default(o):
         return o.tolist()
     raise TypeError(f"Object of type {type(o).__name__} is not JSON serializable")
 
-def raw_spectrogram(session: Path):
-    """The session's spectrogram in dB, not whitened, on session_spectrogram.py's timeline and frames."""
-    closed = [json.loads(line) for line in (session / "timeline.jsonl").read_text().splitlines()]
-    closed = sorted((e for e in closed if e.get("type") == "file_close"), key=lambda e: e["first_sample_utc_epoch"])
-    start = closed[0]["first_sample_utc_epoch"]
-    files = [(session / e["file"], e["first_sample_utc_epoch"] - start) for e in closed]
+def raw_spectrogram(session: Path, fmax: float = 450.0):
+    """The session's spectrogram in dB, not whitened, on session_spectrogram.py's timeline and frames at fmax."""
+    files, _ = session_files(session)
+    r = recipe(fmax)
+    SR, NPERSEG, HOP_S = r["sr"], r["nperseg"], r["hop_s"]
     x, gap = [], []
     for b, is_audio in _placed_blocks(files, SR, 0.01, 1 << 22):
         x.append(np.asarray(b, np.float32) if is_audio else np.zeros(len(b), np.float32))
         gap.append(np.full(len(b), not is_audio))
     x, g = np.concatenate(x), np.concatenate(gap)
     hop = int(round(HOP_S * SR))
-    f, band = _band(SR, NPERSEG, 40.0, 450.0)
+    f, band = _band(SR, NPERSEG, r["fmin"], r["fmax"])
     K = (len(x) - NPERSEG) // hop + 1
     parts = [_stft_db(x[k0 * hop:(min(k0 + 16384, K) - 1) * hop + NPERSEG], SR, NPERSEG, hop, band)
              for k0 in range(0, K, 16384)]
@@ -78,7 +89,7 @@ def raw_spectrogram(session: Path):
     return (NPERSEG / 2 + np.arange(K) * hop) / SR, f, np.concatenate(parts, axis=1), cg[s0 + NPERSEG] - cg[s0] == 0
 
 
-def band_power(f, L, valid):
+def band_power(f, L, valid, BANDS):
     """Each band's linear mean power per frame; NaN on an invalid frame."""
     P = 10 ** (L.astype(np.float64) / 10)
     out = {}
@@ -129,7 +140,7 @@ def picture(path, t, f, L, sp, seg_curve, t_cpa, best, title):
     axes[0].pcolormesh(t[m] - t_cpa, f, L[:, m], shading="auto", cmap="magma",
                        vmin=np.percentile(L[:, m], 5), vmax=np.percentile(L[:, m], 99.5))
     axes[0].set_title("unwhitened dB")
-    ew = window(sp, t_cpa)
+    ew = window(sp, t_cpa, float(sp.f[-1]))
     w = ew.sp
     axes[1].pcolormesh(w.t - t_cpa, w.f, w.S, shading="auto", cmap="magma", vmin=0, vmax=np.percentile(w.S, 99.5))
     axes[1].set_title("what the tonal scorer sees (whitened, local median removed)")
@@ -140,7 +151,7 @@ def picture(path, t, f, L, sp, seg_curve, t_cpa, best, title):
             ax.plot(tt[keep], h * F_REF * scale * ratio[keep], ls, color="cyan", lw=0.8, alpha=0.8)
         ax.axvline(0, color="white", lw=0.6, alpha=0.6)
         ax.set_xlabel("s from the predicted heard CPA")
-        ax.set_ylim(40, 450)
+        ax.set_ylim(40, float(f[-1]))
     axes[0].set_ylabel("Hz")
     fig.suptitle(title)
     fig.tight_layout()
@@ -153,19 +164,23 @@ def main():
     ap.add_argument("case"); ap.add_argument("session", type=Path); ap.add_argument("known_point", type=Path)
     ap.add_argument("out", type=Path)
     ap.add_argument("--max-ground-m", type=float, default=6000.0); ap.add_argument("--null", type=int, default=200)
+    ap.add_argument("--fmax", type=float, default=450.0, help="the band's upper edge, Hz (default 450)")
+    ap.add_argument("--spectrogram", help="the case's whitened spectrogram at --fmax (default the case's own)")
     a = ap.parse_args()
     if not a.out.resolve().is_relative_to((data_root() / "private").resolve()):
         sys.exit(f"{a.out} is not under {data_root() / 'private'}: the per-pass table would place the site")
     case = priv.resolve_case(latest_case(a.case))
     site = priv.load_site(case["site"])
-    sp = Spectrogram.load(resolve(case["spectrogram"]))
-    t, f, L, valid = raw_spectrogram(a.session)
+    sp = Spectrogram.load(resolve(a.spectrogram or case["spectrogram"]))
+    BANDS = bands(a.fmax)
+    MARK = next(iter(BANDS))
+    t, f, L, valid = raw_spectrogram(a.session, a.fmax)
     if len(t) != len(sp.t) or not np.allclose(t, sp.t) or len(f) != len(sp.f):
         sys.exit("the unwhitened frames don't match the case's spectrogram")
     start = datetime.datetime.fromisoformat(case["start_time"]["utc"].replace("Z", "+00:00")).timestamp()
     t0, t1 = start + float(t[0]), start + float(t[-1])
     dt = float(t[1] - t[0])
-    means = {k: window_means(p, dt) for k, p in band_power(f, L, valid).items()}
+    means = {k: window_means(p, dt) for k, p in band_power(f, L, valid, BANDS).items()}
     types = AircraftTypes()
     traces = join_days(trace_paths(case))[0]
     segs = build_segments(traces, site["lat"], site["lon"])
@@ -196,14 +211,14 @@ def main():
                "ear_audible": ear_audible(engine, ground)}
         for name, m in means.items():
             row[f"z_{name}"], row[f"rise_db_{name}"] = z_at(t, m, t_cpa)
-        z = row["z_40-450"]
+        z = row[f"z_{MARK}"]
         row["marked"] = bool(z is not None and z >= Z_MARK)
         kp = known.get((seg.icao, round(t_cpa, 1)))
         row["tonal_heard"] = None if kp is None else kp["heard"]
         row["tonal_z"] = None if kp is None else kp["z"]
         rows.append(row)
     rng = np.random.default_rng(20261104)
-    null = [z_at(t, means["40-450"], tc)[0] for tc in rng.uniform(t[0] + FAR_S, t[-1] - FAR_S, a.null)]
+    null = [z_at(t, means[MARK], tc)[0] for tc in rng.uniform(t[0] + FAR_S, t[-1] - FAR_S, a.null)]
     null = [z for z in null if z is not None]
     a.out.mkdir(parents=True, exist_ok=True)
     (a.out / "broadband_passes.json").write_text(json.dumps(rows, indent=1, default=_json_default) + "\n")    # private: never in git
@@ -213,25 +228,26 @@ def main():
     pick += sorted((x for x in props if x[0]["ear_audible"] and x[0]["tonal_heard"] is False),
                    key=lambda x: x[0]["ground_m"])[:4]
     for i, (r, (seg, t_obs, ratio, t_cpa, ground, engine)) in enumerate(pick):
-        sc = window(sp, t_cpa).sweep_scores(t_obs - start, ratio, SHIFTS, F0_SCALES)
+        sc = window(sp, t_cpa, a.fmax).sweep_scores(t_obs - start, ratio, SHIFTS, F0_SCALES)
         si, fi = np.unravel_index(int(np.argmax(sc)), sc.shape)
         picture(a.out / f"pass-{i + 1}.png", t, f, L, sp, (t_obs, ratio, start), t_cpa,
                 (float(SHIFTS[si]), float(F0_SCALES[fi])),
                 f"pass {i + 1}: {engine}, {ground / 1000:.1f} km ground; tonal {'heard' if r['tonal_heard'] else 'not heard'}"
-                f" (z {r['tonal_z']}), broadband z {r['z_40-450']}; best tone {F_REF * F0_SCALES[fi]:.0f} Hz")
+                f" (z {r['tonal_z']}), broadband z {r[f'z_{MARK}']}; best tone {F_REF * F0_SCALES[fi]:.0f} Hz")
         r["picture"] = f"pass-{i + 1}.png"
     (a.out / "broadband_passes.json").write_text(json.dumps(rows, indent=1, default=_json_default) + "\n")
 
     def tally(rs):
-        zs = [r["z_40-450"] for r in rs if r["z_40-450"] is not None]
+        zs = [r[f"z_{MARK}"] for r in rs if r[f"z_{MARK}"] is not None]
         return {"passes": len(rs), "marked": sum(r["marked"] for r in rs),
                 "tonal_heard": sum(bool(r["tonal_heard"]) for r in rs),
                 "median_z": round(float(np.median(zs)), 2) if zs else None,
                 "marked_by_band": {b: sum((r[f"z_{b}"] or 0) >= Z_MARK for r in rs) for b in BANDS},
-                "median_rise_db": round(float(np.median([r["rise_db_40-450"] for r in rs
-                                                         if r["rise_db_40-450"] is not None] or [np.nan])), 2)}
+                "median_rise_db": round(float(np.median([r[f"rise_db_{MARK}"] for r in rs
+                                                         if r[f"rise_db_{MARK}"] is not None] or [np.nan])), 2)}
     edges = EDGES + [a.max_ground_m]
-    summary = {"case": a.case, "z_mark": Z_MARK, "bands_hz": list(BANDS),
+    summary = {"case": a.case, "z_mark": Z_MARK, "mark_band_hz": MARK, "bands_hz": list(BANDS), "fmax_hz": a.fmax,
+               "recipe": recipe(a.fmax),
                "null": {"times": len(null), "marked_share": round(float(np.mean(np.array(null) >= Z_MARK)), 3),
                         "median_z": round(float(np.median(null)), 2)},
                "by_class": {}, "ear": {}}

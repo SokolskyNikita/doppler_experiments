@@ -98,7 +98,7 @@ def main():
                      "z": round((score - med) / mad, 2) if mad > 0 else None, "heard": bool(score > null.max())})
     a.out.mkdir(parents=True, exist_ok=True)
     (a.out / "known_point_passes.json").write_text(json.dumps(rows, indent=1) + "\n")   # private: never in git
-    bins = [0, 1000, 2000, 4000, a.max_ground_m]
+    bins = [0, 1000, 2000, 3500, a.max_ground_m]       # 2 km: the ear's turboprop limit; 3.5 km: the rest's
     summary = {"case": a.case, "passes": len(rows), "heard": sum(r["heard"] for r in rows), "draws": a.draws,
                "by_ground_range_m": [{"from": lo, "to": hi, "passes": sum(lo <= r["ground_m"] < hi for r in rows),
                                       "heard": sum(lo <= r["ground_m"] < hi and r["heard"] for r in rows)}

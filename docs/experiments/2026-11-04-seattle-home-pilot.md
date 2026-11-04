@@ -2,7 +2,7 @@
 
 <!-- index
 question: What does the owner's indoor phone recorder hear of the propeller traffic around it, and what does locate make of a 2.3 h session?
-outcome: Pending: the criteria below were written before the run
+outcome: Tonal check hears 2 of the 11 passes the owner's ear heard, both within 1 km; locate refused (flight data short of the day); broadband check and locate rerun pending
 -->
 
 ## Question
@@ -27,6 +27,37 @@ hear, and what does `locate` find on its own?
 
 The owner listened to the session and approved its run on the fleet's private bucket (2026-11-04).
 
+**The ear's reference**, from the owner, who listened to the session: the passes they could hear were easy to hear for
+8–12 s each, the larger ones longest. They heard nothing beyond about 3–3.5 km of ground range, or beyond about 2 km for
+turboprops. Below, piston and unknown-type passes are counted audible to the ear within 3.5 km, and turboprops within 2
+km.
+
+## The microphone
+
+Three 120 s samples were recorded at 22:09–22:16Z, after the session, with the placement unchanged. They show what the
+phone's two microphones contribute.
+
+| Floor, lines removed (dBFS) | 20–40 Hz | 40–80 | 80–160 | 160–300 | 300–450 |
+|---|---|---|---|---|---|
+| bottom mic, raw | −66 | −64 | −70 | −78 | −87 |
+| back mic, raw | −65 | −64 | −73 | −81 | −88 |
+| voice-performance stereo, ch0 (bottom) | −77 | −77 | −85 | −94 | −100 |
+| voice-performance stereo, ch1 (back) | −74 | −76 | −85 | −94 | −99 |
+
+- **Gain:** voice-performance capture has 11–16 dB less digital gain, which is harmless at 24 bit.
+- **Lines more than 10 dB above the floor:**
+  - bottom mic: 26.4 and 467.8 Hz;
+  - back mic: 64.5, 193.8 and 195.8 Hz;
+  - voice-performance: none.
+- **Coherence between the two mics:** 0.98 below 80 Hz, and 0.24–0.42 at 160–450 Hz.
+  - Averaging the two mics lowers the 160–450 Hz floor by only 0.5 dB.
+  - In that band the mics' own noise is incoherent, while a far-field aircraft is coherent at both. So coherence between
+    the mics around a pass's predicted CPA is a third detector, beside the tonal and broadband ones, and the phone's
+    self-noise cannot fake it.
+  - **Planned for the first stereo session:** that coherence measurement, judged against the same ear reference.
+- **Recommendation to the recorder project:** voice-performance stereo capture, with the back mic as the primary
+  channel.
+
 ## Criteria, written before the run
 
 A pilot: no criterion for "located" is set, and nothing here is tuned on its result.
@@ -40,8 +71,39 @@ A pilot: no criterion for "located" is set, and nothing here is tuned on its res
    6 s), weather off: its verdict, its top candidate's and refined point's distance from the site (site-relative),
    whether its matched flights are among the heard passes, and its funnel.
 
-Both run on one 4xlarge box from the private bucket, with the caches under `private/cache`; the per-flight table and
+Both ran on one 4xlarge box from the private bucket, with the caches under `private/cache`; the per-flight table and
 the records stay in `private/runs/`.
+
+### Added before run 5: the broadband check
+
+The owner's ear heard the passes within 2–3.5 km as a roar, while the tonal check heard 2 of them. The broadband check
+asks whether the recording carries those passes as broadband energy without the harmonic lines the tonal score looks
+for (`tools/experiments/2026-11-04/broadband_site.py`). It covers every airborne pass within 6 km of ground range,
+jets included.
+
+- **Spectrogram:** the unwhitened one, rebuilt from the FLACs on the stored spectrogram's frames. The running-median
+  whitening removes part of a slow broadband rise.
+- **Statistic:**
+  - the band power over ±15 s of the predicted heard CPA, against the same 30 s power at every centre 30–150 s away on
+    either side;
+  - z = (centre − median) / (1.4826 MAD), with the rise in dB beside it;
+  - bands: 40–450 Hz, 40–100, 100–200 and 200–450 Hz.
+- **Marked:** a pass is marked when its 40–450 Hz z ≥ 3. The sub-bands are reported beside it, not used to mark.
+- **Null:** the share of 200 random times that the same z marks. The traffic is dense, about one aircraft within 6 km
+  every 80 s, so this is the share a pass would get marked with no pass chosen at all.
+- **Crowding:** each pass carries how many other aircraft have a heard CPA within 30 s and within 150 s of its own.
+- **Judged against the ear:**
+  - A broadband detector that matches the ear marks the propeller passes inside the ear's range and not those beyond
+    it, at well above the null's share.
+  - The gap to close is the 9 passes the ear heard and the tonal check didn't: 1–3.5 km for pistons and unknown types,
+    plus the two pistons within 1 km.
+  - If broadband marks most of them, the indoor recording carries the roar and not the lines the detector assumes. The
+    detector's first stage for this site would then have to be broadband: the problem is the signal's form, not
+    sensitivity.
+  - If broadband marks few of them, the recording carries little of either, and placement and gain are the problem.
+- **Pictures, under `private/` only:** the two passes the tonal check heard, and the four nearest that the ear heard and
+  it did not. Each shows the unwhitened spectrogram and the tonal scorer's view, with the predicted curve at the sweep's
+  best tone overlaid, to show whether any lines exist at all.
 
 ## Results
 
@@ -55,18 +117,25 @@ table) and on a private path my code resolved under the repo. All three are fixe
 
 23 propeller or unknown-type passes came within 6 km of ground range during the recording: 14 piston, 6 turboprop and 3
 of unknown type. Each was scored at the site on the recorder's clock against 200 placements of its own curve at wrong
-times.
+times. The bins carry the ear's lines, 2 km for turboprops and 3.5 km for the rest. Each cell is the passes heard by
+the tonal check, out of the passes in that bin.
 
-| Ground range | Passes | Heard |
-|---|---|---|
-| 0–1 km | 4 | 2 |
-| 1–2 km | 2 | 0 |
-| 2–4 km | 10 | 0 |
-| 4–6 km | 7 | 0 |
-| all | 23 | 2 |
+| Ground range | Piston | Unknown | Turboprop | All |
+|---|---|---|---|---|
+| 0–1 km | 1 / 3 | – | 1 / 1 | 2 / 4 |
+| 1–2 km | 0 / 2 | – | – | 0 / 2 |
+| 2–3.5 km | 0 / 3 | 0 / 2 | 0 / 5 | 0 / 10 |
+| 3.5–6 km | 0 / 6 | 0 / 1 | – | 0 / 7 |
+| all | 1 / 14 | 0 / 3 | 1 / 6 | 2 / 23 |
 
-- **Heard: 2 of 23, both within 1 km,** one piston and one turboprop, at z 7.4 and 8.1. Two other passes within 1 km
-  were not heard.
+- **Against the ear: the tonal check heard 2 of the 11 passes the ear heard.** Those 11 are the pistons and unknown
+  types within 3.5 km (10) and the turboprops within 2 km (1).
+  - Heard: one piston and one turboprop, both within 1 km, at z 7.4 and 8.1.
+  - Not heard: two pistons within 1 km, and all 7 pistons and unknown types at 1–3.5 km.
+- **Beyond the ear's range, neither heard anything:** 12 passes (the 5 turboprops at 2–3.5 km and the 7 passes beyond
+  3.5 km).
+- **No turboprop gap in this session:** none passed at 1–2 km. The gap to close is the pistons and unknown types at
+  1–3.5 km, plus the two pistons within 1 km.
 - **Beyond 1 km, none of 19.** The criterion is strict (above every one of the 200 null draws), and below it the
   evidence is weak but not absent: the median pass scores 2.1 robust σ above its null, and 10 of the 21 unheard passes
   are above 2 σ. So the farther passes leave a weak trace, above the typical wrong-time placement, but none clears the
@@ -78,7 +147,7 @@ the site.
 
 ### Locate
 
-**Run 4** (`private/runs/2026-11-04-seattle-home-pilot-4/locate/`, 541 s for the box, $0.05): `locate` detected 10
+**As it stands: the pipeline refused, and nothing was searched.** Run 4 (`private/runs/2026-11-04-seattle-home-pilot-4/locate/`, 541 s for the box, $0.05): `locate` detected 10
 flyovers, all 10 usable, on a recording with every frame valid. It then stopped before searching, `insufficient_evidence`
 with `flight_data_missing_time`. The case's ADS-B cut was fetched on the day itself and ends at 20:13Z, while
 `locate` required data for the whole UTC day, and that rule doesn't depend on the clock gate. There are no candidates,
@@ -90,13 +159,22 @@ is dropped, so only the recording's own window of flight data can reach a candid
 window when a start is stated: the stated start ± (its tolerance + `tol_s` + 300 s) across the recording, capped at the
 whole-day bounds, so no case it passed before now fails. The cut covers the window. One thing changes slightly: the
 comparable score's null draws wrong flights from the whole CPA table, which here lacks the day after 20:13Z. Run 5
-reruns `locate` alone on the same case.
+reruns the whole box command at the fix (626937b on): the spectrogram, the known point (rerun under the new bins;
+it is seeded, so the result is the same), `locate`, and then the broadband check.
 
 ## Outcome
 
-Pending.
+So far, from run 4:
+- The tonal check hears 2 of the 11 passes the owner's ear heard, both within 1 km. The rest of the ear's range, 1–3.5
+  km, gets nothing.
+- `locate` refused before searching, because the flight data stopped short of the whole day. That was a defect in its
+  coverage rule, now fixed.
+
+Run 5 adds the broadband check and `locate`'s first search. Whether the box series follows depends on whether
+`locate`'s region holds the site.
 
 ## Files
 
-`tools/experiments/2026-11-04/known_point_site.py`, `tools/data/session_spectrogram.py`, `bench/private.py`; the case
+`tools/experiments/2026-11-04/known_point_site.py`, `tools/experiments/2026-11-04/broadband_site.py`,
+`tools/experiments/2026-11-04/seattle_pilot_launch.sh`, `tools/data/session_spectrogram.py`, `bench/private.py`; the case
 in `bench/cases.json` and its private file. Runs: under `$DOPPLERTRACK_DATA/private/runs/`, named in the results.

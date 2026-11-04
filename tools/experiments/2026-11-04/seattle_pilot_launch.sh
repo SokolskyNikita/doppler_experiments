@@ -41,7 +41,8 @@ done
 PUBLIC=(raw/aux/opensky/doc8643AircraftTypes.csv)
 INPUTS=()
 for p in "${REQUIRED[@]}" "${PUBLIC[@]}"; do INPUTS+=(--input "$p"); done
-# On the box: the spectrogram from the FLACs, the known-point check, then locate on the case; all under private/.
+# On the box: the spectrogram from the FLACs, the known-point check, locate on the case, then the broadband check
+# (last, so its failure can't cost locate's record); all under private/. Runs 3-4 ran the first three only.
 BOX_CMD=$(cat <<EOF2
 set -e
 # AircraftTypes() reads the Doc 8643 table from \$DOPPLERTRACK_CACHE and would otherwise fetch it from OpenSky.
@@ -50,6 +51,7 @@ S=private/derived/$CASE/rec.npz
 uv run python -I tools/data/session_spectrogram.py "\$DOPPLERTRACK_DATA/raw/seattle-home/20261104-ha-pilot-2" "\$DOPPLERTRACK_DATA/\$S"
 uv run python tools/experiments/2026-11-04/known_point_site.py $CASE "\$RUN/known_point"
 uv run python -m bench run --profile locate $CASE --run-dir "\$RUN/locate"
+uv run python tools/experiments/2026-11-04/broadband_site.py $CASE "\$DOPPLERTRACK_DATA/raw/seattle-home/20261104-ha-pilot-2" "\$RUN/known_point" "\$RUN/broadband"
 EOF2
 )
 $RUNS launch seattle-home-pilot --private --size 4xlarge --fallback-on-demand "${INPUTS[@]}" -- "$BOX_CMD"

@@ -125,14 +125,22 @@ def spectrogram_sha256(sp) -> str:
     return array_sha256(sp.t, sp.f, sp.S, sp.valid, start)
 
 
-def cached_detections(sp, produce: Callable[..., T], root: str | Path | None = None, **params) -> T:
-    """produce(sp, **params), cached on the spectrogram's contents, every detect parameter except
-    those in DETECT_IGNORED, and the source of the detector (DETECTOR_MODULES). Meant for
-    tracks.detect_events: cached_detections(sp, detect_events, f_lo=60, f_hi=300, top=10)."""
-    key_params = {k: v for k, v in params.items() if k not in DETECT_IGNORED}
+def detection_parts(sp, produce: Callable, **params) -> dict:
+    """What a detection result depends on: the spectrogram's contents, every detect parameter except those
+    in DETECT_IGNORED, the producer, the detector's source (DETECTOR_MODULES) and the numeric libraries."""
     import scipy
-    parts = {"spectrogram": spectrogram_sha256(sp), "params": key_params,
-             "producer": getattr(produce, "__qualname__", repr(produce)),
-             "source": source_sha256(*DETECTOR_MODULES),
-             "versions": {"numpy": np.__version__, "scipy": scipy.__version__}}
-    return cached("detections", parts, lambda: produce(sp, **params), root=root)
+    return {"spectrogram": spectrogram_sha256(sp), "params": {k: v for k, v in params.items() if k not in DETECT_IGNORED},
+            "producer": getattr(produce, "__qualname__", repr(produce)),
+            "source": source_sha256(*DETECTOR_MODULES),
+            "versions": {"numpy": np.__version__, "scipy": scipy.__version__}}
+
+
+def detection_key(sp, produce: Callable, **params) -> str:
+    """The cache key cached_detections files these detections under, to record beside a result."""
+    return entry_key(detection_parts(sp, produce, **params))
+
+
+def cached_detections(sp, produce: Callable[..., T], root: str | Path | None = None, **params) -> T:
+    """produce(sp, **params), cached on detection_parts. Meant for
+    tracks.detect_events: cached_detections(sp, detect_events, f_lo=60, f_hi=300, top=10)."""
+    return cached("detections", detection_parts(sp, produce, **params), lambda: produce(sp, **params), root=root)

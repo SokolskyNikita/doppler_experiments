@@ -32,6 +32,11 @@ def main(argv=None):
     rc.add_argument("--revision"); rc.add_argument("--profile", choices=sorted(runner.PROFILES), default="saved-fit")
     rc.add_argument("--code-json", required=True, help="the code revision the parent read when the run started")
     rc.add_argument("--overrides-json", default="{}")
+    t1 = sub.add_parser("tier1", help="Tier 1: detect and fits against the blind labels, and the known point")
+    t1.add_argument("--set", action="append", choices=("development", "calibration", "evaluation"),
+                    help="span sets to run (default: development only; calibration is for Phase 4)")
+    t1.add_argument("--run-dir", type=Path, help="an empty folder made by tools/data/new_run.py (default: make one)")
+    t1.add_argument("--workers", type=int, help="processes for detect (default: the performance cores)")
     c = sub.add_parser("compare", help="print the difference between two benchmark runs")
     c.add_argument("a", type=Path); c.add_argument("b", type=Path)
     a = ap.parse_args(argv)
@@ -60,6 +65,9 @@ def main(argv=None):
         code, execute = runner._executor(a.revision, a.profile, print, code=json.loads(a.code_json),
                                          overrides=json.loads(a.overrides_json))
         runner.run_one(a.case, a.run_dir, execute, code)
+    elif a.cmd == "tier1":
+        from . import tier1
+        print(tier1.run_tier1(tuple(a.set or ["development"]), run_dir=a.run_dir, workers=a.workers))
     elif a.cmd == "compare":
         print(runner.compare_runs(a.a, a.b))
 

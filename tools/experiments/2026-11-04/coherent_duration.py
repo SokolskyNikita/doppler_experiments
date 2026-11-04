@@ -367,7 +367,8 @@ def inputs(stage, pl, bands_run=None):
     else:
         paths |= set(SPANS.values()) | {str(next(pass_dir(p).glob("*.kml")).relative_to(DATA)) for p in allp.values()}
         paths |= {str((pass_dir(p) / "audio.wav").relative_to(DATA)) for p in allp.values()}
-        paths |= {f"derived/traces/{p['day']}/livermore_margin12.npz" for p in allp.values()}
+        if stage == "test":           # the gates use the true flight only
+            paths |= {f"derived/traces/{p['day']}/livermore_margin12.npz" for p in allp.values()}
     # run folders go to `runs launch --input-run` (RUN_INPUTS, plus the prep run's bands.json), not --input
     return sorted(x for x in paths if not x.startswith("runs/"))
 

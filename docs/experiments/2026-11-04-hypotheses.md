@@ -160,6 +160,15 @@ background is only a handful of null sigmas.
       records.
     - No committed `runs` launched it.
 
+**B1 and B2 reproduced at today's code** (fleet, 2026-11-04, `18ff8b4`):
+- **Boxes:** `runs/2026-11-04-hypotheses-b1b2-s1of3/` to `-s3of3`, 3 × 8xlarge spot, 80–96 s wall each, $0.06.
+- **Merged:** `runs/2026-11-04-merge-b1b2/`.
+- **Result:** every event's B1, admitting source and admitted-row count is identical to the retune's run at
+  `758d739`.
+  - B1 is not met on any case, and B2 is met.
+  - Only the gate fallback admits a true flight, on degraded event 2 and eagle event 1. Elsewhere only the `ls`
+    hypotheses are left, and they miss.
+
 ## Prepared before the A1/A3 result
 
 Written 2026-11-04, before the fleet run, which is the first A1/A3 run whose ranking will be read.

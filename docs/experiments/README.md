@@ -13,6 +13,7 @@ Oyster Bay and the eagle cam shaped the method, so every result on them is devel
 
 | Record | Question | Outcome |
 |---|---|---|
+| [2026-11-04-bench-seed-cases](2026-11-04-bench-seed-cases.md) | Does the benchmark runner reproduce the saved-fit results, and what do the seed cases give? | Yes: Oyster Bay 1st of 328, 123 m / 43 m, 4.9 %, locations bit-identical; the eagle-cam clip matches the full recording; both moved-box negatives return wrong answers (north 148 km off by 3.2 %, WSW 182 km off by 10.7 %) with margins above the true positives' |
 | [2026-11-03-phase1-prep-regression](2026-11-03-phase1-prep-regression.md) | Do the detector's named records leave `detect`'s output unchanged? | Yes: Oyster Bay's `detect` JSON is byte-identical before and after; 2 passed, 1 expected failure |
 | [2026-11-03-phase0-review-regression](2026-11-03-phase0-review-regression.md) | Do the review fixes preserve CPA geometry while masking unsupported evidence? | 66 offline tests pass; Oyster Bay has 2 passes and 1 expected failure; reception holes preserve CPA proposals and mask curve evidence |
 | [2026-11-03-phase0-regression](2026-11-03-phase0-regression.md) | Do Phase 0's data and trajectory masks preserve the Oyster Bay checks? | 2 passed, 1 expected failure; the detector-fit bias remains Phase 2 work |

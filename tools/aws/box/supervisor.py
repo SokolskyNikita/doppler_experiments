@@ -140,12 +140,28 @@ def uv_sync(repo: Path) -> None:
                    env={**os.environ, **PYTHON_ENV, "UV_CACHE_DIR": str(SCRATCH / "uv-cache")})
 
 
+def input_kind(rel: str, listing: str) -> str:
+    """"file" or "folder" for data-root path rel, from `s5cmd ls s3://<bucket>/data/<rel>`'s output (an object as
+    "<date> <time> <size> <its full key>", a common prefix as "DIR <last part>/"; checked against s5cmd 2.3.0). A
+    path that is both an object and a folder is read as the file. Raises FileNotFoundError when it is neither."""
+    rel = rel.strip("/")
+    name = rel.rsplit("/", 1)[-1]
+    lines = [line.split() for line in listing.splitlines() if line.strip()]
+    if any(len(f) >= 4 and f[0] != "DIR" and f[-1] in (f"data/{rel}", rel, name) for f in lines):
+        return "file"
+    if any(f[:1] == ["DIR"] and f[-1] == f"{name}/" for f in lines):
+        return "folder"
+    raise FileNotFoundError(f"input {rel} is neither a file nor a folder in the bucket's data/: seed it from the Mac "
+                            "(runs seed, or --input-run for a run folder) and relaunch")
+
+
 def pull_inputs(bucket: str, inputs: list[str], data: Path) -> None:
     """Each input is a file or a folder under the data root; folders come over whole."""
     for rel in inputs:
         rel = rel.strip("/")
         dest = data / rel
-        if s3_exists(f"s3://{bucket}/data/{rel}") and not s3_exists(f"s3://{bucket}/data/{rel}/*"):
+        listing = s5("ls", f"s3://{bucket}/data/{rel}", check=False, capture=True).stdout
+        if input_kind(rel, listing) == "file":
             dest.parent.mkdir(parents=True, exist_ok=True)
             s5("cp", f"s3://{bucket}/data/{rel}", str(dest))
         else:

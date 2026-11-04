@@ -311,3 +311,22 @@ def test_seed_refuses_while_a_recorder_session_sits_in_derived_traces(tmp_path, 
     with pytest.raises(pytest.fail.Exception, match="went on"):
         runs.seed(a)
     assert not runs.RECORDER_SESSION.match("2026-11-04") and runs.RECORDER_SESSION.match("20261104-coexist")
+
+
+def test_an_input_is_read_as_a_file_a_folder_or_missing():
+    # s5cmd 2.3.0's own output, from the dev box: an object by its full key, a prefix by its last part
+    file_ls = "2026/11/04 21:05:31             11614  data/derived/swfl/detected_top40_15C.json\n"
+    folder_ls = "                                  DIR  swfl/\n                                  DIR  swfl_clip/\n"
+    both_ls = ("2026/11/04 21:05:31   11614  data/derived/swfl/detected.json\n"
+               "                     DIR  detected.json/\n")
+    assert supervisor.input_kind("derived/swfl/detected_top40_15C.json", file_ls) == "file"
+    assert supervisor.input_kind("derived/swfl", folder_ls) == "folder"
+    assert supervisor.input_kind("derived/swfl/", folder_ls) == "folder"
+    assert supervisor.input_kind("derived/swfl/detected.json", both_ls) == "file"
+    # a sibling with a longer name is not a match, and nothing at all is a clear error
+    with pytest.raises(FileNotFoundError, match="neither a file nor a folder"):
+        supervisor.input_kind("derived/swfl/detected", file_ls)
+    with pytest.raises(FileNotFoundError):       # swfl_clip/ alone doesn't make derived/swf a folder
+        supervisor.input_kind("derived/swf", folder_ls)
+    with pytest.raises(FileNotFoundError, match="seed it"):
+        supervisor.input_kind("derived/missing.npz", "")

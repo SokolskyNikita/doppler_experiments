@@ -196,6 +196,26 @@ The c = 340.3 m/s and authors'-c rows are from the rerun of all three settings (
 - **The fit absorbs none of a c error.** Changing c moves both speed and slant range by exactly the same fraction: d ln v / d ln c and d ln R / d ln c are 1.000 at the median over all 50 crossings (IQR 0.996–1.003 for v and 0.990–1.009 for R, between 340.3 m/s and c_T). The curve fixes v/c, through its asymptotes, and R/v, through how fast it crosses, so a c error of x % passes in full into speed and from there in full into range.
 - **Item 2 outcome: the pipeline should take a measured temperature.** The shipped pipeline has no sound-speed input: `speed_of_sound()` defaults to 15 °C (340.3 m/s), and every caller in `tracks.py`, `search.py`, `score.py`, `pipeline.py`, the CLI and the bench runner uses that default. Where a station temperature exists for the recording's hour, `speed_of_sound(T)` is the input it should take. On these crossings that would have removed a 4 % speed bias, and, since range scales with c, a 4 % range error the fit can't see.
 
+**All 788 crossings** (the fleet rerun: `runs/2026-11-04-merge-alaska/`, merged from `runs/2026-11-04-model-error-alaska-s{1..8}of8`, commit 5df450b).
+- **Setup.** The band is 0.70–1.50 × the authors' best-determined tone, fitted at all three sound speeds. 775 crossings have all three fits.
+- **The 13 others lack a station report within 1 h of the CPA,** so they have no temperature setting. No fit was weak and none raised.
+- **The sample.** Median FR24 slant range 1.46 km and speed 63 m/s; 425 are C185s.
+
+Median against FR24, with 95 % bootstrap intervals over crossings (`intervals.json`):
+
+| Fit | Slant range, median | Slant range, median abs | over 20 % | Speed, median | Speed, median abs |
+|---|---|---|---|---|---|
+| `fit_event`, 340.3 m/s | −1.4 % (−2.3 to +0.2) | 11.9 % (10.5–13.1) | 33 % | +3.4 % (3.0–3.9) | 5.4 % (5.0–5.8) |
+| `fit_event`, authors' c (median 310 m/s) | −10.8 % (−11.9 to −9.0) | 15.3 % (14.1–16.7) | 38 % | −6.3 % | 6.9 % |
+| `fit_event`, station temperature (median 328 m/s) | −5.0 % (−6.3 to −3.9) | 12.1 % (10.9–13.4) | 33 % | −0.4 % (−0.8 to +0.1) | 3.6 % (3.2–4.0) |
+| The authors' own fits | −10.3 % (−11.7 to −9.2) | 14.5 % (13.6–15.5) | 34 % | −6.2 % | 6.7 % |
+
+- **The 50's ordering holds on all 788.** The station temperature takes the speed bias to zero within its interval (−0.4 %), against +3.4 % at 15 °C, as the physics predicts.
+- **But the correct c makes the slant-range bias worse,** from −1.4 % to −5.0 %. That is the same symptom as Oyster Bay's margin under the per-flight path ([case-weather](2026-11-04-case-weather.md)), and it belongs in the same open question. The 15 °C slant range's small bias is again a cancellation of a c too high against a range that comes out short (−5.0 % at the right c). The authors' c is the worst of the three.
+- **The fit still passes a c error through unattenuated.** d ln v / d ln c and d ln R / d ln c are 1.000 at the median.
+- **The spread is wider than on the 50** (12 % against 7 % median abs). This is a narrower band on a larger, more varied sample; the 50 used the full 40–240 Hz. The stage 3 numbers above are the 50 at the wide band, and these are the whole set at the narrow band.
+- **The narrow band no longer costs fits.** 0.70–1.50 × the tone gave no weak fit on any crossing (item 6).
+
 **A failed run, kept and marked: `runs/2026-11-04-model-error-alaska-narrow/`.** It was meant to fit all 789 in a narrow band placed on the authors' best-determined tone (0.85–1.15×; their f0 placed the band and never entered the comparison).
 - **The crash.** 655 crossings raised `ValueError: attempt to get argmax of an empty sequence`. `grid_search` searches f0 over (1.15·f_lo, 0.85·f_hi), which assumes the band holds a whole Doppler span. With f_hi/f_lo = 1.15/0.85 that range collapses to a point: 654 of the failures had no f0 candidate at all. The 134 that "ran" had exactly one, left by floating-point rounding. So `fit_event` needs f_hi/f_lo above about 1.35 or it crashes. This is also the real cause of stage 2's crash on R35, R08 and R51.
 - **The 134 that ran are a biased sample,** fitted with a single f0 candidate. Their c = 340.3 slant-range error is a median 20.3 % over all 134. On the 7 of them that are also in the wide-band 50, it is 45.7 % against the wide band's 18.4 % on the same 7. Read that only as "a single fixed f0 fits badly", not as a band comparison.

@@ -209,6 +209,18 @@ def launch_all(a) -> list[str]:
     return jobs
 
 
+def is_run_path(p: str) -> bool:
+    return p.strip("/") == "runs" or p.strip("/").startswith("runs/")
+
+
+def check_run_input(p: str) -> str:
+    """A run-folder input names one folder (or a file in one), never runs/ itself."""
+    parts = p.strip("/").split("/")
+    if parts[0] != "runs" or len(parts) < 2 or not parts[1]:
+        sys.exit(f"--input-run {p}: give one run folder, runs/<yyyy-mm-dd>-<topic>[/...], not the whole of runs/")
+    return "/".join(parts)
+
+
 def seed_run_inputs(s3, bucket: str, inputs: list[str]) -> None:
     """Inputs under runs/ (small reference files from earlier runs) go up from here when the bucket lacks
     them or they changed; data/ inputs come from the seed."""
@@ -233,6 +245,8 @@ def launch(a) -> str:
         a.topic = a.topic or prior["topic"]
         a.command = a.command or [prior["command"]]
         a.input, a.case = a.input or prior["inputs"], []
+        a.input_run = (getattr(a, "input_run", None) or []) + [i for i in a.input if is_run_path(i)]
+        a.input = [i for i in a.input if not is_run_path(i)]
         a.cache = a.cache or prior["caches"]
         a.jobs = a.jobs or prior.get("jobs")
         a.shard = prior.get("shard")
@@ -250,8 +264,15 @@ def launch(a) -> str:
         cases, paths, kinds = listed_inputs(json.loads(listing.stdout))
         a.case, a.input, a.cache = a.case + cases, a.input + paths, a.cache + kinds
         print(f"inputs from the job: {len(cases)} cases, {len(paths)} paths, caches {kinds}")
+    explicit_runs = [p for p in a.input if is_run_path(p)]
+    if explicit_runs:     # run folders are outputs: one goes up only when named with --input-run
+        sys.exit(f"--input {explicit_runs[0]}: run folders are outputs; name the one a job reads with --input-run")
+    a.input = a.input + [check_run_input(p) for p in getattr(a, "input_run", None) or []]
     inputs = case_inputs(a.case) + [p for p in a.input if p not in case_inputs(a.case)]
     inputs = list(dict.fromkeys(inputs))
+    for p in inputs:
+        if is_run_path(p):
+            check_run_input(p)
     seed_run_inputs(s3, bucket, inputs)
     caches = list(dict.fromkeys(a.cache or (["terrarium"] if a.case else [])))
     with tempfile.TemporaryDirectory() as tmp:
@@ -836,8 +857,9 @@ def main(argv=None) -> None:
     la.add_argument("--shards", type=int, default=1, help="launch n boxes, each with DOPPLERTRACK_SHARD=k "
                     "(1..n) and DOPPLERTRACK_SHARDS=n, as jobs <topic>-s<k>of<n>")
     la.add_argument("--case", action="append", default=[], help="a bench case whose inputs the box needs")
-    la.add_argument("--input", action="append", default=[], help="a file or folder under the data root; "
-                    "runs/<folder> paths are uploaded from here first")
+    la.add_argument("--input", action="append", default=[], help="a file or folder under the data root, not runs/")
+    la.add_argument("--input-run", action="append", default=[], metavar="runs/FOLDER", help="a run folder the job "
+                    "reads (or a file in one), uploaded from here first; never runs/ itself")
     la.add_argument("--cache", action="append", default=[], help=f"a cache kind to bring: {', '.join(CACHE_KINDS)}")
     la.add_argument("--inputs-from", metavar="COMMAND", help="a command (run here, in the checkout) that prints "
                     "the job's inputs as JSON: `tools/data/shards.py`'s --inputs or `bench inputs`")
@@ -869,7 +891,8 @@ def main(argv=None) -> None:
     fl.add_argument("--watch", type=float, metavar="MIN", help="with --util: a snapshot every MIN minutes into a run folder")
     sub.add_parser("seed-tools", help="put uv and ffmpeg for each architecture in the bucket")
     fs = sub.add_parser("fetch-sources", help="fetch the public raw files the bucket lacks on a box")
-    fs.add_argument("--size", default="4xlarge", help="instance size (default: 4xlarge; the job is network-bound)")
+    fs.add_argument("--size", default="large", help="instance size (default: large, 2 vCPU: the job only waits on "
+                    "the network, at 0 %% CPU on a 4xlarge)")
     fs.add_argument("--dry-run", action="store_true", help="only print the plan")
     sd = sub.add_parser("seed", help="upload what has no public source, and the caches")
     sd.add_argument("--dry-run", action="store_true")

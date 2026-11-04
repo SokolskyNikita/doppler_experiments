@@ -96,14 +96,30 @@ then copy `dev_references.json` to every dev box.
 
 Inputs:
 - `derived/livermore/`, the unpacked corpus.
-- `runs/2026-11-04-livermore-audit/`: its `passes.csv` and `sites.json`. `runs launch` sends a `runs/` input
-  up from this machine.
+- `runs/2026-11-04-livermore-audit/`: its `passes.csv` and `sites.json`. Pass it with `--input-run runs/2026-11-04-livermore-audit`:
+  `runs launch` sends a named run folder up from this machine.
 - `raw/audio/livermore/zenodo-23424278/final_results_40_cases.csv`.
 - Cache: `--cache terrarium`, for the development events' terrain.
 - `raw/audio/youtube/oyster_bay.webm` and `raw/audio/youtube/swfl_2024-12-28.webm`.
 - `derived/oyster_bay/traces_ny.npz` and `derived/swfl/traces_swfl.npz`.
 
 Split: by pass, for example 15 and 14 passes on two boxes, with the dev events on either of them.
+
+## 4. Item 3 round 3, the likelihood tracker (`ll_box.sh`: `ll_roc.py`, then `ll_livermore.py`)
+
+decision: whether item 3's tracker becomes the likelihood tracker (`lltrack`), or stays `ridge()` with `hmmtrack`
+retired.
+
+| Step | Units | Command |
+|---|---|---|
+| constants | one file, from the development events | `ll_roc.py "$RUN" constants` |
+| roc | one per (a, β, noise window or weak-pass case): 4 × 11 × 18 | `ll_roc.py "$RUN" roc [A ...]` |
+| pick | — | `ll_roc.py "$RUN" pick` |
+| livermore, dev | one per pass (40) and per event (6) | `ll_livermore.py "$RUN" livermore\|dev [PASS or EVENT ...]` |
+| merge | — | `ll_livermore.py "$RUN" merge` |
+
+Inputs: the same as job 3. The box runs the steps in order, so the knobs are picked on synthetic data before any
+Livermore pass is read.
 
 ## SDE-B
 

@@ -42,7 +42,9 @@ as /scratch, installs s5cmd (pinned by hash) and uv and ffmpeg from the bucket, 
 [supervisor](box/supervisor.py), which:
 - rebuilds the branch and runs `uv sync --frozen`;
 - pulls the inputs (`--case` adds a bench case's audio, spectrogram, traces and derived files; `--input`
-  any file or folder under the data root) and the caches (`--cache`: detections, window_fits, terrarium,
+  any file or folder under the data root except runs/; `--input-run runs/<folder>` an earlier run's folder,
+  uploaded from here first: run folders are outputs, so each one a job reads is named, and runs/ as a whole never
+  goes up) and the caches (`--cache`: detections, window_fits, terrarium,
   plus every cache delta earlier jobs sent back). CPA tables are rebuilt on the box (under a minute);
 - writes `runs/<id>/run.json`: new_run.py's fields plus the instance type, AZ, spot or on-demand, AMI,
   inputs and preparation times;

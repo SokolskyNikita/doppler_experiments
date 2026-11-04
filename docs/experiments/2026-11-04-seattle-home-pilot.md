@@ -2,7 +2,7 @@
 
 <!-- index
 question: What does the owner's indoor phone recorder hear of the propeller traffic around it, and what does locate make of a 2.3 h session?
-outcome: Indoors the stored 40-450 Hz carries passes within about 1 km, as lines; the gap is placement, detection or the stored band; locate finds the site on-node, 482 m off it off-node (4 km fails the series criterion)
+outcome: Indoors the phone carries passes within about 1 km, as lines; locate's top is 480 m off the site at 200 m spacing in boxes to 12 km (fails the 300 m criterion), 294 m at 50 m
 -->
 
 ## Question
@@ -205,8 +205,10 @@ times. If they are still audible there, the content is in 40–450 Hz and the ga
 450 Hz carries them.
 
 **Next session's levers, in order:**
-1. **The stored band.** The recorder project is asked to store 4 kHz, flat to about 1.8 kHz; the phone already
-   samples 48 kHz.
+1. **The stored band.** This is the owner's privacy measure for a microphone in the home, not a pipeline setting, so
+   the test's session exists only if the owner chooses a wider band in the recorder project. Three options were put to
+   them: 2 kHz (flat to about 900 Hz, which covers Livermore's harmonics up to 868 Hz), 4 kHz (flat to about 1.8 kHz),
+   and the full band. The owner chose the full band for the next sessions.
 2. **Placement:** a window or outdoor placement, to lower the floor.
 3. **Stereo:** stereo capture, for the coherence cue between the two mics, which household self-noise and single-mic
    transients can't fake.
@@ -214,11 +216,26 @@ times. If they are still audible there, the content is in 40–450 Hz and the ga
 
 **Pre-registered test of the band, on the first session stored at 4 kHz:**
 - The known-point check (tonal, its sweep widened to the band's harmonics) and the broadband check both run twice on
-  the same passes and the same ear reference: once on the stored 40–450 Hz, once on 40–1800 Hz.
+  the same passes and the same ear reference: once on the stored 40–450 Hz, once on 40–1800 Hz. A session stored
+  narrower than 1.8 kHz uses its own passband edge, stated with the result.
 - **The band is the lever if** the wide band marks at least half of the ear-audible propeller passes beyond 1 km, while
   40–450 Hz marks no more of them than its null share.
 - **The band is not the lever if** the wide band marks no more of them than its null share.
 - Anything between is reported as it falls.
+
+**Ready before the session, so the test needs no new code** (2026-11-05):
+- **Wide spectrogram:** `tools/data/session_spectrogram.py --fmax HZ` builds it with the package's STFT. It keeps the
+  2.048 s Hann window, the 0.25 s hop and the 0.49 Hz bins, decodes at 4 kHz up to a 1.8 kHz edge (in 1 kHz steps above
+  it), and whitens with the same 600 s running median.
+- **Both checks take `--fmax` and `--spectrogram`:**
+  - The tonal check scores floor(fmax / 300) harmonics, every one of which stays in band for any 60–300 Hz tone: 6 at
+    1.8 kHz, 1 at 450 Hz.
+  - The broadband check marks on 40 Hz to fmax and adds 450–900 and 900–fmax to its sub-bands.
+- **Case builder:** `tools/data/home_session_case.py SESSION_ID --traces PATH` writes the session's private case (a
+  `spectrogram_wide` at the band's edge when the session stores more than 450 Hz) and its public entry. The box is the
+  series' off-node 4 km square.
+- **Launch:** the launch script's `--session ID bandtest` runs both checks on both bands. Like every launch, it ships
+  only the files the owner names.
 
 ### Locate
 
@@ -362,8 +379,39 @@ again with the top within 300 m of the site, the failure is sampling. If not, it
 The method's fix would choose among pairs after each pair's top is refined, not on the coarse grid. That is
 recorded here, not built.
 
-**8 and 12 km:** run as the owner asked, at 200 m. They are reported, not judged: they fall outside the pre-registered
-rule, and they carry the same sampling limit.
+**Run 12: the off-node 4 km box at 50 m spacing.** (`private/runs/2026-11-04-seattle-home-pilot-12/
+locate-silence-off-box4km-sp50m/`, 2,003,797 CPA records, 334 triples scored.) The criterion was written for the case's
+200 m grid, so this is the diagnosis, not the judged series.
+
+- **Top candidate:** 294 m from the site, score 6.46, inside the 300 m line by 6 m.
+- **Clock:** the residual shift is +0.5 s, no longer at the sweep's edge.
+- **Refine:** 241 m from the site.
+- **Margin:** the best node beyond 300 m is 387 m from the site at 5.96, 8 % below the top and part of the same mode.
+  The best node within 150 m of the site scores 4.75.
+- **Pair:** the winner is still the 1.8 and 0.8 km pistons (events 4 and 3), not run 7's pair.
+
+So the 200 m grid mismeasured this pair's peak by about 200 m and forced the −6 s slip. At 50 m the pair's own mode is
+about 250–300 m from the site. The sharper on-site peak of run 7's pair doesn't win at 50 m either, so run 7's 0 m
+was mostly the node coinciding with the site. The working error of this session's best pair is a few hundred metres.
+
+**8 and 12 km (runs 10 and 11), reported, not judged.** They ran at 200 m, as the owner asked, outside the
+pre-registered rule, with the same off-node placement:
+
+| Box | Run | CPA records | Top candidate from the site | Score | Residual shift | Refined from the site |
+|---|---|---|---|---|---|---|
+| 4 km | 9 | 134,641 | 482 m | 5.13 | −6.0 s | 294 m |
+| 8 km | 10 | 499,475 | 480 m | 5.03 | −6.0 s | 238 m |
+| 12 km | 11 | 1,091,510 | 477 m | 4.64 | −6.0 s | 273 m |
+
+- **Same answer at every size:** the same event pair (the 1.8 and 0.8 km pistons) wins at the same node.
+- **No better candidate anywhere:** in each box that node beat the best of all ten event-pair searches, so no
+  candidate anywhere in a box of up to 12 km (about 3,600 nodes) scored higher.
+- **Score drift:** the top score falls with the box, because the comparable z's null is drawn from a CPA table that
+  grows with the grid. Scores at different box sizes are not comparable.
+- **What stops a pass:** at 200 m, the grid's sampling of the winning pair's peak (run 12: at 50 m the same pair's top
+  is 294 m from the site). No wrong location wins across nine times the area.
+- **20 km:** the next size, once adsb.lol's 2026-11-04 archive is out. It needs a `fetch-day --keep-jets` cut of a wide
+  public Puget Sound box and a private case pointing at it.
 
 ### The box series: criterion, written before any run
 
@@ -400,6 +448,15 @@ the same case and the same flight data, at boxes of 4, 8, 12 and then 20 km.
 
 ## Outcome
 
+**Locate, from automatic events with the silence filter off:**
+- A 4 km search at 50 m spacing puts the owner's home within 300 m: the top candidate is 294 m away and the refined
+  point 241 m. The winning pair is the 1.8 and 0.8 km piston passes (events 4 and 3).
+- Boxes of 8 and 12 km at 200 m spacing keep the same winner within 500 m of the home, against every other location in
+  the box.
+- The 300 m criterion was written with the case's 200 m grid. At 200 m the 4 km size misses (482 m). At 50 m it passes
+  by 6 m, one grid cell, and is stated with that caveat.
+- No verdict before Phase 4's null of the maximum.
+
 So far, from runs 4, 5 and 7:
 - The tonal check hears 2 of the 11 passes the owner's ear heard, both within 1 km. The rest of the ear's range, 1–3.5
   km, gets nothing.
@@ -422,8 +479,13 @@ So far, from runs 4, 5 and 7:
 
 - Run 9, the box series' first size: 4 km with the site off the grid fails the criterion. Its top is 482 m away, on
   a different event pair with a broader surface. Run 7's sharp pair can't score above it on a 200 m grid that misses
-  its peak. So the judged series stops at 4 km. Run 10 (50 m spacing) tests whether sampling is the cause, and 8 and
-  12 km are reported, not judged.
+  its peak. So the judged series stops at 4 km.
+- Runs 10 and 11 (8 and 12 km, reported, not judged): the same node, 480 and 477 m from the site, wins every box.
+  No location in a 12 km box scores higher.
+- Run 12 (4 km at 50 m spacing): the same pair's top is 294 m from the site, inside the 300 m line, with the clock's
+  residual shift back to +0.5 s. The 200 m grid had displaced it by about 200 m.
+  - This session's best pair places the site to a few hundred metres, and nothing in a 12 km box beats it.
+  - 20 km waits for the archive.
 
 ## Files
 

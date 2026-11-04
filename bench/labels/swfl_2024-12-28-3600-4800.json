@@ -1,0 +1,272 @@
+{
+ "format": 1,
+ "recording": {
+  "id": "swfl_2024-12-28",
+  "source": "raw/audio/youtube/swfl_2024-12-28.webm",
+  "sha256": "58dd4c1259598c85579d1aba1311d18651f70501c2df822104cacb54b4a0ddc0",
+  "t0_utc": null,
+  "case": null
+ },
+ "span": [
+  3600,
+  4800
+ ],
+ "sheets": "runs/2026-11-04-blind-labels/swfl",
+ "windows": [
+  {
+   "id": "sw-e01",
+   "class": "overlapping",
+   "start": 3600,
+   "end": 3775,
+   "lines": [
+    [
+     165,
+     105
+    ],
+    [
+     205,
+     165
+    ],
+    [
+     270,
+     240
+    ]
+   ],
+   "harmonics": 2,
+   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "blind": true,
+   "date": "2026-11-04",
+   "notes": "a clear fall 165 to 105 Hz steepest near 3685 s, and a slower one 205 to 165 Hz over 3660-3770 s"
+  },
+  {
+   "id": "sw-a01",
+   "class": "absent",
+   "start": 3775,
+   "end": 3785,
+   "lines": [],
+   "harmonics": 0,
+   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "blind": true,
+   "date": "2026-11-04",
+   "notes": ""
+  },
+  {
+   "id": "sw-e02",
+   "class": "uncertain",
+   "start": 3785,
+   "end": 3812,
+   "lines": [
+    [
+     160,
+     110
+    ]
+   ],
+   "harmonics": 1,
+   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "blind": true,
+   "date": "2026-11-04",
+   "notes": "broadband burst at 3775-3785 s just before"
+  },
+  {
+   "id": "sw-a02",
+   "class": "absent",
+   "start": 3812,
+   "end": 3815,
+   "lines": [],
+   "harmonics": 0,
+   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "blind": true,
+   "date": "2026-11-04",
+   "notes": ""
+  },
+  {
+   "id": "sw-e03",
+   "class": "uncertain",
+   "start": 3815,
+   "end": 3845,
+   "lines": [
+    [
+     210,
+     170
+    ]
+   ],
+   "harmonics": 1,
+   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "blind": true,
+   "date": "2026-11-04",
+   "notes": ""
+  },
+  {
+   "id": "sw-e04",
+   "class": "masked",
+   "start": 3845,
+   "end": 3900,
+   "lines": [],
+   "harmonics": 0,
+   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "blind": true,
+   "date": "2026-11-04",
+   "notes": "broadband, wind or birds"
+  },
+  {
+   "id": "sw-a03",
+   "class": "absent",
+   "start": 3900,
+   "end": 3960,
+   "lines": [],
+   "harmonics": 0,
+   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "blind": true,
+   "date": "2026-11-04",
+   "notes": ""
+  },
+  {
+   "id": "sw-e05",
+   "class": "masked",
+   "start": 3960,
+   "end": 4110,
+   "lines": [],
+   "harmonics": 0,
+   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "blind": true,
+   "date": "2026-11-04",
+   "notes": "repeated broadband bursts; bird calls at 4030-4045 s"
+  },
+  {
+   "id": "sw-a04",
+   "class": "absent",
+   "start": 4110,
+   "end": 4200,
+   "lines": [],
+   "harmonics": 0,
+   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "blind": true,
+   "date": "2026-11-04",
+   "notes": ""
+  },
+  {
+   "id": "sw-e06",
+   "class": "masked",
+   "start": 4200,
+   "end": 4440,
+   "lines": [],
+   "harmonics": 0,
+   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "blind": true,
+   "date": "2026-11-04",
+   "notes": "broadband bursts and bird calls throughout"
+  },
+  {
+   "id": "sw-a05",
+   "class": "absent",
+   "start": 4440,
+   "end": 4520,
+   "lines": [],
+   "harmonics": 0,
+   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "blind": true,
+   "date": "2026-11-04",
+   "notes": ""
+  },
+  {
+   "id": "sw-e07",
+   "class": "clear",
+   "start": 4520,
+   "end": 4582,
+   "lines": [
+    [
+     300,
+     255
+    ],
+    [
+     185,
+     160
+    ],
+    [
+     140,
+     118
+    ]
+   ],
+   "harmonics": 2,
+   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "blind": true,
+   "date": "2026-11-04",
+   "notes": "falling lines at three heights"
+  },
+  {
+   "id": "sw-a06",
+   "class": "absent",
+   "start": 4582,
+   "end": 4620,
+   "lines": [],
+   "harmonics": 0,
+   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "blind": true,
+   "date": "2026-11-04",
+   "notes": ""
+  },
+  {
+   "id": "sw-e08",
+   "class": "uncertain",
+   "start": 4620,
+   "end": 4668,
+   "lines": [
+    [
+     110,
+     100
+    ],
+    [
+     190,
+     175
+    ]
+   ],
+   "harmonics": 2,
+   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "blind": true,
+   "date": "2026-11-04",
+   "notes": ""
+  },
+  {
+   "id": "sw-a07",
+   "class": "absent",
+   "start": 4668,
+   "end": 4740,
+   "lines": [],
+   "harmonics": 0,
+   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "blind": true,
+   "date": "2026-11-04",
+   "notes": ""
+  },
+  {
+   "id": "sw-e09",
+   "class": "uncertain",
+   "start": 4740,
+   "end": 4785,
+   "lines": [
+    [
+     150,
+     130
+    ]
+   ],
+   "harmonics": 1,
+   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "blind": true,
+   "date": "2026-11-04",
+   "notes": "broadband 4685-4720 s and 4785-4800 s"
+  },
+  {
+   "id": "sw-a08",
+   "class": "absent",
+   "start": 4785,
+   "end": 4800,
+   "lines": [],
+   "harmonics": 0,
+   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "blind": true,
+   "date": "2026-11-04",
+   "notes": ""
+  }
+ ],
+ "associations": []
+}

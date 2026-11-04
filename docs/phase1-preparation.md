@@ -28,38 +28,46 @@ Today's detector merges coarse candidates from all windows using a descending tu
 fields are compared in order by score, fundamental frequency, speed, slant range and emission
 CPA time. The first candidate kept can suppress a nearby one. Sorting a new record by score
 alone could therefore consistently keep a different candidate even though both runs report the
-same winning score. Make the existing sort key explicit at this merge.
+same winning score. Move this merge out of `detect_events` into a small function that takes the
+coarse candidates, the minimum separation and the number to keep, and make the existing sort key
+explicit there.
 
-Add one focused regression test with the record change. Supply two candidates from different
-windows with equal scores and emission times closer than the minimum separation. Present the
-120 Hz proposal first and the 121 Hz proposal second. Assert that the 121 Hz proposal survives.
-This exercises the user-visible consequence of the sort order while allowing the within-window
-and final refined-score sorts to keep their own rules. The existing tests already cover silence
-and applying the score threshold after refinement. [Detector tests](../tests/test_phase0_cli.py)
+Add one focused regression test with the record change, calling the merge function directly.
+Supply two candidates, as if from different windows, with equal scores and emission times closer
+than the minimum separation. Present the 120 Hz proposal first and the 121 Hz proposal second.
+Assert that the 121 Hz proposal survives. This exercises the user-visible consequence of the sort
+order while allowing the within-window and final refined-score sorts to keep their own rules. The
+existing tests already cover silence and applying the score threshold after refinement.
+[Detector tests](../tests/test_phase0_cli.py)
 
-Exercise the new records through the real process pool on a small input that produces a candidate.
-Compare the result with the same input using one worker. This checks that the request reaches
-the worker and that its result makes the return trip. The tie test above independently specifies
-which candidate the merge must keep.
+Exercise the new records through the real process pool on a small synthetic input that produces a
+candidate. Run `detect_events` with `workers=2` and with `workers=1`, and require the two event
+lists to be equal. Two workers are enough to cross the process boundary; the default starts one
+process per core and spends the Tier 0 budget on startup. This checks that the request reaches
+the worker and that its result makes the return trip, and it is the first form of Phase 1's
+check that `jobs=1` and `jobs=10` give the same results byte for byte. The tie test above
+independently specifies which candidate the merge must keep.
 
 ## 2. Give the next agent one check command and an edit map
 
 Add `tools/check.sh` so a provisioned checkout can run the following checks offline with one
-command. A failure in any step should cause the command to fail.
+command. A failure in any step should cause the command to fail. Add ruff and mypy to the `dev`
+dependency group, so `uv sync` provides everything the command runs.
 
 | Check | What it establishes |
 |---|---|
-| Ruff and scoped mypy | Ruff catches stale imports left by the worker edit. Mypy checks that the producer and consumer agree on the record fields and their types. |
+| Ruff and scoped mypy | Ruff, limited to its pyflakes rules (`--select F`) on `src/` and `tests/`, catches stale imports and unused variables left by the worker edit. Fix what it reports today in the same change. Mypy runs on `tracks.py` only, following imports silently, so it checks that the producer and consumer agree on the record fields and their types without reporting the rest of the package, which has few annotations. |
 | Ordinary offline pytest suite | The detector regression and existing cache, coverage and search tests pass together. Exclude opt-in recordings even when a developer has exported their data path. |
 | [Installed-wheel smoke check](../tests/install_smoke.py) | Outside the checkout, the installed command can invoke ffmpeg, turn a local WAV into a spectrogram and run detection. This exercises the package that a caller actually installs. |
 
 Time the command on this Mac without competing jobs, with dependencies already available locally.
 Report the pytest time against the one-minute Tier 0 test target and give the total command time
-separately. Document how to run the detector test or the existing cache tests on their own so an
-agent can check a single edit before running the full suite.
+separately. In the Tests section of [AGENTS.md](../AGENTS.md), beside `tools/check.sh`, document
+how to run the detector test or the existing cache tests on their own so an agent can check a
+single edit before running the full suite.
 
-Write a short `docs/architecture.md` and link it from [AGENTS.md](../AGENTS.md). Organize it around
-the two edits a Phase 1 agent is about to make.
+Write a short edit map, `docs/architecture.md`, and link it from AGENTS.md. Add it to AGENTS.md's
+fork-only files. Organize it around the two edits a Phase 1 agent is about to make.
 
 - **Changing detector scheduling.** Trace a request from `detect_events` into `_scan_window` and a
   candidate back through merging and refinement. Point to the tie test and the process-pool check.

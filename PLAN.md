@@ -214,10 +214,10 @@ Each phase below gives its goal, the approach we expect to take given what we kn
 
 Give the detector worker named inputs and outputs. Test which candidate survives a score tie when
 overlapping windows propose nearby events, and exercise the records through the process pool.
-The [preparation spec](docs/rearchitecture-requirements.md) describes the worker change and checks.
+The [preparation spec](docs/phase1-preparation.md) describes the worker change and checks.
 
-**Done when** the worker checks pass as part of the offline command and the edit map points to
-the detector, CPA computation and cache tests. Phase 1 starts with parallelism.
+**Done when** the worker checks pass as part of the offline command and the edit map
+(`docs/architecture.md`) points to the detector, CPA computation and cache tests. Phase 1 starts with parallelism.
 
 #### Phase 1: minimal benchmark (M)
 

@@ -48,7 +48,7 @@ Doppler curves of propeller aircraft. `README.md` explains the method; `PLAN.md`
 - `main` mirrors upstream; never commit to it. `dev` is the fork's line, and all work branches off `dev`.
   Merge upstream into `dev`; never rebase or force-push `dev`.
 - Fork-only files: `PLAN.md`, `AGENTS.md`, `CLAUDE.md`, `.claude/`, `tools/`, `bench/`, `docs/reference/`,
-  `docs/experiments/`. They may share a commit with upstream code; drop them when sending work upstream.
+  `docs/experiments/`, `docs/phase1-preparation.md`. They may share a commit with upstream code; drop them when sending work upstream.
 - To send work upstream, branch `up/<topic>` from `upstream/main`, cherry-pick the topic's upstream commits
   by SHA, compare the series with `git range-diff`, and re-run the tests there. Don't use
   `git rebase --onto upstream/main dev <topic>`: it drops every commit `dev` already contains.

@@ -12,10 +12,19 @@ from dopplertrack.result import dumps  # noqa: E402
 from test_result import example_record  # noqa: E402
 
 
+SEED = {"oyster-bay", "eagle-cam-clip-18000s", "oyster-bay-moved-wsw150", "oyster-bay-hp150-aac32k"}
+
+
 def test_committed_manifest_is_valid():
-    doc = cases.load_cases()
-    assert {c["set"] for c in doc["cases"]} == {"development"}
-    assert len({c["id"] for c in doc["cases"]}) == 4
+    doc = cases.load_cases()          # validates every case and refuses duplicate versions
+    assert {c["set"] for c in doc["cases"]} <= set(cases.SETS)
+    blocked = [c for c in doc["cases"] if not cases.is_runnable(c)]
+    assert all(c["runnable"]["blocked"].strip() for c in blocked)
+    runnable = {c["id"] for c in doc["cases"] if cases.is_runnable(c)}
+    assert SEED <= runnable
+    # only development cases run before Phase 4; calibration and evaluation cases wait, with a reason
+    assert all(c["set"] == "development" for c in doc["cases"] if cases.is_runnable(c))
+    assert {c["set"] for c in blocked} >= {"calibration", "evaluation"}
 
 
 def _case():

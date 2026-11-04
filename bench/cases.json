@@ -882,9 +882,9 @@
    "group": "eclipse-esid375",
    "set": "evaluation",
    "expected_outcome": "located",
-   "description": "Eclipse Soundscapes ESID 375: two continuous 12.4 h WAVs from 01:39:34 UTC on 2024-04-07, quiet airspace (6 prop passes within 12 km)",
+   "description": "Eclipse Soundscapes ESID 375: two continuous 12.4 h WAVs with a 2 s hole between them, from 01:39:34 UTC on 2024-04-07, quiet airspace (6 prop passes within 12 km) (gaps: docs/experiments/2026-11-03-gap-aware-spectrogram.md)",
    "runnable": {
-    "blocked": "runs past UTC midnight into 2024-04-08, whose flight data is not fetched yet; evaluation cases run only at milestones (PLAN 5.4 tier E)"
+    "blocked": "runs past UTC midnight into 2024-04-08: that day's flight data is on disk, but the runner loads one day's traces per case and cannot join two yet; evaluation cases run only at milestones (PLAN 5.4 tier E)"
    },
    "source": {
     "identifiers": {
@@ -928,7 +928,14 @@
      }
     ],
     "traces": "derived/traces/2024-04-07/esid375_margin12.npz",
-    "note": "2024-04-08 is also needed"
+    "extraction_box": [
+     40.225,
+     41.342,
+     -85.038,
+     -82.968
+    ],
+    "extraction_note": "2024-04-08 cut: coverage_bbox measured in its metadata; the 2024-04-07 cut (esid<n>_margin12, pre-Phase 0) has no metadata and was cut to the same box (envelope recovered by SDE-D)",
+    "traces_next_day": "derived/traces/2024-04-08/esid375_margin12.npz"
    },
    "labels": {
     "reference": {
@@ -940,7 +947,16 @@
     "checked_by": "not yet labelled; site coordinates as published",
     "blind": true
    },
-   "built_with": "4088419"
+   "built_with": "4088419",
+   "search": {
+    "bbox": [
+     40.335,
+     41.232,
+     -84.893,
+     -83.113
+    ],
+    "note": "padded_bbox(bbox, 12 km) lies inside the 2024-04-08 cut's measured coverage_bbox"
+   }
   },
   {
    "id": "eclipse-esid710",
@@ -948,9 +964,9 @@
    "group": "eclipse-esid710",
    "set": "evaluation",
    "expected_outcome": "located",
-   "description": "Eclipse Soundscapes ESID 710: 1,437 files of 55 s, one per minute, from 00:00:06 UTC on 2024-04-07, moderate traffic near Peoria (19 prop passes within 12 km)",
+   "description": "Eclipse Soundscapes ESID 710: 1,437 one-minute files that abut except at two missing-file holes, from 00:00:06 UTC on 2024-04-07, moderate traffic near Peoria (19 prop passes within 12 km) (gaps: docs/experiments/2026-11-03-gap-aware-spectrogram.md)",
    "runnable": {
-    "blocked": "records 55 s of every 60 s: needs the gap-aware spectrogram (PLAN Phase 1 item 8); evaluation cases run only at milestones (PLAN 5.4 tier E)"
+    "blocked": "has missing-file holes of about 2.5 min (two per day) and needs the gap-aware spectrogram, on dev since 7a54955; the case entry still has to point its audio at it; evaluation cases run only at milestones (PLAN 5.4 tier E)"
    },
    "source": {
     "identifiers": {
@@ -994,7 +1010,13 @@
      }
     ],
     "traces": "derived/traces/2024-04-07/esid710_margin12.npz",
-    "note": ""
+    "extraction_box": [
+     40.136,
+     41.253,
+     -90.624,
+     -88.557
+    ],
+    "extraction_note": "2024-04-08 cut: coverage_bbox measured in its metadata; the 2024-04-07 cut (esid<n>_margin12, pre-Phase 0) has no metadata and was cut to the same box (envelope recovered by SDE-D)"
    },
    "labels": {
     "reference": {
@@ -1006,7 +1028,16 @@
     "checked_by": "not yet labelled; site coordinates as published",
     "blind": true
    },
-   "built_with": "4088419"
+   "built_with": "4088419",
+   "search": {
+    "bbox": [
+     40.246,
+     41.143,
+     -90.479,
+     -88.702
+    ],
+    "note": "padded_bbox(bbox, 12 km) lies inside the 2024-04-08 cut's measured coverage_bbox"
+   }
   },
   {
    "id": "eclipse-esid740",
@@ -1014,9 +1045,9 @@
    "group": "eclipse-esid740",
    "set": "calibration",
    "expected_outcome": "located",
-   "description": "Eclipse Soundscapes ESID 740: 1,437 files of 55 s, one per minute, from 00:00:46 UTC on 2024-04-07, quiet airspace (7 prop passes within 12 km)",
+   "description": "Eclipse Soundscapes ESID 740: 1,437 one-minute files that abut except at two missing-file holes, from 00:00:46 UTC on 2024-04-07, quiet airspace (7 prop passes within 12 km) (gaps: docs/experiments/2026-11-03-gap-aware-spectrogram.md)",
    "runnable": {
-    "blocked": "records 55 s of every 60 s: needs the gap-aware spectrogram (PLAN Phase 1 item 8); calibration cases are not run before Phase 4's thresholds exist"
+    "blocked": "has missing-file holes of about 2.5 min (two per day) and needs the gap-aware spectrogram, on dev since 7a54955; the case entry still has to point its audio at it; calibration cases are not run before Phase 4's thresholds exist"
    },
    "source": {
     "identifiers": {
@@ -1060,7 +1091,13 @@
      }
     ],
     "traces": "derived/traces/2024-04-07/esid740_margin12.npz",
-    "note": ""
+    "extraction_box": [
+     37.195,
+     38.312,
+     -90.059,
+     -88.076
+    ],
+    "extraction_note": "2024-04-08 cut: coverage_bbox measured in its metadata; the 2024-04-07 cut (esid<n>_margin12, pre-Phase 0) has no metadata and was cut to the same box (envelope recovered by SDE-D)"
    },
    "labels": {
     "reference": {
@@ -1072,7 +1109,16 @@
     "checked_by": "not yet labelled; site coordinates as published",
     "blind": true
    },
-   "built_with": "4088419"
+   "built_with": "4088419",
+   "search": {
+    "bbox": [
+     37.304,
+     38.203,
+     -89.915,
+     -88.22
+    ],
+    "note": "padded_bbox(bbox, 12 km) lies inside the 2024-04-08 cut's measured coverage_bbox"
+   }
   },
   {
    "id": "eclipse-esid937",
@@ -1080,9 +1126,9 @@
    "group": "eclipse-esid937",
    "set": "calibration",
    "expected_outcome": "not_located",
-   "description": "Eclipse Soundscapes ESID 937: two continuous 12.4 h WAVs from 05:40:21 UTC on 2024-04-07, no prop pass within 20 km all day: must abstain",
+   "description": "Eclipse Soundscapes ESID 937: two continuous 12.4 h WAVs with a 2 s hole between them, from 05:40:21 UTC on 2024-04-07, no prop pass within 20 km all day: must abstain (gaps: docs/experiments/2026-11-03-gap-aware-spectrogram.md)",
    "runnable": {
-    "blocked": "runs past UTC midnight into 2024-04-08, whose flight data is not fetched yet; calibration cases are not run before Phase 4's thresholds exist"
+    "blocked": "runs past UTC midnight into 2024-04-08: that day's flight data is on disk, but the runner loads one day's traces per case and cannot join two yet; calibration cases are not run before Phase 4's thresholds exist"
    },
    "source": {
     "identifiers": {
@@ -1126,7 +1172,14 @@
      }
     ],
     "traces": "derived/traces/2024-04-07/esid937_margin12.npz",
-    "note": "2024-04-08 is also needed"
+    "extraction_box": [
+     36.413,
+     37.53,
+     -91.188,
+     -89.226
+    ],
+    "extraction_note": "2024-04-08 cut: coverage_bbox measured in its metadata; the 2024-04-07 cut (esid<n>_margin12, pre-Phase 0) has no metadata and was cut to the same box (envelope recovered by SDE-D)",
+    "traces_next_day": "derived/traces/2024-04-08/esid937_margin12.npz"
    },
    "labels": {
     "reference": {
@@ -1138,7 +1191,16 @@
     "checked_by": "not yet labelled; site coordinates as published",
     "blind": true
    },
-   "built_with": "4088419"
+   "built_with": "4088419",
+   "search": {
+    "bbox": [
+     36.522,
+     37.421,
+     -91.044,
+     -89.37
+    ],
+    "note": "padded_bbox(bbox, 12 km) lies inside the 2024-04-08 cut's measured coverage_bbox"
+   }
   },
   {
    "id": "xenocanto-xc979185",

@@ -78,6 +78,13 @@ vCPUs even when its job runs 16 workers, so only four fit in a region. Size the 
 deeper: more small boxes start sooner, fit the quota's remainders in every region, and lose less to one
 interruption. Keep 16xlarge for a single process that really uses 64 workers.
 
+**Is the box the right size?** `runs fleet --util` lists every running box's CPU over the last 5 and 15 minutes
+and the vCPU-hours it has left idle, and marks a box under 60 % after its first 5 minutes; `--history` covers
+every job today over its whole run, and `--watch 10` appends a snapshot every 10 minutes to a new run folder. It
+reads EC2's own CPUUtilization metric with GetMetricStatistics, which counts against CloudWatch's free 1M API
+requests a month: nothing to pay at a few dozen boxes every few minutes. A temporary check
+([fleet_util.py](fleet_util.py)).
+
 ## The dev box
 
 A c8g.2xlarge on demand (8 cores, 16 GB, 300 GB gp3) with the fork at `~/dopplertrack` and the data and

@@ -430,7 +430,11 @@ def status(a) -> None:
 
 def fleet(a) -> None:
     """Every project box running now, by region, with its job and hourly price; the jobs whose launch failed
-    for capacity or quota in the last day; and the hourly total."""
+    for capacity or quota in the last day; and the hourly total. With --util, how much CPU each box uses."""
+    if getattr(a, "util", False):
+        sys.path.insert(0, str(HERE))
+        import fleet_util
+        return fleet_util.main(a)
     total, rows, launches = 0.0, [], {}
     for region in (r for r in JOB_REGIONS if deployed(r)):
         ec2 = session(region).client("ec2")
@@ -859,7 +863,10 @@ def main(argv=None) -> None:
                         ("cancel", "terminate a job's box"), ("interrupt", "send a job's spot box a real interruption")):
         p = sub.add_parser(name, help=help_)
         p.add_argument("job", nargs="?" if name == "status" else None)
-    sub.add_parser("fleet", help="every box running now, by region, with its price, and failed launches")
+    fl = sub.add_parser("fleet", help="every box running now, by region, with its price, and failed launches")
+    fl.add_argument("--util", action="store_true", help="each box's CPU use and idle vCPU-hours (fleet_util.py)")
+    fl.add_argument("--history", action="store_true", help="with --util: every job today, over its whole run")
+    fl.add_argument("--watch", type=float, metavar="MIN", help="with --util: a snapshot every MIN minutes into a run folder")
     sub.add_parser("seed-tools", help="put uv and ffmpeg for each architecture in the bucket")
     fs = sub.add_parser("fetch-sources", help="fetch the public raw files the bucket lacks on a box")
     fs.add_argument("--size", default="4xlarge", help="instance size (default: 4xlarge; the job is network-bound)")

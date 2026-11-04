@@ -108,6 +108,12 @@ Criteria, each case judged against its own null's γ_m:
   - A day already in derived/ is never fetched again.
   - The cuts are published read-only to `derived/traces/<day>/` and recorded in the data manifest (adsb.lol,
     ODbL 1.0).
+- **The clock gate.** `locate`'s clock gate ([clock-gate](../experiments/2026-11-04-clock-gate.md)) keeps only
+  triples whose clock lies within the case's stated start and tolerance. Another day's flights would all fail it.
+  - So the locate arm shifts each null day's traces by whole days onto the recording's date, keeping the time of
+    day, and runs with the gate on, as the case does.
+  - The saved-fit arm runs `run_search`, which has no gate, so its days need no shift.
+  - The null block's names follow B's schema v3 (`verdict.null`).
 - The null replicates the pair rule and silence filter that `locate`'s verdict uses. A `comparable` draw is ten
   searches, like the case itself, and the `saved-fit` arm is one. B's final locate record sets the rule; the null
   waits on it.

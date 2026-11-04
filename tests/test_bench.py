@@ -68,9 +68,11 @@ def one_case(tmp_path):
     return path
 
 
-def _fake_execute(case, case_dir, log=print):
+def _fake_execute(case, case_dir, log=print, code=None):
     assert "labels" not in case
-    return example_record()
+    rec = example_record()
+    rec["provenance"]["code"] = code
+    return rec
 
 
 def test_the_record_and_its_hash_are_written_before_any_label_is_read(tmp_path, one_case):
@@ -118,3 +120,28 @@ def test_compare_runs_prints_both_runs(tmp_path, one_case):
     out = runner.compare_runs(tmp_path / "a", tmp_path / "b")
     assert "synthetic" in out and "record identical" not in out.splitlines()[0]
     assert "true_pair_rank" in out and "+0.0" in out
+
+
+def test_each_record_carries_the_code_revision_it_was_given(tmp_path, one_case):
+    code = {"package_version": "0.2.0", "git_commit": "f" * 40, "git_dirty": True}
+    runner.bench_case("synthetic", tmp_path / "out", execute=_fake_execute, cases_path=one_case, code=code)
+    rec = json.loads((tmp_path / "out" / "result.json").read_text())
+    assert rec["provenance"]["code"] == code
+
+
+def test_a_blocked_case_needs_a_reason_and_is_never_run(tmp_path):
+    case = _case()
+    for k in ("derived", "spectrogram", "search", "refine", "events"):
+        del case[k]
+    case["runnable"] = {"blocked": "waits for the gap-aware spectrogram"}
+    cases.validate_case(case, cases.manifest_files())
+    case["runnable"] = {"blocked": ""}
+    with pytest.raises(cases.CaseError, match="runnable"):
+        cases.validate_case(case, cases.manifest_files())
+    case["runnable"] = {"blocked": "waits for flight data"}
+    case["id"] = "blocked"
+    path = tmp_path / "cases.json"
+    path.write_text(json.dumps({"schema": 1, "cases": [case]}))
+    assert cases.case_ids(path) == [] and cases.case_ids(path, runnable_only=False) == ["blocked"]
+    with pytest.raises(cases.CaseError, match="not runnable"):
+        cases.blind_case("blocked", path)

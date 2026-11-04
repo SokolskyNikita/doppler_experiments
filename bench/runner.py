@@ -41,6 +41,22 @@ def _cpu() -> float:
     return a.ru_utime + a.ru_stime + b.ru_utime + b.ru_stime
 
 
+class _Tee(io.StringIO):
+    """Keeps what a stage prints and passes each complete line on to the log as it arrives."""
+
+    def __init__(self, log):
+        super().__init__()
+        self.forward, self.pending, self.stdout = log, "", sys.stdout
+
+    def write(self, s):
+        self.pending += s
+        *lines, self.pending = self.pending.split("\n")
+        with contextlib.redirect_stdout(self.stdout):    # the log may print; it must not print into itself
+            for ln in lines:
+                self.forward(ln)
+        return super().write(s)
+
+
 class Stages:
     """Wall and CPU time per pipeline stage, with the stage's log lines kept for the record."""
 
@@ -49,7 +65,7 @@ class Stages:
 
     @contextlib.contextmanager
     def __call__(self, name):
-        buf = io.StringIO()
+        buf = _Tee(self.log)
         w0, c0 = time.perf_counter(), _cpu()
         try:
             with warnings.catch_warnings(record=True) as caught, contextlib.redirect_stdout(buf):
@@ -58,9 +74,9 @@ class Stages:
         finally:
             self.stages.append({"name": name, "wall_s": round(time.perf_counter() - w0, 3),
                                 "cpu_s": round(_cpu() - c0, 3)})
+            if buf.pending:
+                buf.write("\n")
             text = buf.getvalue()
-            if text:
-                self.log(text.rstrip("\n"))
             self.warnings += [f"{name}: {ln.strip()}" for ln in text.splitlines() if "WARNING" in ln]
             self.warnings += [f"{name}: {w.category.__name__}: {w.message}" for w in caught]
 
@@ -71,7 +87,7 @@ def load_events(case: dict):
     ev = case["events"]
     if ev["mode"] != "saved_fits":
         raise NotImplementedError("detect-mode events arrive with the raw-audio baseline")
-    data = [json.load(open(resolve(p))) for p in ev["files"]]
+    data = [json.loads(resolve(p).read_text()) for p in ev["files"]]
     if ev.get("pick"):
         (lst,) = data
         data = [lst[i - 1] for i in ev["pick"]]
@@ -105,7 +121,13 @@ def _altitude_sources(traces) -> dict:
     return counts
 
 
-def execute_case(case: dict, case_dir: Path, log=print) -> dict:
+def code_revision() -> dict:
+    commit = git("rev-parse", "HEAD")
+    return {"package_version": _package_version(), "git_commit": commit or unavailable("not a git checkout"),
+            "git_dirty": bool(git("status", "--porcelain")) if commit else unavailable("not a git checkout")}
+
+
+def execute_case(case: dict, case_dir: Path, log=print, code: dict | None = None) -> dict:
     """Run one blind case through spectrogram, events, flight data, CPA table, search and refine, and
     return its result record. It never sees the case's labels."""
     from dopplertrack import pipeline
@@ -117,6 +139,7 @@ def execute_case(case: dict, case_dir: Path, log=print) -> dict:
     from dopplertrack.terrain import Terrain
 
     assert "labels" not in case, "the runner must be given the blind case"
+    code = code or code_revision()
     s, rf = case["search"], case["refine"]
     stage = Stages(log)
     errors: list[str] = []
@@ -245,8 +268,7 @@ def execute_case(case: dict, case_dir: Path, log=print) -> dict:
         "conventions": CONVENTIONS_V1,
         "provenance": {
             "created": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
-            "code": {"package_version": _package_version(), "git_commit": git("rev-parse", "HEAD") or unavailable("not a git checkout"),
-                     "git_dirty": bool(git("status", "--porcelain")) if git("rev-parse", "HEAD") else unavailable("not a git checkout")},
+            "code": code,
             "parameters": params, "inputs": inputs, "caches": caches,
             "lineage": {"raw": case["source"]["raw"], "flight_data_assets": case["flight_data"]["archive_assets"],
                         "derived": [{"path": d["path"], "sha256": d["sha256"]} for d in case["derived"]]},
@@ -267,12 +289,12 @@ HASH_FILE = "result.json.sha256"
 
 
 def bench_case(case_id: str, case_dir: Path, execute=execute_case, labels=case_labels, cases_path=None,
-               log=print) -> dict:
+               log=print, code: dict | None = None) -> dict:
     """Run one case blind, write result.json and its hash, and only then read the labels and score it."""
     kw = {} if cases_path is None else {"path": cases_path}
     case = blind_case(case_id, **kw)
     case_dir.mkdir(parents=True, exist_ok=True)
-    record = execute(case, case_dir, log=log)
+    record = execute(case, case_dir, log=log, code=code or code_revision())
     sha = write_record(case_dir / "result.json", record)
     (case_dir / HASH_FILE).write_text(f"{sha}  result.json\n")
     meta = {k: case[k] for k in ("id", "version", "group", "set", "expected_outcome")}
@@ -338,8 +360,11 @@ def new_run(topic: str) -> Path:
 
 def run_bench(case_ids: list[str], tier: str = "t2", run_dir: Path | None = None, log=print) -> Path:
     """Run cases into a new run folder (or `run_dir`) and collect their scoreboard entries in results.json."""
+    # the code revision is read once, before anything runs, so an edit during a long run can't relabel it
+    code = code_revision()
+    commit, dirty = code["git_commit"], code["git_dirty"]
     if run_dir is None:
-        run_dir = new_run(f"bench-{git('rev-parse', '--short', 'HEAD') or 'nogit'}-{tier}")
+        run_dir = new_run(f"bench-{(commit or 'nogit')[:7]}-{tier}")
     info_path = run_dir / "run.json"
     info = json.loads(info_path.read_text()) if info_path.exists() else {}
     info.update(command=sys.argv, cases=case_ids, tier=tier)
@@ -353,10 +378,10 @@ def run_bench(case_ids: list[str], tier: str = "t2", run_dir: Path | None = None
                 print(msg, file=fh, flush=True)
                 log(msg)
             w0 = time.perf_counter()
-            entry = bench_case(cid, case_dir, log=case_log)
+            entry = bench_case(cid, case_dir, log=case_log, code=code)
             log(f"{cid}: {entry['status']} in {time.perf_counter() - w0:.0f} s")
         entries.append(entry)
-    doc = {"schema": 1, "tier": tier, "git_commit": git("rev-parse", "HEAD"), "git_dirty": bool(git("status", "--porcelain")),
+    doc = {"schema": 1, "tier": tier, "git_commit": commit, "git_dirty": dirty,
            "created": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"), "cases": entries}
     (run_dir / "results.json").write_text(json.dumps(doc, indent=1, sort_keys=True) + "\n")
     return run_dir

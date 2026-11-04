@@ -76,13 +76,28 @@ REQUIRED = ("id", "version", "group", "set", "expected_outcome", "description", 
             "labels.true_pair", "labels.checked_by", "built_with")
 
 
+# A case that can't run yet (its audio needs the gap-aware spectrogram, its flight data isn't fetched, or it
+# waits for a milestone) carries runnable = {"blocked": reason} and needs only what identifies it.
+REQUIRED_BLOCKED = ("id", "version", "group", "set", "expected_outcome", "description", "source.identifiers",
+                    "source.acquisition", "source.raw", "start_time.source", "start_time.utc",
+                    "start_time.uncertainty_s", "flight_data.date", "labels.reference", "labels.checked_by",
+                    "built_with")
+
+
+def is_runnable(case: dict) -> bool:
+    return case.get("runnable", True) is True
+
+
 def validate_case(case: dict, manifest_files: dict[str, str]) -> None:
     """Raise CaseError listing every problem with one case entry. manifest_files maps path -> sha256."""
     where = case.get("id", "<case without id>") if isinstance(case, dict) else "<not an object>"
     if not isinstance(case, dict):
         raise CaseError([f"{where}: a case must be an object"])
     problems: list[str] = []
-    for dotted in REQUIRED:
+    runnable = is_runnable(case)
+    if not runnable and not (isinstance(case.get("runnable"), dict) and str(case["runnable"].get("blocked", "")).strip()):
+        problems.append(f"{where}: runnable must be true or {{\"blocked\": reason}}")
+    for dotted in REQUIRED if runnable else REQUIRED_BLOCKED:
         _need(case, dotted, problems, where)
     if case.get("set") not in SETS:
         problems.append(f"{where}: set must be one of {SETS}, not {case.get('set')!r}")
@@ -128,9 +143,9 @@ def validate_case(case: dict, manifest_files: dict[str, str]) -> None:
     if "cpa_cache" in s and not str(s["cpa_cache"]).startswith("cpa/"):
         problems.append(f"{where}: search.cpa_cache must be a path under the cache root's cpa/")
     ev = case.get("events") or {}
-    if ev.get("mode") not in ("saved_fits", "detect"):
+    if runnable and ev.get("mode") not in ("saved_fits", "detect"):
         problems.append(f"{where}: events.mode must be saved_fits or detect")
-    if ev.get("mode") == "saved_fits" and not ev.get("files"):
+    if runnable and ev.get("mode") == "saved_fits" and not ev.get("files"):
         problems.append(f"{where}: saved_fits needs events.files")
     lab = case.get("labels") or {}
     ref = lab.get("reference")
@@ -177,6 +192,8 @@ def _latest(doc: dict, case_id: str) -> dict:
 def blind_case(case_id: str, path=CASES) -> dict:
     """The latest version of a case without its labels: everything the runner may see."""
     case = copy.deepcopy(_latest(load_cases(path), case_id))
+    if not is_runnable(case):
+        raise CaseError([f"{case_id}: not runnable yet: {case['runnable']['blocked']}"])
     del case["labels"]
     return case
 
@@ -189,8 +206,9 @@ def case_labels(case_id: str, version: int, path=CASES) -> dict:
     raise KeyError(f"no case {case_id!r} version {version}")
 
 
-def case_ids(path=CASES) -> list[str]:
-    return sorted({c["id"] for c in load_cases(path)["cases"]})
+def case_ids(path=CASES, runnable_only: bool = True) -> list[str]:
+    cases = load_cases(path)["cases"]
+    return sorted({c["id"] for c in cases if is_runnable(c) or not runnable_only})
 
 
 def _expand(argv: list[str], out: Path) -> list[str]:

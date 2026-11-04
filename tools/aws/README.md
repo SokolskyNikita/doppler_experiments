@@ -59,8 +59,9 @@ as /scratch, installs s5cmd (pinned by hash) and uv and ffmpeg from the bucket, 
 
 `runs wait` follows the status; `runs pull` copies the run folders into `$DOPPLERTRACK_DATA/runs` (under
 a new `-n` name if one exists here: never into an existing run) and adds the new cache entries to
-`$DOPPLERTRACK_CACHE` without touching any existing file. An interrupted job is relaunched by hand: its
-partial run folder is kept, and its cache delta saves the stages it finished.
+`$DOPPLERTRACK_CACHE` without touching any existing file. An interrupted job continues with `runs launch
+--resume JOB`: its partial run folder comes to the fresh box, and it runs the job's own code bundle (copied
+from `jobs/JOB/code/`, recorded as `code_source` in run.json), not this checkout's, unless `--repo` says otherwise.
 
 Example, the Oyster Bay saved-fit Tier 2 case (157 s from submit to done on 2026-11-04):
 

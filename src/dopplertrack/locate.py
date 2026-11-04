@@ -113,6 +113,8 @@ def _best_per_pair(res):
 def _search(sp, ev1, ev2, traces, grid, cfg: LocateConfig, meta, bbox, comparable=False, triples=None):
     from . import pipeline
     c_kw = _air(cfg)
+    if cfg.cpa_cache:             # a fresh cache root (a fleet box) has no folder for the table or its lock yet
+        Path(cfg.cpa_cache).parent.mkdir(parents=True, exist_ok=True)
     return pipeline.run_search(sp, ev1, ev2, traces, grid, harmonics=(1, 1), tol_s=cfg.tol_s, v_tol=cfg.v_tol,
                                d_tol=tuple(cfg.d_tol), silence_d_m=cfg.silence_d_m, max_range_m=cfg.max_range_m,
                                progress=False, cpa_cache=cfg.cpa_cache, trace_metadata=meta, search_bbox=tuple(bbox),

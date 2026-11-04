@@ -69,6 +69,15 @@ tools/aws/runs launch oyster-t2 --case oyster-bay --wait -- .venv/bin/python -m 
 Several invocations on one box: a driver that runs them at once with `DOPPLERTRACK_JOBS` split, like
 [aws_sweep.sh](../experiments/2026-11-04/aws_sweep.sh) (6 settings at a time with 10 jobs each).
 
+## Sizing
+
+Quota is counted in vCPUs per region and market: 256 spot and 256 on-demand in each region until AWS raises it
+(increases requested). A box counts its whole size against that, whatever the job uses: a 16xlarge shard costs 64
+vCPUs even when its job runs 16 workers, so only four fit in a region. Size the box to the job's workers
+(`--size 4xlarge` for 16, `8xlarge` for 32; a vCPU is a core on Graviton and c7a), and shard wider rather than
+deeper: more small boxes start sooner, fit the quota's remainders in every region, and lose less to one
+interruption. Keep 16xlarge for a single process that really uses 64 workers.
+
 ## The dev box
 
 A c8g.2xlarge on demand (8 cores, 16 GB, 300 GB gp3) with the fork at `~/dopplertrack` and the data and

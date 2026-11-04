@@ -206,11 +206,37 @@ Part 2 has no row for the SWFL free union of two; its "mirror union" includes ad
 - **At CPA, airplanes.live is the densest single network in NY,** with a 10 s largest gap. Its SWFL CPA isn't denser than the cut's, though airplanes.live has the most points overall. adsbx is no denser at CPA than our cut on either case.
 - **Aircraft.** adsbx sees the most window aircraft: +4.7 % in NY and +1.9 % in SWFL. The four-mirror union has 32 NY aircraft our cut lacks, against 1 the other way.
 
+**Saved-fit searches on the refetch** (part 3's setup, fresh CPA cache names `cpa/adsbfetch/<case>_r031_*.npz`, one process). The record's rows from section 3 come first for comparison:
+
+| Case, traces | True pair rank | Flight pairs | Refined error | Margin | Top pair, if not the true one |
+|---|---|---|---|---|---|
+| oyster-bay, our cut (section 3) | 1 | 328 | 43.3 m | 4.9 % | |
+| oyster-bay, free union (section 3) | 1 | 55 | 43.3 m | 40.9 % | |
+| oyster-bay, free union, refetched | 1 | 55 | 43.3 m | 40.9 % | |
+| oyster-bay, adsbx | 1 | 44 | 43.3 m | 36.7 % | |
+| oyster-bay, four-mirror union | 1 | 58 | 43.3 m | 35.3 % | |
+| eagle-cam, our cut (section 3) | 1 | 607 | 877 m | 2.5 % | |
+| eagle-cam, free union (section 3) | 3 | 174 | 14,087 m | 5.7 % | a0e90b+a25807 |
+| eagle-cam, free union, refetched | 3 | 174 | 14,087 m | 5.7 % | a0e90b+a25807 |
+| eagle-cam, adsbx | 1 | 187 | 1,173 m | 4.1 % | |
+| eagle-cam, free union + adsb.lol | 1 | 182 | 1,824 m | 2.8 % | |
+| eagle-cam, four-mirror union | 1 | 230 | 1,906 m | 5.2 % | |
+
+- **Deterministic.** The refetched free unions reproduce section 3 exactly, as identical inputs should.
+- **Oyster Bay is unchanged on every source:** rank 1 at 43.3 m, margin 35–41 %.
+- **The eagle cam's flip is specific to adsbfi + airplanes.live.**
+  - adsbx alone puts the true pair back at rank 1: 10.56 against 10.14 for the same runner-up, a0e90b+a25807.
+  - So do both unions that include adsb.lol, the network of our cut (10.19 against 9.91; 10.06 against 9.56).
+  - The refined error grows from 877 m to 1.2–1.9 km.
+  - The margin stays small, 2.8–5.2 %.
+- **Section 3's reading stands, now from both sides.** The eagle cam's rank depends on which networks' tracks are used, and its margin is within the change a different track makes. adsbx doesn't settle it, any more than the free union unsettled it.
+
 **Scripts:** `tools/experiments/2026-11-04/adsbfetch_refetch_summary.py`; `adsbfetch_compare.py --adsbx`; the fetch and build scripts are in the run folders.
 
 **Outputs:**
 - `runs/2026-11-04-adsbfetch-refetch/`: `fetch.sh`, `command.sh`, `snapshot.txt`, `snapshot_unittest.log`, `manifests/`, `logs/`, `replay/`, `wtraces2/`, `traces2/`, `window_*.txt`, `build_npz.sh`, the `*_mirror_*.npz`, `compare_flights.*`, `completeness.json`, `headline.json`.
 - `runs/2026-11-04-adsbfetch-refetch-adsbx/`: the same for adsbx.
+- `runs/2026-11-04-adsbfetch-refetch-savedfit-2/`: the saved-fit runs (`-refetch-savedfit/` failed at argument parsing; nothing ran).
 
 **Scripts:**
 - `tools/data/adsbfetch_to_npz.py`, `tools/data/nnumber.py`;

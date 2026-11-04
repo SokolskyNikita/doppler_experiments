@@ -36,6 +36,9 @@ Layer 1 classes: clear, uncertain, overlapping, masked, absent. An overlapping w
 per source; an event no pass explains is "unmatched", with the passes considered in its notes. The windows cover the whole span, so a
 stretch with no event is an "absent" window, not a gap. A line is the frequency where a visible tone enters
 and leaves the window; "harmonics" is how many such lines belong to the event.
+Some files are generated rather than labelled by hand (tools/data/background_labels.py, from a source's own
+annotations). They use the same format, and their labeller field names the script, so a reader can tell
+labels made by construction from a person's labels.
 """
 import argparse
 import fnmatch

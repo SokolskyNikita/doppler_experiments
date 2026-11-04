@@ -48,6 +48,15 @@ EDGES = [0, 1000, 2000, 3500]
 NPERSEG, HOP_S, SR = 8192, 0.25, 4000
 
 
+
+def _json_default(o):
+    """numpy scalars and arrays from the band sums, which json cannot encode by itself."""
+    if hasattr(o, "item"):
+        return o.item()
+    if hasattr(o, "tolist"):
+        return o.tolist()
+    raise TypeError(f"Object of type {type(o).__name__} is not JSON serializable")
+
 def raw_spectrogram(session: Path):
     """The session's spectrogram in dB, not whitened, on session_spectrogram.py's timeline and frames."""
     closed = [json.loads(line) for line in (session / "timeline.jsonl").read_text().splitlines()]
@@ -197,7 +206,7 @@ def main():
     null = [z_at(t, means["40-450"], tc)[0] for tc in rng.uniform(t[0] + FAR_S, t[-1] - FAR_S, a.null)]
     null = [z for z in null if z is not None]
     a.out.mkdir(parents=True, exist_ok=True)
-    (a.out / "broadband_passes.json").write_text(json.dumps(rows, indent=1) + "\n")    # private: never in git
+    (a.out / "broadband_passes.json").write_text(json.dumps(rows, indent=1, default=_json_default) + "\n")    # private: never in git
     # pictures: the tonal check's heard passes, and the four nearest unheard passes the ear heard
     props = [(r, p) for r, p in zip(rows, passes) if r["engine"] != "jet"]
     pick = [x for x in props if x[0]["tonal_heard"]]
@@ -211,7 +220,7 @@ def main():
                 f"pass {i + 1}: {engine}, {ground / 1000:.1f} km ground; tonal {'heard' if r['tonal_heard'] else 'not heard'}"
                 f" (z {r['tonal_z']}), broadband z {r['z_40-450']}; best tone {F_REF * F0_SCALES[fi]:.0f} Hz")
         r["picture"] = f"pass-{i + 1}.png"
-    (a.out / "broadband_passes.json").write_text(json.dumps(rows, indent=1) + "\n")
+    (a.out / "broadband_passes.json").write_text(json.dumps(rows, indent=1, default=_json_default) + "\n")
 
     def tally(rs):
         zs = [r["z_40-450"] for r in rs if r["z_40-450"] is not None]
@@ -233,8 +242,8 @@ def main():
     for k, v in (("ear_audible", True), ("ear_inaudible", False)):
         summary["ear"][k] = tally([r for r in rows if r["ear_audible"] is v])
     summary["pictures"] = len(pick)
-    (a.out / "broadband_summary.json").write_text(json.dumps(summary, indent=1) + "\n")
-    print(json.dumps(summary))
+    (a.out / "broadband_summary.json").write_text(json.dumps(summary, indent=1, default=_json_default) + "\n")
+    print(json.dumps(summary, default=_json_default))
 
 
 if __name__ == "__main__":

@@ -1,6 +1,7 @@
 """High-level pipeline steps that the CLI and notebooks share."""
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import time
@@ -13,13 +14,48 @@ from .adsb import AircraftTypes, Trace, load_region, load_traces, save_traces
 from .audio import Spectrogram, compute_spectrogram, load_audio
 from .doppler import speed_of_sound
 from .score import EventWindow, locked_score
-from .search import Grid, Segment, build_segments, cpa_table, pair_candidates, save_cpa_table, load_cpa_table
+from .search import Grid, Segment, build_segments, cpa_fingerprint, cpa_table, pair_candidates, save_cpa_table, load_cpa_table
 from .terrain import Terrain
 from .tracks import EventFit, fit_event
 
 
 def log(msg):
     print(f"[{time.strftime('%H:%M:%S')}] {msg}", flush=True)
+
+
+@contextlib.contextmanager
+def _file_lock(path):
+    """Exclusive advisory lock on `path` (created if missing). Where fcntl is unavailable this is a no-op;
+    atomic saves still keep the cache consistent, at the cost of possibly computing a table twice."""
+    try:
+        import fcntl
+    except ImportError:
+        yield
+        return
+    with open(path, "a") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(f, fcntl.LOCK_UN)
+
+
+def cached_cpa_table(grid: Grid, segs: list[Segment], max_range_m: float, c: float, path=None) -> pd.DataFrame:
+    """cpa_table(), reusing the table saved at `path` if it was built from identical inputs (cpa_fingerprint).
+    A lock file next to it makes a second process wait for the first instead of computing the same table."""
+    if not path:
+        return cpa_table(grid, segs, max_range_m=max_range_m, c=c)
+    fp = cpa_fingerprint(grid, segs, max_range_m, c)
+    with _file_lock(f"{path}.lock"):
+        if os.path.exists(path):
+            cpa = load_cpa_table(path, fp)
+            if cpa is not None:
+                log(f"loaded CPA table from {path}")
+                return cpa
+            log(f"{path} was built from other inputs; recomputing")
+        cpa = cpa_table(grid, segs, max_range_m=max_range_m, c=c)
+        save_cpa_table(path, cpa, fp)
+        return cpa
 
 
 def make_spectrogram(audio_path, out_path, hop_s=0.25, fmin=40, fmax=450, nperseg=8192, whiten_window_s=600):
@@ -88,24 +124,16 @@ def run_search(sp: Spectrogram, ev1: EventFit, ev2: EventFit, traces: list[Trace
                cpa_cache=None) -> tuple[pd.DataFrame, list[Segment]]:
     """Rank grid points for a two-event recording.
 
-    cpa_cache: optional .npz path. The (grid point, flight) CPA table depends only on the grid,
-    the traces and max_range, not on the events, and is the slow part; with a path given it is
-    loaded if present and valid for this grid/traces, else computed and saved."""
+    cpa_cache: optional .npz path. The (grid point, flight) CPA table depends only on the grid
+    (with its elevations), the traces, max_range and the speed of sound, not on the events, and is
+    the slow part; with a path given it is reused when those inputs are identical, else computed
+    and saved (see cached_cpa_table)."""
     c = speed_of_sound() if c is None else c
     e0, e1 = grid.enu[:, 0].min() - max_range_m, grid.enu[:, 0].max() + max_range_m
     n0, n1 = grid.enu[:, 1].min() - max_range_m, grid.enu[:, 1].max() + max_range_m
     segs = build_segments(traces, grid.lat0, grid.lon0, clip_enu=(e0, e1, n0, n1))
     log(f"{len(segs)} airborne segments; grid of {len(grid)} points")
-    cpa = None
-    fp = {"grid": (len(grid), float(grid.lat0), float(grid.lon0), float(grid.lat.min()), float(grid.lon.max())),
-          "segs": (len(segs), int(sum(len(s.t) for s in segs))), "max_range_m": float(max_range_m), "c": float(c)}
-    if cpa_cache and os.path.exists(cpa_cache):
-        cpa = load_cpa_table(cpa_cache, fp)
-        log(f"loaded CPA table from {cpa_cache}" if cpa is not None else f"{cpa_cache} is for a different grid/traces; recomputing")
-    if cpa is None:
-        cpa = cpa_table(grid, segs, max_range_m=max_range_m, c=c)
-        if cpa_cache:
-            save_cpa_table(cpa_cache, cpa, fp)
+    cpa = cached_cpa_table(grid, segs, max_range_m, c, cpa_cache)
     log(f"{len(cpa)} (point, flight) CPA records")
     dt = ev2.t_cpa - ev1.t_cpa
     pairs = pair_candidates(cpa, dt, tol_s=tol_s,

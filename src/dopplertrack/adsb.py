@@ -6,7 +6,6 @@ import gzip
 import json
 import os
 import zlib
-from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -16,6 +15,7 @@ import requests
 from .geo import lla_to_enu
 from .coverage import ScanReport
 from .doppler import MAX_TRACE_GAP_S
+from .parallel import process_pool, resolve_jobs
 
 FT = 0.3048
 KT = 0.514444
@@ -218,7 +218,7 @@ def load_region(archive_dir: str | Path, bbox: tuple[float, float, float, float]
     files = sorted(Path(archive_dir).glob("traces/*/trace_full_*.json"))
     out = []
     report = report if report is not None else ScanReport()
-    with ProcessPoolExecutor(workers or os.cpu_count()) as ex:
+    with process_pool(resolve_jobs(workers)) as ex:      # spawn, as everywhere: fork under numpy threads can deadlock
         for tr, outcome in ex.map(_scan_one, ((str(f), bbox) for f in files), chunksize=256):
             report.seen += 1
             setattr(report, outcome, getattr(report, outcome) + 1)

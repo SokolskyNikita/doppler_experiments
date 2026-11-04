@@ -4,8 +4,9 @@
   "id": "swfl_2024-12-28",
   "source": "raw/audio/youtube/swfl_2024-12-28.webm",
   "sha256": "58dd4c1259598c85579d1aba1311d18651f70501c2df822104cacb54b4a0ddc0",
-  "t0_utc": null,
-  "case": null
+  "t0_utc": "2024-12-28T14:21:08.49Z",
+  "case": null,
+  "t0_note": "from the known-point fit's clock (runs/2026-11-03-issue-1); used for layer 2 only"
  },
  "span": [
   3600,
@@ -268,5 +269,103 @@
    "notes": ""
   }
  ],
- "associations": []
+ "associations": [
+  {
+   "window": "sw-e01",
+   "flight": {
+    "icao": "a625e2",
+    "registration": "N4956N",
+    "heard_cpa_s": 3701.4,
+    "slant_m": 1890
+   },
+   "confidence": "probable",
+   "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
+   "blind": false,
+   "date": "2026-11-04",
+   "notes": "the steep 165 to 105 Hz component"
+  },
+  {
+   "window": "sw-e01",
+   "flight": {
+    "icao": "aafea6",
+    "registration": "N8073G",
+    "heard_cpa_s": 3753.4,
+    "slant_m": 2293
+   },
+   "confidence": "possible",
+   "alternatives": [
+    {
+     "icao": "a02c8c",
+     "registration": "N110DP",
+     "heard_cpa_s": 3751.8,
+     "slant_m": 3739
+    }
+   ],
+   "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
+   "blind": false,
+   "date": "2026-11-04",
+   "notes": "the slow 205 to 165 Hz component; N110DP, heard 1.6 s apart, fits it as well"
+  },
+  {
+   "window": "sw-e02",
+   "flight": {
+    "icao": "a02c8c",
+    "registration": "N110DP",
+    "heard_cpa_s": 3751.8,
+    "slant_m": 3739
+   },
+   "confidence": "possible",
+   "alternatives": [
+    {
+     "icao": "aafea6",
+     "registration": "N8073G",
+     "heard_cpa_s": 3753.4,
+     "slant_m": 2293
+    }
+   ],
+   "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
+   "blind": false,
+   "date": "2026-11-04",
+   "notes": "may be the tail of sw-e01's slow component"
+  },
+  {
+   "window": "sw-e03",
+   "flight": "unmatched",
+   "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
+   "blind": false,
+   "date": "2026-11-04",
+   "notes": "N348D (6.0 km, heard 3883 s) is flat over the window"
+  },
+  {
+   "window": "sw-e07",
+   "flight": "unmatched",
+   "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
+   "blind": false,
+   "date": "2026-11-04",
+   "notes": "N701NH (10.2 km, heard 4566 s) is flat; the lines fall 16-19 %, so a closer source with no ADS-B"
+  },
+  {
+   "window": "sw-e08",
+   "flight": "unmatched",
+   "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
+   "blind": false,
+   "date": "2026-11-04",
+   "notes": "N8306B (8.3 km, heard 4689 s) and N255SK (10.4 km) are flat near 105 and 180 Hz, close to the lines' frequencies but heard after the window"
+  },
+  {
+   "window": "sw-e09",
+   "flight": {
+    "icao": "ab958b",
+    "registration": "N8455Z",
+    "heard_cpa_s": 4787.1,
+    "slant_m": 4624
+   },
+   "confidence": "possible",
+   "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
+   "blind": false,
+   "date": "2026-11-04",
+   "notes": "a 150 Hz line follows the curve's flat start; its fall is after the span"
+  }
+ ],
+ "overlays": "runs/2026-11-04-blind-labels/swfl_overlay"
 }

@@ -4,8 +4,9 @@
   "id": "oyster_bay",
   "source": "raw/audio/youtube/oyster_bay.webm",
   "sha256": "6884324b4fb9babbc89b10de71f283dd338766a15d2fbd1aeedb52216276692d",
-  "t0_utc": null,
-  "case": null
+  "t0_utc": "2026-09-08T20:17:30.34Z",
+  "case": null,
+  "t0_note": "from the known-point fit's clock (runs/2026-11-03-issue-1); used for layer 2 only"
  },
  "span": [
   0,
@@ -377,5 +378,101 @@
    "notes": ""
   }
  ],
- "associations": []
+ "associations": [
+  {
+   "window": "ob-e01",
+   "flight": "unmatched",
+   "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
+   "blind": false,
+   "date": "2026-11-04",
+   "notes": "no pass within 40 s"
+  },
+  {
+   "window": "ob-e02",
+   "flight": "unmatched",
+   "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
+   "blind": false,
+   "date": "2026-11-04",
+   "notes": "N360NY (7.3 km, heard 131 s) predicts a fall over the window; the lines rise"
+  },
+  {
+   "window": "ob-e03",
+   "flight": {
+    "icao": "a40d8f",
+    "registration": "N360NY",
+    "heard_cpa_s": 130.5,
+    "slant_m": 7252
+   },
+   "confidence": "probable",
+   "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
+   "blind": false,
+   "date": "2026-11-04",
+   "notes": "at f0 293 Hz the modelled curve follows the 345 to 255 Hz line over 120-155 s; the steep 130 to 65 Hz line falls further than the model's 1.75 ratio"
+  },
+  {
+   "window": "ob-e04",
+   "flight": "unmatched",
+   "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
+   "blind": false,
+   "date": "2026-11-04",
+   "notes": "rising lines; N360NY's curve is flat by then"
+  },
+  {
+   "window": "ob-e05",
+   "flight": "unmatched",
+   "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
+   "blind": false,
+   "date": "2026-11-04",
+   "notes": "no pass within 40 s"
+  },
+  {
+   "window": "ob-e06",
+   "flight": "unmatched",
+   "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
+   "blind": false,
+   "date": "2026-11-04",
+   "notes": "no pass within 40 s"
+  },
+  {
+   "window": "ob-e07",
+   "flight": "unmatched",
+   "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
+   "blind": false,
+   "date": "2026-11-04",
+   "notes": "no pass within 40 s"
+  },
+  {
+   "window": "ob-e08",
+   "flight": "unmatched",
+   "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
+   "blind": false,
+   "date": "2026-11-04",
+   "notes": "no pass within 40 s; a strong event"
+  },
+  {
+   "window": "ob-e10",
+   "flight": "unmatched",
+   "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
+   "blind": false,
+   "date": "2026-11-04",
+   "notes": "only N2152Z, 11.8 km, heard 603 s, whose curve is flat over the window; the lines fall 43 %"
+  },
+  {
+   "window": "ob-e11",
+   "flight": "unmatched",
+   "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
+   "blind": false,
+   "date": "2026-11-04",
+   "notes": "C-GZQU (8.8 km, heard 814 s) could fit a falling streak near 800-820 s, but not the rising lines; N501EX (8.4 km, heard 782 s) is flat; left unmatched"
+  },
+  {
+   "window": "ob-e12",
+   "flight": "unmatched",
+   "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
+   "blind": false,
+   "date": "2026-11-04",
+   "notes": "N829RP (4.1 km, heard 1117 s) shows no visible curve; the streaks at 1160-1170 s don't follow it"
+  }
+ ],
+ "overlays": "runs/2026-11-04-blind-labels/oyster_bay_overlay"
 }

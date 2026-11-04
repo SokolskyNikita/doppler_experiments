@@ -13,6 +13,7 @@ Oyster Bay and the eagle cam shaped the method, so every result on them is devel
 
 | Record | Question | Outcome |
 |---|---|---|
+| [2026-11-04-blind-labels](2026-11-04-blind-labels.md) | In three blind-labelled 20 min clips, how many tonal events does an ADS-B pass explain? | A lead, from first-pass labels: few. 1 of 11 at Oyster Bay, 0 of 6 at ESID 740, 1–3 of 6 at the eagle cam; most passes within 12 km aren't visible |
 | [2026-11-04-livermore-audit](2026-11-04-livermore-audit.md) | Can the Livermore microphone and start times be recovered, and do ridge, WAV and ADS-B agree in time? | Yes: the author's recorder point to under 1 m, WAVs are the ridge ±5.00 s, and the ridge clock matches ADS-B to about 1 s per pass with no common offset beyond 0.5 s |
 | [2026-11-03-phase1-prep-regression](2026-11-03-phase1-prep-regression.md) | Do the detector's named records leave `detect`'s output unchanged? | Yes: Oyster Bay's `detect` JSON is byte-identical before and after; 2 passed, 1 expected failure |
 | [2026-11-03-phase0-review-regression](2026-11-03-phase0-review-regression.md) | Do the review fixes preserve CPA geometry while masking unsupported evidence? | 66 offline tests pass; Oyster Bay has 2 passes and 1 expected failure; reception holes preserve CPA proposals and mask curve evidence |

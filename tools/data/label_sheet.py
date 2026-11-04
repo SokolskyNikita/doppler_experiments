@@ -26,9 +26,11 @@ Label files live in bench/labels/<recording>-<t0>-<t1>.json:
    "sheets": "runs/<folder>",          where the contact sheets are
    "windows": [{"id", "class", "start", "end", "lines": [[f_start, f_end], ...], "harmonics",
                 "labeller", "blind", "date", "notes"}],
-   "associations": [{"window", "flight": {"icao", "registration", "heard_cpa_utc", "slant_m"} or "unmatched",
+   "associations": [{"window", "flight": {"icao", "registration", "heard_cpa_s", "slant_m"} or "unmatched",
+                     "confidence": "probable" or "possible", "alternatives": [flights that fit as well],
                      "labeller", "blind", "date", "notes"}]}
-Layer 1 classes: clear, uncertain, overlapping, masked, absent. The windows cover the whole span, so a
+Layer 1 classes: clear, uncertain, overlapping, masked, absent. An overlapping window may have one association
+per source; an event no pass explains is "unmatched", with the passes considered in its notes. The windows cover the whole span, so a
 stretch with no event is an "absent" window, not a gap. A line is the frequency where a visible tone enters
 and leaves the window; "harmonics" is how many such lines belong to the event.
 """
@@ -136,11 +138,8 @@ def whiten(S: np.ndarray, frames: bool = True) -> np.ndarray:
     return S - np.nanmedian(S, axis=0, keepdims=True) if frames else S
 
 
-def draw(sp: Spectrogram, out_dir: Path, span, strip, sheet, vmax, smooth=2.0, fpool=3, overlay=None, tag="blind"):
-    """For display only: a running mean over `smooth` s along time (tones are continuous, noise isn't) and
-    a maximum over `fpool` bins along frequency (a one-bin line survives the downscaling)."""
+def display(sp: Spectrogram, smooth: float, fpool: int) -> np.ndarray:
     from scipy.ndimage import maximum_filter1d, uniform_filter1d
-    out_dir.mkdir(parents=True, exist_ok=True)
     S = whiten(sp.S)
     gap = np.isnan(S)
     S = np.nan_to_num(S)
@@ -149,6 +148,14 @@ def draw(sp: Spectrogram, out_dir: Path, span, strip, sheet, vmax, smooth=2.0, f
     if fpool > 1:
         S = maximum_filter1d(S, fpool, axis=0)
     S[gap] = np.nan
+    return S
+
+
+def draw(sp: Spectrogram, out_dir: Path, span, strip, sheet, vmax, smooth=2.0, fpool=3, overlay=None, tag="blind"):
+    """For display only: a running mean over `smooth` s along time (tones are continuous, noise isn't) and
+    a maximum over `fpool` bins along frequency (a one-bin line survives the downscaling)."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    S = display(sp, smooth, fpool)
     paths = []
     for s0 in np.arange(span[0], span[1], sheet):
         s1 = min(s0 + sheet, span[1])
@@ -201,6 +208,40 @@ def passes(traces_path, site, t0_utc, span, max_range):
     return out
 
 
+def zooms(sp: Spectrogram, labels, flights, out_dir: Path, vmax, smooth, fpool, reach=40.0):
+    """One close-up per labelled event and pass heard within `reach` s of it: the event's window and
+    60 s either side of the heard CPA, with the pass's curve at the f0 of each of the event's lines."""
+    S = display(sp, smooth, fpool)
+    cmap = plt.get_cmap("magma").copy(); cmap.set_bad("0.6")
+    names = []
+    for w in labels["windows"]:
+        if w["class"] == "absent":
+            continue
+        for t, ratio, th, d, icao, reg in flights:
+            if not (w["start"] - reach <= th <= w["end"] + reach):
+                continue
+            a, b = min(w["start"], th - 60), max(w["end"], th + 60)
+            m = (sp.t >= a) & (sp.t <= b)
+            if not m.any():
+                continue
+            fig, ax = plt.subplots(figsize=(10, 4))
+            ax.imshow(np.ma.masked_invalid(S[:, m]), origin="lower", aspect="auto", cmap=cmap, vmin=0, vmax=vmax,
+                      extent=[sp.t[m][0], sp.t[m][-1], sp.f[0], sp.f[-1]], interpolation="nearest")
+            for f_a, f_b in w.get("lines", []):
+                f0 = 2 * f_a * f_b / (f_a + f_b)
+                ax.plot(t, f0 * ratio, "c-", lw=0.9, alpha=0.8)
+            ax.axvline(th, color="c", lw=0.6, ls=":")
+            ax.axvspan(w["start"], w["end"], ymin=0, ymax=0.03, color="lime")
+            ax.set_xlim(a, b); ax.set_ylim(sp.f[0], sp.f[-1])
+            ax.set_title(f"{w['id']} ({w['class']}) and {reg or icao}: {d / 1000:.1f} km, heard CPA {th:.0f} s", fontsize=9)
+            fig.tight_layout()
+            name = f"zoom_{w['id']}_{reg or icao}.png"
+            fig.savefig(out_dir / name, dpi=90)
+            plt.close(fig)
+            names.append(name)
+    return names
+
+
 def make_overlay(labels, flights):
     lines = []      # (t_mid, f0) of every labelled line
     for w in labels["windows"]:
@@ -220,7 +261,7 @@ def make_overlay(labels, flights):
                 ax.text(th, ax.get_ylim()[1], f" {reg or icao} {d / 1000:.1f} km", color="c", fontsize=6, va="top")
         for w in labels["windows"]:
             if w["class"] != "absent" and w["end"] >= a and w["start"] <= b:
-                ax.axvspan(max(w["start"], a), min(w["end"], b), color="lime", alpha=0.08)
+                ax.axvspan(max(w["start"], a), min(w["end"], b), ymin=0, ymax=0.03, color="lime")
                 ax.text(max(w["start"], a), ax.get_ylim()[0], f" {w['id']}", color="lime", fontsize=6, va="bottom")
     return overlay
 
@@ -260,6 +301,8 @@ def check(path: Path) -> list[str]:
             errs.append(f"association to unknown window {a['window']}")
         if a["flight"] != "unmatched" and not a["flight"].get("icao"):
             errs.append(f"association of {a['window']}: flight needs an icao or 'unmatched'")
+        if a.get("confidence", "probable") not in ("probable", "possible"):
+            errs.append(f"association of {a['window']}: confidence {a['confidence']!r}")
     return errs
 
 
@@ -298,6 +341,7 @@ def main():
         labels = json.load(open(a.labels))
         flights = passes(a.traces, a.site, a.t0_utc, a.span, a.range)
         pngs = draw(sp, out, a.span, a.strip, a.sheet, a.vmax, a.smooth, a.fpool, make_overlay(labels, flights), tag="overlay")
+        pngs += zooms(sp, labels, flights, out, a.vmax, a.smooth, a.fpool)
         json.dump([dict(heard_cpa_s=th, slant_m=d, icao=icao, registration=reg) for _, _, th, d, icao, reg in
                    sorted(flights, key=lambda x: x[2])], open(out / "passes.json", "w"), indent=1)
     meta = dict(cmd=a.cmd, span=a.span, band=a.band, strip=a.strip, sheet=a.sheet, vmax=a.vmax, smooth=a.smooth, fpool=a.fpool,

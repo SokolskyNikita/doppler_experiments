@@ -96,8 +96,8 @@ then copy `dev_references.json` to every dev box.
 
 Inputs:
 - `derived/livermore/`, the unpacked corpus.
-- `runs/2026-11-04-livermore-audit/`: its `passes.csv` and `sites.json`. `runs launch` sends a `runs/` input
-  up from this machine.
+- `runs/2026-11-04-livermore-audit/`: its `passes.csv` and `sites.json`. Pass it with `--input-run runs/2026-11-04-livermore-audit`:
+  `runs launch` sends a named run folder up from this machine.
 - `raw/audio/livermore/zenodo-23424278/final_results_40_cases.csv`.
 - Cache: `--cache terrarium`, for the development events' terrain.
 - `raw/audio/youtube/oyster_bay.webm` and `raw/audio/youtube/swfl_2024-12-28.webm`.

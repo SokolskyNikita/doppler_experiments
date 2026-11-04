@@ -64,13 +64,16 @@ if __name__ == "__main__":
     if any((out / f"{a}-t{t}").exists() for a in ("time", "frequency") for t in (1, 2)):
         lines += ["#### whitening across frequency (task 1)", py(HERE / "whiten_frequency.py", out, "merge")]
     for w in ("time", "frequency"):
-        chosen = out / "hmm_knobs" / w / "chosen.json"
-        if not chosen.exists():
-            lines.append(f"#### tracker, {w} whitening: no chosen.json"); continue
-        c = json.loads(chosen.read_text())
-        tc, tb = c["chosen"]
-        lines.append(f"#### tracker, {w} whitening: theta_cont {tc:g}, theta_birth {tb:g} (pairs {c['pairs']})")
-        lines.append(py(HERE / "hmm_livermore.py", out, "merge", w, tc, tb))
+        picks = sorted((out / "hmm_knobs" / w).glob("chosen*.json"))      # chosen.json, then retune 1's chosen_cov*.json
+        if not picks:
+            lines.append(f"#### tracker, {w} whitening: no chosen.json")
+        for chosen in picks:
+            c = json.loads(chosen.read_text())
+            tc, tb = c["chosen"]
+            if not (out / "hmm" / f"{w}_tc{tc:g}_tb{tb:g}").exists():
+                lines.append(f"#### tracker, {w} whitening, {chosen.name}: no units at {tc:g}/{tb:g}"); continue
+            lines.append(f"#### tracker, {w} whitening, {chosen.name}: theta_cont {tc:g}, theta_birth {tb:g} (pairs {c['pairs']})")
+            lines.append(py(HERE / "hmm_livermore.py", out, "merge", w, tc, tb))
     txt = "\n".join(lines)
     (out / "side_by_side.txt").write_text(txt + "\n")
     U.write(out / "merged_from.json", dict(jobs=sys.argv[1:]))

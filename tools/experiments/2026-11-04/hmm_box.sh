@@ -5,9 +5,14 @@
 # and the merge. The knobs are set before any real recording is tracked. Every step skips its finished units,
 # so the same command resumes a stopped box (runs launch --resume).
 #
-# usage: hmm_box.sh time|frequency          (in $RUN, which the box sets)
+# With MIN_COVERAGE, the pick is hmm_knobs.py's retune 1 (pairs covering at least that much of the weak pass).
+#
+# usage: hmm_box.sh time|frequency [MIN_COVERAGE]          (in $RUN, which the box sets)
 set -eu
 W=$1
+COV=${2:-}
+CHOSEN=chosen.json
+[ -n "$COV" ] && CHOSEN=chosen_cov$COV.json
 D=$(dirname "$0")
 PY="uv run --frozen python"
 JOBS=${DOPPLERTRACK_JOBS:-$($PY -c 'from dopplertrack.parallel import default_jobs; print(default_jobs())')}
@@ -20,10 +25,10 @@ for tc in 3 4 5 6 7 8 9; do
     pids="$pids $!"
 done
 for p in $pids; do wait "$p"; done                                     # set -e stops on the first failed pair
-$PY "$D/hmm_knobs.py" "$RUN" pick "$W"
+$PY "$D/hmm_knobs.py" "$RUN" pick "$W" ${COV:+"$COV"}
 
 read -r TC TB <<EOF
-$($PY -c "import json, sys; c = json.load(open(sys.argv[1]))['chosen']; print(c[0], c[1])" "$RUN/hmm_knobs/$W/chosen.json")
+$($PY -c "import json, sys; c = json.load(open(sys.argv[1]))['chosen']; print(c[0], c[1])" "$RUN/hmm_knobs/$W/$CHOSEN")
 EOF
 echo "picked theta_cont $TC theta_birth $TB"
 

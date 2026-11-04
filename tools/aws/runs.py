@@ -240,8 +240,9 @@ def launch(a) -> str:
             s3.upload_file(str(f), bucket, f"jobs/{job}/code/{f.name}")
     s3.upload_file(str(HERE / "box" / "supervisor.py"), bucket, f"jobs/{job}/supervisor.py")
     put_status(s3, bucket, job, {"job": job, "state": "submitted", "updated": now()})
-    # spot in each region in turn, then on demand in each: never a wait for capacity or quota
-    markets = [True] if a.on_demand else [False] if a.spot_only else [False, True]
+    # spot in each region in turn; then on demand in each only with --fallback-on-demand, so a job never eats
+    # the on-demand quota that deciding runs (--on-demand) count on
+    markets = [True] if a.on_demand else [False, True] if a.fallback_on_demand else [False]
     ids, errs, region = [], [], None
     for od in markets:
         for region in (a.region or JOB_REGIONS):
@@ -597,7 +598,7 @@ def fetch_sources(a) -> None:
     key = f"plans/{datetime.datetime.now():%Y%m%d-%H%M%S}-fetch.json"
     s3.put_object(Bucket=bucket, Key=key, Body=json.dumps({"files": plan}, indent=1).encode())
     a.topic, a.case, a.input, a.cache, a.jobs = "aws-fetch-sources", [], [], [], None
-    a.on_demand, a.spot_only, a.max_hours, a.checkpoint_minutes, a.wait = False, False, 6, 5, False
+    a.on_demand, a.fallback_on_demand, a.max_hours, a.checkpoint_minutes, a.wait = False, False, 6, 5, False
     a.resume, a.repo, a.shards, a.shard, a.region = None, None, 1, None, None
     a.command = ["python3", "tools/aws/box/fetch_sources.py", f"s3://{bucket}/{key}", bucket]
     launch(a)
@@ -719,8 +720,8 @@ def main(argv=None) -> None:
     la.add_argument("--on-demand", action="store_true", help="on-demand instead of spot, for deciding runs")
     la.add_argument("--region", action="append", choices=JOB_REGIONS, help="only this region (repeatable; "
                     f"default: {', '.join(JOB_REGIONS)}, in that order)")
-    la.add_argument("--spot-only", action="store_true", help="fail rather than fall back to on-demand when no "
-                    "spot capacity is free")
+    la.add_argument("--fallback-on-demand", action="store_true", help="if no region has spot capacity, start "
+                    "an on-demand box rather than fail (off by default: it uses the on-demand quota)")
     la.add_argument("--max-hours", type=float, default=12, help="stop the command after this long (default: 12)")
     la.add_argument("--checkpoint-minutes", type=float, default=10, help="upload the run folders this often")
     la.add_argument("--repo", help="ship this checkout instead of the one runs is in (e.g. a worktree at another commit)")

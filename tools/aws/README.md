@@ -22,8 +22,13 @@ tools/aws/runs seed | seed-tools | fetch-sources
    untracked files. On the box, `git rev-parse HEAD` and `git status` say what they said here, so bench's
    and new_run.py's provenance is the Mac's. Nothing is pushed to GitHub;
 3. starts an instant EC2 Fleet of one instance, spot unless `--on-demand`, price-capacity-optimized over
-   c8g, c8gd, c7g (arm64) and c7a (amd64) of `--size`, across the four AZs. A single type in a single AZ
-   is often out of capacity (c8gd.16xlarge was, twice, on 2026-11-04).
+   c8g, c8gd, c7g (arm64) and c7a (amd64) of `--size` across a region's AZs, trying us-west-2, then
+   us-west-1, then us-east-2 (`--region` pins one). A single type in a single AZ is often out of capacity
+   (c8gd.16xlarge was, twice, on 2026-11-04). With no spot capacity anywhere it fails, unless
+   `--fallback-on-demand`: on-demand quota is kept for the deciding runs that ask for it;
+4. with `--shards n`, does this n times, one box per shard, each with `DOPPLERTRACK_SHARD_SPEC=k/n`
+   (which tools/data/shards.py reads as its `--shard` default); `--inputs-from '<command>'` takes the
+   inputs from a job's own listing (shards.py's `--inputs`, or `bench inputs`).
 
 The box (launch template user data, [box/bootstrap.sh](box/bootstrap.sh)) stripes any instance-store NVMe
 as /scratch, installs s5cmd (pinned by hash) and uv and ffmpeg from the bucket, and starts the job's

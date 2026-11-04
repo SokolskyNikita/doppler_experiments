@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from bench import tier1  # noqa: E402
 
 WINDOWS = [
-    {"index": 0, "class": "clear", "start": 100.0, "end": 200.0, "lines": [[130, 65], [345, 255]]},
+    {"index": 0, "class": "clear", "start": 100.0, "end": 200.0, "lines": [[130, 100], [260, 200]]},
     {"index": 1, "class": "absent", "start": 200.0, "end": 300.0, "lines": []},
     {"index": 2, "class": "uncertain", "start": 300.0, "end": 400.0, "lines": [[150, 205]]},
     {"index": 3, "class": "clear", "start": 400.0, "end": 500.0, "lines": [[235, 165]]},
@@ -21,7 +21,7 @@ def det(t, f0, score=5.0):
 
 
 def test_matched_missed_and_extra_with_the_uncertain_window_counted_nowhere():
-    m = tier1.match([det(150, 95), det(250, 120), det(350, 180)], WINDOWS)
+    m = tier1.match([det(150, 115), det(250, 120), det(350, 180)], WINDOWS)
     assert m["clear"] == {"windows": 2, "matched": 1, "missed": 1, "outside_model": 0}
     assert m["extra"] == {"total": 1, "by_window_class": {"absent": 1}}
     assert m["excluded_detections"] == 1
@@ -41,7 +41,7 @@ def test_a_detection_off_every_line_in_a_clear_window_is_extra():
 
 
 def test_the_threshold_curve_drops_detections_below_each_score():
-    rows = tier1.threshold_curve([det(150, 95, 3.0), det(250, 120, 6.0)], WINDOWS, hours=1 / 9)
+    rows = tier1.threshold_curve([det(150, 115, 3.0), det(250, 120, 6.0)], WINDOWS, hours=1 / 9)
     by = {r["min_score"]: r for r in rows}
     assert by[0.0]["matched"] == 1 and by[0.0]["extra"] == 1 and by[0.0]["extra_per_hour"] == pytest.approx(9.0)
     assert by[6.0]["matched"] == 0 and by[6.0]["extra"] == 1
@@ -66,7 +66,7 @@ def _record(tmp_path, detections):
 
 
 def test_compare_reads_the_labels_only_after_the_hash(tmp_path):
-    full = [{"t_cpa": 150.0, "t_cpa_emit": 130.0, "f0": 95.0, "v": 50.0, "d": 6000.0, "t_start": 100.0,
+    full = [{"t_cpa": 150.0, "t_cpa_emit": 130.0, "f0": 115.0, "v": 50.0, "d": 6000.0, "t_start": 100.0,
              "t_end": 200.0, "score": 5.0, "f_pre": 120.0, "f_post": 70.0}]
     _record(tmp_path, full)
     labels = {"windows": [{"class": w["class"], "start": w["start"], "end": w["end"], "lines": w["lines"]} for w in WINDOWS]}
@@ -126,3 +126,12 @@ def test_the_committed_labels_fit_what_tier1_reads(span):
     for assoc in labels["associations"]:
         if isinstance(assoc["flight"], dict):
             assert 0 <= assoc["line"] < len(ids[assoc["window"]]["lines"])
+
+
+def test_a_fundamental_needs_its_harmonic_and_an_unambiguous_line():
+    two = [[130, 100], [260, 200]]
+    assert tier1._line_match(115, two)              # 115 on the first line, 230 on the second
+    assert tier1._line_match(240, two)              # 240 as the second harmonic: k = 1/2 puts 120 on the first line
+    assert not tier1._line_match(170, two)          # between the lines at every k
+    assert not tier1._line_match(70, [[130, 65]])   # a 2x-wide band: 70 and 140 both on it, so which harmonic is unclear
+    assert tier1._line_match(100, [[235, 165]])     # one line: 200 on it for k = 2 only

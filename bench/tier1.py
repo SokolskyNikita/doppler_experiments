@@ -32,7 +32,8 @@ KNOBS = {
                                  # heard CPA, so one whose window straddles an edge is judged on partial evidence
     "cpa_slack_s": 5.0,          # a detection's heard CPA may lie this far outside a window: labels are read to seconds
     "line_tolerance": 0.10,      # f0 * k within this fraction of a labelled line's entry-exit band
-    "harmonic_ratios": [0.5, 1.0, 2.0],
+    "harmonic_ratios": [0.5, 1.0, 2.0],  # f0 * k on exactly one line for one k, and with two or more lines its next
+                                 # harmonic on another (see _line_match); tightened before the full spans were matched
     "fit_band_margin": 0.10,     # a labelled line is fitted in its band widened by this fraction
     "association_dt_s": 10.0,    # a detection agrees with its associated flight within this heard-CPA difference
     "association_df": 0.10,      # and this fraction of f0
@@ -185,10 +186,27 @@ def outside_model(w: dict) -> bool:
     return not any(not rising(line) for line in w["lines"])
 
 
-def _line_match(f0: float, lines: list[list[float]]) -> bool:
+def _in_band(f: float, line) -> bool:
     tol = KNOBS["line_tolerance"]
-    return any(min(line) * (1 - tol) <= f0 * k <= max(line) * (1 + tol)
-               for line in lines for k in KNOBS["harmonic_ratios"])
+    return min(line) * (1 - tol) <= f <= max(line) * (1 + tol)
+
+
+def _line_match(f0: float, lines: list[list[float]]) -> bool:
+    """Whether a detection's f0 is a window's fundamental: for some k in harmonic_ratios, f0 * k lies in
+    exactly one line's band, and no other k puts it on that line; and when the window has two or more falling
+    lines, the next harmonic, 2 * f0 * k, lies in another line's band. Rising lines take no part."""
+    falling = [line for line in lines if not rising(line)]
+    ks = KNOBS["harmonic_ratios"]
+    for k in ks:
+        on = [j for j, line in enumerate(falling) if _in_band(f0 * k, line)]
+        if len(on) != 1:
+            continue
+        j = on[0]
+        if any(_in_band(f0 * k2, falling[j]) for k2 in ks if k2 != k):
+            continue                      # the line's band spans a factor of two: which harmonic is ambiguous
+        if len(falling) < 2 or any(_in_band(2 * f0 * k, line) for i, line in enumerate(falling) if i != j):
+            return True
+    return False
 
 
 def match(detections: list[dict], windows: list[dict], min_score: float = 0.0) -> dict:

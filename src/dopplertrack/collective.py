@@ -9,8 +9,9 @@ A window no pass explains adds 0, so it can't veto a point. Windows keep only th
 heard CPA (the clock prior); the straight-pass v and d are not used.
 
 The search is coarse to fine (the proposal's section 4, corrected): a COARSE_M grid scored as the maximum over its
-cell's span (the residual shift and the f0 sweep widened to cover it), then the FINE_M grid inside the cells whose Z
-reaches KEEP_FRACTION of the coarse maximum.
+cell's span (the residual shift and the f0 sweep widened to cover it), then the FINE_M grid inside the KEEP_TOP coarse
+cells with the highest Z (a design step recorded before the rerun: a fraction of the maximum kept 141 cells on a
+negative).
 """
 from __future__ import annotations
 
@@ -27,7 +28,7 @@ from .search import Grid, build_segments, cpa_table
 from .tracks import EventFit, local_whiten
 
 COARSE_M, FINE_M = 2000.0, 200.0
-KEEP_FRACTION = 0.7           # fine cells: coarse Z >= this fraction of the coarse maximum
+KEEP_TOP = 5                  # fine cells: the coarse cells with the highest Z
 CLUSTER_S = 20.0              # the clock vote: a window's candidate clocks within +-CLUSTER_S of another window's
 AGREE_S = 6.0                 # windows sum at a point only where their best clocks agree within +-AGREE_S
 NULL_N = 1000
@@ -95,7 +96,7 @@ def _score_chunk(task):
     obs, seg, t_heard, widx, offs = task
     views, segs, c, sw = _STATE["views"], _STATE["segs"], _STATE["c"], _STATE["sweep"]
     shifts, scales = sw.shifts(), sw.f0_scales()
-    out_s, out_b = np.zeros(len(seg)), np.zeros(len(seg))
+    out_s, out_b, out_f = np.zeros(len(seg)), np.zeros(len(seg)), np.zeros(len(seg))
     cache = {}
     for i in range(len(seg)):
         key = (int(seg[i]), float(obs[i][0]), float(obs[i][1]))
@@ -103,9 +104,9 @@ def _score_chunk(task):
             cache = {key: modelled_curve(segs[int(seg[i])], obs[i], c)}
         to, r = cache[key]
         sc = views[int(widx[i])].sweep_scores(to + offs[i], r, shifts, scales, n=sw.n)
-        k, _ = np.unravel_index(int(np.argmax(sc)), sc.shape)
-        out_s[i], out_b[i] = float(sc.max()), float(offs[i] + shifts[k])
-    return out_s, out_b
+        k, j = np.unravel_index(int(np.argmax(sc)), sc.shape)
+        out_s[i], out_b[i], out_f[i] = float(sc.max()), float(offs[i] + shifts[k]), float(scales[j])
+    return out_s, out_b, out_f
 
 
 def _run(tasks, state, workers):
@@ -116,8 +117,8 @@ def _run(tasks, state, workers):
     finally:
         _STATE.clear()
     if not parts:
-        return np.zeros(0), np.zeros(0)
-    return np.concatenate([p[0] for p in parts]), np.concatenate([p[1] for p in parts])
+        return np.zeros(0), np.zeros(0), np.zeros(0)
+    return tuple(np.concatenate([p[i] for p in parts]) for i in range(3))
 
 
 def _tasks(enu, gidx, seg, t_heard, widx, offs):
@@ -139,9 +140,11 @@ def window_nulls(views, wins, cpa, segs, enu, c, sweep, workers=None, n=NULL_N) 
         offs = win.t_cpa - th
         _, tasks = _tasks(enu, g, s, th, np.full(len(idx), w), offs)
         used = {int(k) for k in np.unique(s)}
-        sc, _ = _run(tasks, {"views": views, "segs": {k: segs[k] for k in used}, "c": c, "sweep": sweep}, workers)
+        sc, _, _ = _run(tasks, {"views": views, "segs": {k: segs[k] for k in used}, "c": c, "sweep": sweep}, workers)
         med = float(np.median(sc)); sig = float(1.4826 * np.median(np.abs(sc - med)))
-        out.append({"median": med, "sigma": max(sig, 1e-9), "n": n, "seed": seed})
+        out.append({"median": med, "sigma": max(sig, 1e-9), "n": n, "seed": seed,
+                    "sample_sha256": hashlib.sha256(np.ascontiguousarray(idx).tobytes()).hexdigest(),
+                    "f0_sweep": [1 - sweep.f0_span, 1 + sweep.f0_span], "anchor_s": win.t_cpa})
     return out
 
 
@@ -170,8 +173,8 @@ def collective_scores(cand: pd.DataFrame, cpa: pd.DataFrame, views, nulls, segs,
     w = cand["w"].to_numpy(); offs = cand["b"].to_numpy()
     order, tasks = _tasks(enu, g, s, th, w, offs)
     used = {int(k) for k in np.unique(s)}
-    sc, bb = _run(tasks, {"views": views, "segs": {k: segs[k] for k in used}, "c": c, "sweep": sweep}, workers)
-    out = pd.DataFrame({"gidx": g[order], "seg": s[order], "w": w[order], "s": sc, "b": bb})
+    sc, bb, ff = _run(tasks, {"views": views, "segs": {k: segs[k] for k in used}, "c": c, "sweep": sweep}, workers)
+    out = pd.DataFrame({"gidx": g[order], "seg": s[order], "w": w[order], "t_heard": th[order], "s": sc, "b": bb, "f0_scale": ff})
     med = np.array([n["median"] for n in nulls]); sig = np.array([n["sigma"] for n in nulls])
     out["z"] = (out["s"] - med[out["w"]]) / sig[out["w"]]
     return out
@@ -194,17 +197,25 @@ def point_scores(scored: pd.DataFrame, n_windows: int) -> pd.DataFrame:
     return top[["gidx", "Z", "b", "n_matched"]].reset_index(drop=True)
 
 
-def matched_at(scored: pd.DataFrame, gidx: int, b: float, segs, n_windows: int) -> list[dict]:
-    """Each window's best pass at a point and clock (within +-AGREE_S): its z, flight and clock; None where none."""
-    here = scored[(scored["gidx"] == gidx) & (np.abs(scored["b"] - b) <= AGREE_S)]
-    out = []
-    for w in range(n_windows):
+def matched_at(scored: pd.DataFrame, gidx: int, b: float, segs, wins) -> tuple[list, list]:
+    """Each window's best pass at a point and its winning clock bin, by point_scores' own rule (the clock binned at
+    AGREE_S / 2, a window's best within two bins either side), and the voters: the windows with any candidate there."""
+    step = AGREE_S / 2
+    b0 = int(np.floor(b / step))
+    here = scored[(scored["gidx"] == gidx)]
+    here = here[np.abs(np.floor(here["b"] / step).astype(np.int64) - b0) <= 2]
+    out, voters = [], sorted({int(w) for w in here["w"]})
+    for w, win in enumerate(wins):
         m = here[here["w"] == w]
         if not len(m):
             out.append(None); continue
         r = m.loc[m["z"].idxmax()]
-        out.append({"z": float(r.z), "score": float(r.s), "icao": segs[int(r.seg)].icao, "clock": float(r.b)})
-    return out
+        if r.z <= 0:
+            out.append({"z": float(r.z), "score": float(r.s)}); continue
+        out.append({"flight": segs[int(r.seg)].icao, "icao": segs[int(r.seg)].icao, "segment": int(r.seg),
+                    "pass_cpa_utc": float(r.t_heard), "harmonic": 1, "f0_hz": float(win.f0 * r.f0_scale),
+                    "shift_s": float(r.b - b), "clock": float(r.b), "score": float(r.s), "z": float(r.z)})
+    return out, voters
 
 
 def collective_find(sp: Spectrogram, wins: list[Window], traces, bbox, *, max_range_m=12000.0, c=None, elevation=None,
@@ -238,7 +249,7 @@ def collective_find(sp: Spectrogram, wins: list[Window], traces, bbox, *, max_ra
     if not len(pts_c):
         return dict(winner=None, counts=counts, walls=walls, reason="no point has a window above its null")
     zmax = float(pts_c.Z.max())
-    keep = pts_c[pts_c.Z >= KEEP_FRACTION * zmax]
+    keep = pts_c.sort_values("Z", ascending=False).head(KEEP_TOP)
     # the fine grid: FINE_M points inside each kept coarse cell
     k = int(round(COARSE_M / FINE_M))
     offs = (np.arange(k) - (k - 1) / 2) * FINE_M
@@ -265,8 +276,9 @@ def collective_find(sp: Spectrogram, wins: list[Window], traces, bbox, *, max_ra
         return dict(winner=None, counts=counts, walls=walls, reason="no fine point has a window above its null")
     pts_f = pts_f.sort_values("Z", ascending=False).reset_index(drop=True)
     w0 = pts_f.iloc[0]
+    matched, voters = matched_at(scored_f, int(w0.gidx), float(w0.b), segs, wins)
     winner = dict(lat=float(fine.lat[int(w0.gidx)]), lon=float(fine.lon[int(w0.gidx)]), Z=float(w0.Z), clock_audio_minus_unix=float(w0.b),
-                  n_matched=int(w0.n_matched), windows=matched_at(scored_f, int(w0.gidx), float(w0.b), segs, len(wins)))
+                  n_matched=int(w0.n_matched), windows=matched, voters=voters)
     modes, seen = [], []
     from .geo import haversine_m
     for r in pts_f.itertuples():

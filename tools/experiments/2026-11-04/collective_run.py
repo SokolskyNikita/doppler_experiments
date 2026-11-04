@@ -90,7 +90,7 @@ def main():
         shards.print_inputs(doc["cases"], doc["inputs"], [], tuple(doc["cache_kinds"]))
         return
     params = dict(units=UNITS, detect=DETECT, k=10, c="15 C", weather=False,
-                  collective=dict(coarse_m=2000, fine_m=200, keep_fraction=0.7, cluster_s=20, agree_s=6, null_n=1000))
+                  collective=dict(coarse_m=2000, fine_m=200, keep_top=5, cluster_s=20, agree_s=6, null_n=1000))
     run = shards.open_run(a.run, "collective-find", {"script": "tools/experiments/2026-11-04/collective_run.py", "params": params})
     units = shards.Units(run, UNITS, params, a.shard, a.resume)
     if not a.merge:

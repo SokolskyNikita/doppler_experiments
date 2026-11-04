@@ -12,7 +12,7 @@ def _synth_trace(icao, t, enu, lat0, lon0, gs):
     return Trace(icao, None, "C172", "synthetic", t, lat, lon, alt, np.full_like(t, gs), np.zeros(len(t), bool))
 
 
-def test_true_observer_ranks_first():
+def test_true_observer_ranks_first(monkeypatch):
     c = 340.0
     lat0, lon0 = 40.8765, -73.525
     sr = 4000
@@ -80,6 +80,7 @@ def test_true_observer_ranks_first():
     row = pipeline.relocate_row(row, segs2, ev2.t_cpa - ev1.t_cpa)
     assert segs2[int(row.seg1)].icao == "aaa001" and segs2[int(row.seg2)].icao == "aaa002"
     fine = pipeline.refine(sp, ev1, ev2, segs2, row, spacing_m=250.0, half_m=500.0, extra=[ev2], c=c, workers=1)
+    monkeypatch.setattr(pipeline, "SCORE_CHUNK", 5)            # several chunks, so two workers both get some
     pooled = pipeline.refine(sp, ev1, ev2, segs2, row, spacing_m=250.0, half_m=500.0, extra=[ev2], c=c, workers=2)
     pd.testing.assert_frame_equal(pooled, fine, check_exact=True)
     assert fine.attrs["extra_icao"] == ["aaa002"]

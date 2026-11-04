@@ -220,7 +220,7 @@ def run_search(sp: Spectrogram, ev1: EventFit, ev2: EventFit, traces: list[Trace
         scores = []
         t0 = time.time()
         try:
-            for part in ordered_map(_score_triples, tasks, resolve_jobs(workers), _set_score_state, (state,)):
+            for part in ordered_map(_score_triples, tasks, min(resolve_jobs(workers), max(len(tasks), 1)), _set_score_state, (state,)):
                 scores.extend(part)
                 if progress and len(scores) // 500 > (len(scores) - len(part)) // 500:
                     log(f"scored {len(scores)}/{len(pairs)} ({(time.time() - t0) / len(scores) * 1000:.0f} ms each)")
@@ -321,7 +321,7 @@ def refine(sp, ev1, ev2, segs, res_row, spacing_m=50.0, half_m=400.0, harmonics=
     tasks = [(g.lat[a:a + SCORE_CHUNK], g.lon[a:a + SCORE_CHUNK], g.elev[a:a + SCORE_CHUNK]) for a in range(0, len(g), SCORE_CHUNK)]
     rows = []
     try:
-        for part in ordered_map(_score_fine_points, tasks, resolve_jobs(workers), _set_score_state, (state,)):
+        for part in ordered_map(_score_fine_points, tasks, min(resolve_jobs(workers), max(len(tasks), 1)), _set_score_state, (state,)):
             rows.extend(part)
     finally:
         _SCORE_STATE.clear()

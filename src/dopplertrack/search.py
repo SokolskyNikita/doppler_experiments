@@ -192,8 +192,8 @@ def cpa_table(grid: Grid, segs: list[Segment], max_range_m: float = 10000.0, c: 
     (parallel.default_jobs() by default); the table is the same, byte for byte, for any number."""
     from .parallel import process_pool, resolve_jobs
     c = speed_of_sound() if c is None else c
-    workers = resolve_jobs(workers)
-    if workers == 1 or len(segs) <= 1:
+    workers = min(resolve_jobs(workers), max(len(segs), 1))    # no idle workers for a short list
+    if workers == 1:
         tree = cKDTree(grid.enu[:, :2])
         parts = [_segment_cpa(grid.enu, tree, s, max_range_m, c, chunk) for s in segs]
     else:

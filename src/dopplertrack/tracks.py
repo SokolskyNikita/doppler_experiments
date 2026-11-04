@@ -275,7 +275,6 @@ def detect_events(sp: Spectrogram, f_lo: float, f_hi: float, c: float | None = N
     (sweep-weighted ridge contrast, dB). Only finite scores strictly above
     min_score are returned, so the result may be empty. The default rejects zero
     evidence; a useful false-alarm threshold still needs calibration."""
-    workers = resolve_jobs(workers)
     if top < 1:
         raise ValueError("top must be at least 1")
     if not np.isfinite(min_score):
@@ -285,6 +284,7 @@ def detect_events(sp: Spectrogram, f_lo: float, f_hi: float, c: float | None = N
     d_grid = np.geomspace(400, 9000, 10) if d_grid is None else d_grid
     pad = 0.3 * (f_hi - f_lo)
     starts = np.arange(sp.t[0], max(sp.t[-1] - window_s, sp.t[0]) + 1e-9, step_s)
+    workers = min(resolve_jobs(workers), len(starts))         # no idle workers for a short recording
 
     def jobs():
         for t in starts:

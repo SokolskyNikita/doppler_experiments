@@ -202,7 +202,12 @@
    "labeller": "Claude (SDE-D session), from the contact sheets",
    "blind": true,
    "date": "2026-11-04",
-   "notes": "falling lines steepest near 1095-1100 s"
+   "notes": "falling lines steepest near 1095-1100 s",
+   "checked": {
+    "by": "the user, by eye, from the zoomed windows in runs/2026-11-04-blind-labels-spotcheck/spotcheck.html",
+    "date": "2026-11-04",
+    "verdict": "stands"
+   }
   },
   {
    "id": "e740-a06",

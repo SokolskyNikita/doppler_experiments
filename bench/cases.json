@@ -1124,7 +1124,7 @@
    "id": "eclipse-esid937",
    "version": 1,
    "group": "eclipse-esid937",
-   "set": "calibration",
+   "set": "evaluation",
    "expected_outcome": "not_located",
    "description": "Eclipse Soundscapes ESID 937: two continuous 12.4 h WAVs with a 2 s hole between them, from 05:40:21 UTC on 2024-04-07, no prop pass within 20 km all day: must abstain (gaps: docs/experiments/2026-11-03-gap-aware-spectrogram.md)",
    "runnable": {

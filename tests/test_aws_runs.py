@@ -332,31 +332,33 @@ def test_an_input_is_read_as_a_file_a_folder_or_missing():
         supervisor.input_kind("derived/missing.npz", "")
 
 
-def test_the_owner_clears_private_paths_and_cases_one_by_one(tmp_path, monkeypatch):
+def test_the_owner_clears_private_files_one_by_one(tmp_path, monkeypatch):
     import json
     monkeypatch.setattr(runs, "DATA_ROOT", tmp_path)
-    (tmp_path / "private").mkdir()
+    pilot = tmp_path / "private" / "traces" / "20261104-ha-pilot-2"
+    pilot.mkdir(parents=True)
+    (pilot / "area.npz").write_text("x")
+    (pilot / "area.log").write_text("x")
     (tmp_path / "bench").mkdir()
     (tmp_path / "bench" / "cases.json").write_text(json.dumps({"cases": [
         {"id": "seattle-home-20261104-ha-pilot-2", "private": True, "site": "seattle-home",
-         "audio": {"path": "private/audio/ha-pilot-2.flac"}, "spectrogram": "private/derived/ha-pilot-2/rec.npz"},
-        {"id": "seattle-home-other", "private": True, "audio": {"path": "private/audio/other.flac"}}]}))
+         "audio": {"path": "private/audio/ha-pilot-2.flac"}}]}))
     monkeypatch.setattr(runs, "REPO", tmp_path)
-    # nothing cleared: every private path and case is refused, as before
+    # nothing cleared: every private file and case is refused, as before
     with pytest.raises(SystemExit, match="fleet-allow"):
         runs.case_inputs(["seattle-home-20261104-ha-pilot-2"])
     with pytest.raises(SystemExit, match="private data"):
-        runs.refuse_private(["private/traces/20261104-ha-pilot-2"], "--input")
+        runs.refuse_private(["private/traces/20261104-ha-pilot-2/area.npz"], "--input")
     (tmp_path / "private" / "fleet-allow.txt").write_text(
-        "# cleared by the owner, 2026-11-04\nseattle-home-20261104-ha-pilot-2\nprivate/traces/20261104-ha-pilot-2/\n")
-    # exactly those entries: the case, its own files, and the listed folder (and what is inside it)
-    files = runs.case_inputs(["seattle-home-20261104-ha-pilot-2"])
-    assert files == ["private/audio/ha-pilot-2.flac", "private/derived/ha-pilot-2/rec.npz"]
-    runs.refuse_private(files, "--input", cleared=files)
-    runs.refuse_private(["private/traces/20261104-ha-pilot-2/area.jsonl"], "--input")
-    # and nothing else: another case, another session, a sibling folder
-    with pytest.raises(SystemExit, match="fleet-allow"):
-        runs.case_inputs(["seattle-home-other"])
-    for p in ("private/traces/20261104-ha-pilot", "private/traces/20261104-ha-pilot-3/a", "private/audio/other.flac"):
-        with pytest.raises(SystemExit, match="private data"):
-            runs.refuse_private([p], "--input", cleared=files)
+        "# each approved by name by the owner\nseattle-home-20261104-ha-pilot-2\n"
+        "private/traces/20261104-ha-pilot-2/area.npz\nprivate/traces/20261104-ha-pilot-2/\n")
+    # the case id permits the launch; its files still need their own lines
+    assert runs.case_inputs(["seattle-home-20261104-ha-pilot-2"]) == ["private/audio/ha-pilot-2.flac"]
+    with pytest.raises(SystemExit, match="private data"):
+        runs.refuse_private(["private/audio/ha-pilot-2.flac"], "--input")
+    # exactly the listed file passes; its unlisted sibling doesn't, and a listed folder never does
+    runs.refuse_private(["private/traces/20261104-ha-pilot-2/area.npz"], "--input")
+    with pytest.raises(SystemExit, match="private data"):
+        runs.refuse_private(["private/traces/20261104-ha-pilot-2/area.log"], "--input")
+    with pytest.raises(SystemExit, match="clears each file by name"):
+        runs.refuse_private(["private/traces/20261104-ha-pilot-2"], "--input")

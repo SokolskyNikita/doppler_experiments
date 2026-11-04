@@ -42,6 +42,10 @@ One counted retune is allowed, of the clock vote's cluster width.
 - Oyster Bay and its copy pass 1, with event 2 matched through ace391's own curve.
 - The eagle cam passes 1 only if its event 2's window earns z > 0 at the true clock, or if another window carries a336e4. I expect the latter to be unlikely, so it may land with a2baea and some other window.
 - The runtime is the open risk: the coarse stage's candidates are unbounded by any speed or distance gate.
+- **Against the verdict null, written before it is drawn.** A's saved-fit arm isn't met: against 50 other days' traffic, the eagle cam's own-day best pair Z (8.60) sits at the null's median, Oyster Bay's (19.96) is beaten by 3 of 50 days, and the WSW negative's best wrong answer (17.88) looks like Oyster Bay's truth.
+  - The statistic that has separated the eagle cam's true candidate from its 14.6 km rival is the frozen-clock count of extra flyovers, and Z summed over all windows at one clock generalises it. So it is the statistic with a chance.
+  - The two negatives already finished reach Z = 12.7 and 16.7, against the eagle cam's 17.2. So I expect the collective Z's own-day maxima to sit in the upper part of the other-day null at best, and not to clear γ on the eagle cam.
+  - If it doesn't clear, the record says so, and the evidence, not the threshold, is what gets rethought.
 
 ## A known-answer suite: turning and climbing passes (written before the run)
 

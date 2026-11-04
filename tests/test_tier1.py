@@ -160,3 +160,18 @@ def test_window_fits_are_cached_on_their_inputs(tmp_path, monkeypatch):
     assert tier1._fit_window(task)["fit"] == {"t_cpa": 1.0} and len(calls) == 1
     tier1._fit_window((0, 0, 1.0, 8.0, 100.0, 210.0, "brightness"))
     assert len(calls) == 2
+
+
+def test_false_alarms_are_per_hour_of_audio_that_can_hold_one():
+    # 0-600 s: the uncertain window (300-400) and a masked one overlapping it (350-450) take 150 s
+    windows = WINDOWS + [{"index": 4, "class": "masked", "start": 350.0, "end": 450.0, "lines": []}]
+    assert tier1.countable_hours((0.0, 600.0), windows) == pytest.approx(450 / 3600)
+
+
+def test_pooled_curves_sum_extras_over_spans_and_leave_matches_undefined_without_counted_windows():
+    absent = [{"index": 0, "class": "absent", "start": 0.0, "end": 1800.0, "lines": []}]
+    pool = tier1.pooled_curve([([det(100, 120, 2.0)], absent, 0.5), ([det(200, 120, 4.0), det(300, 90, 1.0)], absent, 0.5)])
+    by = {r["min_score"]: r for r in pool}
+    assert by[0.0]["extra"] == 3 and by[0.0]["extra_per_hour"] == pytest.approx(3.0)
+    assert by[2.0]["extra"] == 2 and by[4.0]["extra"] == 1
+    assert by[0.0]["matched"] is None and by[0.0]["missed"] is None

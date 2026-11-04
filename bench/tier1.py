@@ -73,7 +73,7 @@ def load_tier1(path=TIER1) -> dict:
     doc = json.loads(Path(path).read_text())
     problems = []
     for s in doc.get("spans", []):
-        for k in ("id", "labels", "set", "group", "spectrogram", "reference_case"):
+        for k in ("id", "labels", "set", "group", "family", "spectrogram", "reference_case"):
             if k not in s:
                 problems.append(f"span {s.get('id', '?')}: {k} is missing")
         if s.get("set") not in ("development", "calibration", "evaluation"):
@@ -254,6 +254,35 @@ def match(detections: list[dict], windows: list[dict], min_score: float = 0.0) -
     return out
 
 
+def countable_hours(span: tuple[float, float], windows: list[dict]) -> float:
+    """The audio that can hold a false alarm: the span less its uncertain, masked and outside-model windows."""
+    gone = sorted((max(w["start"], span[0]), min(w["end"], span[1])) for w in windows
+                  if w["class"] in EXCLUDED or (w["class"] in COUNTED and outside_model(w)))
+    lost, reach = 0.0, span[0]
+    for a, b in gone:
+        a = max(a, reach)
+        if b > a:
+            lost += b - a
+            reach = b
+    return max(span[1] - span[0] - lost, 0.0) / 3600.0
+
+
+def pooled_curve(units: list[tuple[list[dict], list[dict], float]]) -> list[dict]:
+    """The false-alarm table over several spans: at each detection score taken as the threshold, the summed
+    matches, misses and extras, and extras per countable hour of all of them. Matched and missed are None
+    when the pool has no counted window."""
+    hours = sum(h for _, _, h in units)
+    counted = any(w["class"] in COUNTED and not outside_model(w) for _, ws, _ in units for w in ws)
+    rows = []
+    for s in sorted({0.0, *(d["score"] for dets, _, _ in units for d in dets)}):
+        ms = [match(dets, ws, s) for dets, ws, _ in units]
+        extra = sum(m["extra"]["total"] for m in ms)
+        rows.append({"min_score": s, "extra": extra, "extra_per_hour": extra / hours if hours else None,
+                     "matched": sum(m[c]["matched"] for m in ms for c in COUNTED) if counted else None,
+                     "missed": sum(m[c]["missed"] for m in ms for c in COUNTED) if counted else None})
+    return rows
+
+
 def threshold_curve(detections: list[dict], windows: list[dict], hours: float) -> list[dict]:
     """The match counts at each detection score taken as the threshold: the false-alarm curve, as a table."""
     rows = []
@@ -261,7 +290,7 @@ def threshold_curve(detections: list[dict], windows: list[dict], hours: float) -
         m = match(detections, windows, s)
         rows.append({"min_score": s, "matched": sum(m[c]["matched"] for c in COUNTED),
                      "missed": sum(m[c]["missed"] for c in COUNTED), "extra": m["extra"]["total"],
-                     "extra_per_hour": m["extra"]["total"] / hours})
+                     "extra_per_hour": m["extra"]["total"] / hours if hours else None})
     return rows
 
 
@@ -367,10 +396,12 @@ def compare_span(out_dir: Path, read_labels, reference_context=None) -> dict:
     windows = [{"index": i, "class": w["class"], "start": float(w["start"]), "end": float(w["end"]),
                 "lines": w["lines"]} for i, w in enumerate(labels["windows"])]
     dets = record["detections"] if isinstance(record["detections"], list) else []
-    hours = (record["span"]["end"] - record["span"]["start"]) / 3600.0
+    hours = countable_hours((record["span"]["start"], record["span"]["end"]), windows)
     entry["detection"] = match(dets, windows)
-    entry["detection"]["extra_per_hour"] = entry["detection"]["extra"]["total"] / hours
+    entry["detection"].update(countable_hours=hours, span_hours=(record["span"]["end"] - record["span"]["start"]) / 3600,
+                              extra_per_hour=entry["detection"]["extra"]["total"] / hours if hours else None)
     entry["detection_curve"] = threshold_curve(dets, windows, hours)
+    entry["_pool"] = (dets, windows, hours)          # for run_tier1's pooled curves; not written
     if reference_context is None:
         entry["fits"] = entry["association"] = unavailable("no trajectory reference was given for this span")
     else:
@@ -518,7 +549,18 @@ def reference_context(span: dict, labels: dict):
     return traces, np.array([0.0, 0.0, elev]), lat, lon, t0, speed_of_sound()
 
 
+BACKGROUND_FAMILIES = ("essex", "aerosonicdb")      # recordings with nothing to find (PLAN 5.1 negatives)
 BUDGET_S = 180.0      # PLAN 5.4: Tier 1 under 3 min; a span or case joins only if the whole run stays under it
+
+
+def build_spans(sets=("development",), log=print) -> list[str]:
+    """Make each missing derived file of the spans in these sets from its recipe, and check every hash."""
+    from .cases import build
+    bad = []
+    for s in load_tier1()["spans"]:
+        if s["set"] in sets and s.get("derived"):
+            bad += build(s, log=log)
+    return bad
 
 
 def run_tier1(sets=("development",), run_dir: Path | None = None, log=print, workers: int | None = None) -> Path:
@@ -558,9 +600,18 @@ def run_tier1(sets=("development",), run_dir: Path | None = None, log=print, wor
     span_entries = []
     for s in ready:
         labels = json.loads(resolve(s["labels"]).read_text())
-        span_entries.append({**compare_span(run_dir / "spans" / s["id"], lambda labels=labels: labels,
-                                            lambda s=s, labels=labels: reference_context(s, labels)),
-                             "set": s["set"], "group": s["group"]})
+        ref = (lambda s=s, labels=labels: reference_context(s, labels)) if s.get("reference_case") else None
+        span_entries.append({**compare_span(run_dir / "spans" / s["id"], lambda labels=labels: labels, ref),
+                             "set": s["set"], "group": s["group"], "family": s["family"]})
+    # pooled false-alarm tables: per group, per family, and over the background families together
+    pools, units = {}, {e["span"]: e.pop("_pool") for e in span_entries if "_pool" in e}
+    for kind, key in (("group", "group"), ("family", "family")):
+        for name in sorted({e[key] for e in span_entries}):
+            members = [e["span"] for e in span_entries if e[key] == name and e["span"] in units]
+            pools[f"{kind} {name}"] = {"spans": members, "curve": pooled_curve([units[m] for m in members])}
+    background = [e["span"] for e in span_entries if e["family"] in BACKGROUND_FAMILIES and e["span"] in units]
+    if background:
+        pools["background"] = {"spans": background, "curve": pooled_curve([units[m] for m in background])}
     kp_entries = []
     for cid in doc["known_point"]:
         case = latest_case(cid)
@@ -574,7 +625,7 @@ def run_tier1(sets=("development",), run_dir: Path | None = None, log=print, wor
     wall = time.perf_counter() - t0
     results = {"schema": 1, "tier": "t1", "code": code, "knobs": KNOBS, "sets": list(sets),
                "created": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
-               "spans": span_entries, "known_point": kp_entries, "skipped": skipped,
+               "spans": span_entries, "pooled": pools, "known_point": kp_entries, "skipped": skipped,
                "timings_s": {k: round(v, 2) for k, v in timings.items()}, "wall_s": round(wall, 2),
                "within_budget": wall < BUDGET_S, "budget_s": BUDGET_S}
     (run_dir / "results.json").write_text(json.dumps(results, indent=1, sort_keys=True) + "\n")

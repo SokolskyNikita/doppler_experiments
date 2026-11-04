@@ -2,7 +2,7 @@
 
 <!-- index
 question: Does aligning waveform cycles over 6 s or 18 s, rather than nine 2 s blocks or today's curve score, recover weak real flyovers at a fixed false-alarm rate when the detector also picks the flight?
-outcome: Pending: both gates failed narrowly on Gumbel thresholds that don't fit real background (KS 0.11-0.35); the one retune (empirical tail, 0.5 dB grid) reruns them
+outcome: Not decided: both gates failed again after the one retune (C9 over C1 6.0 dB synthetic against 4.8+-1; C9 over C1 2.0 dB on real clips against +-1), so the blind test never ran; C9 led C1 throughout and today's curve score trailed
 -->
 
 ## Question and criterion
@@ -62,3 +62,53 @@ things, and nothing else.
   gate criteria and the test rule.
 - **Then:** the gates rerun. If both pass, the settings freeze and the test set runs. If either fails, the record says
   so, and nothing more is spent.
+
+## The gates after the retune
+
+- **Code:** `4f44d40`.
+- **Units:** 496, on 10 × 4xlarge spot, in `runs/2026-11-04-coherent-duration-gates-retune-s<k>of10/`; judged in
+  `runs/2026-11-04-coherent-duration-gates-retune-judge/`.
+- **Thresholds:** the empirical 1 − 1/200 point of all 419 calibration segments, with levels on a 0.5 dB grid.
+
+| | Criterion | Result |
+|---|---|---|
+| Gate 1 | median L80(C1) − L80(C9) = 4.8 ± 1 dB, and L80(C3) − L80(C9) = 3.0 ± 1 dB | **fail**: 6.0 dB and 4.25 dB |
+| Gate 2 | median L80(C9) − L80(C1) within ±1 dB | **fail**: −2.0 dB, on the 5 passes where both reach 80 % |
+
+**L80 per pass, in dB:**
+
+| Pass | Synthetic: C1 / C3 / C9 / T | Real clip, assisted: C1 / C3 / C9 / T |
+|---|---|---|
+| N373DF_R06 | −9.0 / −10.0 / −12.0 / −1.5 | 4.5 / 5.5 / 4.5 / – |
+| N4004R_R19 | −3.0 / −5.0 / −9.0 / 0.0 | 3.0 / 3.5 / 3.0 / 2.5 |
+| N60RS_R11 | −2.0 / −4.0 / −9.0 / 1.5 | – / – / 6.0 / – |
+| N61NG_R37 | −3.5 / −5.5 / −11.0 / 1.0 | – / – / 4.0 / 5.5 |
+| N662EZ_R48 | −3.5 / −9.5 / −13.0 / 3.0 | 3.5 / 1.0 / 1.0 / 4.5 |
+| N784MB_R04 | −3.5 / −5.5 / −9.5 / 0.5 | 0.5 / 1.5 / −1.5 / 4.0 |
+| N795MM_R13 | −5.5 / −7.0 / −11.5 / 0.0 | – / – / – / – |
+| N913TC_R15 | −11.0 / −11.5 / −16.0 / −4.0 | 6.0 / – / 3.0 / 4.5 |
+
+A dash means 80 % wasn't reached even at the grid's top, +6 dB.
+- **The empirical thresholds sit well above the Gumbel's,** because the tails are heavy. So every method needs more
+  power than in the first run, and on three real clips C1 never reaches 80 %.
+- **C9 leads.** It is ahead of or level with C1 on every pass in both modes. Today's curve score, T, trails C1 by about
+  4 dB on the synthetic tone.
+- **Gate 1's target was probably the wrong theory.** +4.8 dB is the weak-signal law for adding nine powers (√9). At a
+  strict false-alarm rate (P = 1/200 per window, after a search over pitch bins) and P_D = 0.8, adding blocks
+  incoherently loses more than that law (Kay II, §5.3–5.4).
+  - The steady 6 dB here, and Codex's 5 dB on its own synthetic, are consistent with that.
+  - This doesn't pass the gate, which was fixed before the run. It is the reason a successor would derive gate 1's
+    target at the operating point, not from the weak-signal law.
+
+## Outcome
+
+**Not decided.** Both gates failed after the one counted retune, so under the proposal the blind test on the 19 passes
+never ran, and nothing more is spent.
+- **Under the decision line,** no 6 s or 18 s scorer earns a test on the locator's shortlist from this experiment.
+- **What it does show, from the gates alone (not the decision rule):**
+  - With the true flight and clock supplied, one 18 s coherent block recovers real passes at a median 2 dB less added
+    power than nine 2 s blocks.
+  - Today's curve score is the weakest of the four on a synthetic tone.
+  - A null drawn from background audio needs an empirical tail.
+- **A successor proposal would need:** gate 1's target derived at the operating point; a level grid reaching above
+  +6 dB for the real clips; and the same blind test.

@@ -65,3 +65,14 @@ pulled folder.
 **Checked here.**
 - The Alaska driver ran 2 crossings as two shards plus a merge (`runs/2026-11-04-alaska-shards-smoke/`).
 - The turn model's synth, fit and profile stages ran here as units (`runs/2026-11-04-turn-model-{synth,fit,profile}/`). Two boot units ran as shard 1/20 of a one-replicate job (`runs/2026-11-04-turn-model-boot-smoke/`).
+
+**Collective null, SWFL and Essex (the first design's statistic).**
+- **The NY smoke unit** (oyster-bay--null--2026-07-10) read clean at Z 22.84 in 31 min. The shard was then cancelled, before any held NY draw.
+- **The PM's option 2.** The 95 SWFL and Essex draws were launched as `collective_run.py --null --null-cases eagle-cam-clip-18000s,xenocanto-xc990819` at a225ac8, whose `collective.py` is 40454ae's, on 24 × 8xlarge.
+- **decision:** whether the eagle cam's 0.5 km find under the first design clears γ, and whether Essex's negative stays below it. The NY draws wait for the second design.
+
+**Collective find, second design: the coarse stage (`collective-coarse-v2`).**
+- **decision:** the second design step's cap and the fine stage's launch ([record](../../../docs/experiments/2026-11-04-collective-find.md), "A design step, written before the next rerun").
+  - Each case's whole coarse map at ±25 % gives the true cell's rank and the margin rule's kept count.
+  - The highest kept cell's fine stage gives the per-cell time the PM asked for before the fine stage launches.
+- **Units:** "<case>--cell0", one per case, 8 in all. Shard 1 (oyster-bay) runs first as the smoke shard. 8xlarge.

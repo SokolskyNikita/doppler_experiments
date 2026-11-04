@@ -10,12 +10,14 @@ References: our adsb.lol tar cut (derived/oyster_bay/traces_ny.npz, derived/swfl
 for Livermore, the author's KML (positions only). Traces come from the fixed adsbfetch's rows in traces2/
 (fetched per source into separate caches; tools/data/adsbfetch_to_npz.from_fixed_rows), to the millisecond.
 
-usage: uv run python tools/experiments/2026-11-04/adsbfetch_compare.py "$RUN"
+usage: uv run python tools/experiments/2026-11-04/adsbfetch_compare.py "$RUN" [--adsbx DIR]
+  --adsbx DIR: also adsbx's rows from DIR/traces2/, a row of their own and a "union with adsbx" beside the
+  free mirrors' union
 """
+import argparse
 import csv
 import importlib.util
 import json
-import sys
 from datetime import date
 from pathlib import Path
 
@@ -68,7 +70,19 @@ def stats(t, lat, lon, tc, ref=None):
     return out
 
 
-def main(run: Path):
+def union_rows(got, adsbx, **row):
+    """The free mirrors' union, and with adsbx's trace too when there is one."""
+    free = [tr for src, tr in got if src != "adsbx"]
+    out = [dict(row, source="mirror union", tr=conv.merge(free))] if free else []
+    if any(src == "adsbx" for src, _ in got):
+        out.append(dict(row, source="union with adsbx", tr=conv.merge([tr for _, tr in got])))
+    return out
+
+
+def main(run: Path, adsbx: Path | None = None):
+    folders = {src: run / "traces2" for src in MIRRORS}
+    if adsbx:
+        folders["adsbx"] = adsbx / "traces2"
     rows = []
     for site, hex_, day, cut_path, point in DEV:
         cut = [tr for tr in load_traces(cut_path) if tr.icao == hex_]
@@ -80,15 +94,15 @@ def main(run: Path):
         ref = (ct, clat, clon)
         rows.append(dict(site=site, hex=hex_, source="adsblol-tar (our cut)", tc=tc, **stats(ct, clat, clon, tc)))
         got = []
-        for src in MIRRORS:
-            tr = mirror(hex_, day, src, run / "traces2")
+        for src, folder in folders.items():
+            tr = mirror(hex_, day, src, folder)
             if tr is None:
                 rows.append(dict(site=site, hex=hex_, source=src, tc=tc, points=0, error="no track")); continue
-            got.append(tr)
+            got.append((src, tr))
             rows.append(dict(site=site, hex=hex_, source=src, tc=tc, **stats(tr.t, tr.lat, tr.lon, tc, ref)))
-        u = conv.merge(got)
-        rows.append(dict(site=site, hex=hex_, source="mirror union", tc=tc, **stats(u.t, u.lat, u.lon, tc, ref)))
-        uc = conv.merge(got + cut)
+        for r in union_rows(got, adsbx, site=site, hex=hex_, tc=tc):
+            u = r.pop("tr"); rows.append(dict(r, **stats(u.t, u.lat, u.lon, tc, ref)))
+        uc = conv.merge([tr for src, tr in got if src != "adsbx"] + cut)
         rows.append(dict(site=site, hex=hex_, source="union with our cut", tc=tc, **stats(uc.t, uc.lat, uc.lon, tc, ref)))
     audit_rows = {r["id"]: r for r in csv.DictReader(open(DATA / "runs/2026-11-04-livermore-audit/passes.csv"))}
     nn_spec = importlib.util.spec_from_file_location("nn", REPO / "tools/data/nnumber.py")
@@ -102,15 +116,14 @@ def main(run: Path):
         ref = (kt, klat, klon)
         rows.append(dict(site="livermore", hex=hex_, id=pid, source="KML (author)", tc=tc, **stats(kt, klat, klon, tc)))
         got = []
-        for src in MIRRORS:
-            tr = mirror(hex_, day, src, run / "traces2")
+        for src, folder in folders.items():
+            tr = mirror(hex_, day, src, folder)
             if tr is None:
                 rows.append(dict(site="livermore", hex=hex_, id=pid, source=src, tc=tc, points=0, error="no track")); continue
-            got.append(tr)
+            got.append((src, tr))
             rows.append(dict(site="livermore", hex=hex_, id=pid, source=src, tc=tc, **stats(tr.t, tr.lat, tr.lon, tc, ref)))
-        if got:
-            u = conv.merge(got)
-            rows.append(dict(site="livermore", hex=hex_, id=pid, source="mirror union", tc=tc, **stats(u.t, u.lat, u.lon, tc, ref)))
+        for r in union_rows(got, adsbx, site="livermore", hex=hex_, id=pid, tc=tc):
+            u = r.pop("tr"); rows.append(dict(r, **stats(u.t, u.lat, u.lon, tc, ref)))
     keys = list(dict.fromkeys(k for r in rows for k in r))
     with open(run / "compare_flights.csv", "w", newline="") as fh:
         w = csv.DictWriter(fh, fieldnames=keys); w.writeheader(); w.writerows(rows)
@@ -121,4 +134,6 @@ def main(run: Path):
 
 
 if __name__ == "__main__":
-    main(Path(sys.argv[1]))
+    ap = argparse.ArgumentParser(); ap.add_argument("run", type=Path); ap.add_argument("--adsbx", type=Path)
+    a = ap.parse_args()
+    main(a.run, a.adsbx)

@@ -3,6 +3,7 @@
 # (tools/experiments/2026-11-04/cloud_jobs.md). Run from the repo root with `runs` on dev:
 #   tools/experiments/2026-11-04/sde_b_cloud.sh launch   seed the new derived files, start every job
 #   tools/experiments/2026-11-04/sde_b_cloud.sh collect  pull, merge the shards, compare, render the reports
+#   tools/experiments/2026-11-04/sde_b_cloud.sh collect-locate  the same for jobs 1 and 2 only, as soon as they finish
 # BASELINE is the commit before the case bump (legacy cuts, station temperatures): job 3 runs there, from a worktree
 # outside the repo, and job 4 runs the bumped cases at HEAD. Both must be clean commits.
 set -euo pipefail
@@ -50,6 +51,18 @@ shards() {   # the run folders of one sharded job, as runs pull leaves them
   for k in $(seq 1 "$n"); do echo "$DATA/runs/$DAY-$topic-s${k}of$n"; done
 }
 
+collect_locate() {   # jobs 1 and 2 first: they decide step A and the pair rule, so they don't wait for the rest
+  for t in locate-t2-off locate-t2-on; do
+    for job in $(shards "$t" "$LOCATE_CASES"); do $RUNS pull "$(basename "$job")"; done
+  done
+  local off on
+  off=$(uv run python tools/data/new_run.py locate-t2-off-merged); uv run python -m bench merge "$off" $(shards locate-t2-off "$LOCATE_CASES")
+  on=$(uv run python tools/data/new_run.py locate-t2-on-merged); uv run python -m bench merge "$on" $(shards locate-t2-on "$LOCATE_CASES")
+  uv run python -m bench compare "$off" "$on" > "$on/compare-silence-off-on.txt"
+  for r in "$off" "$on"; do uv run python -m bench report "$r"; done
+  echo "locate off: $off"; echo "locate on: $on"
+}
+
 collect() {
   for t in locate-t2-off:$LOCATE_CASES locate-t2-on:$LOCATE_CASES savedfit-legacy-cut:$FIT_CASES \
            savedfit-margin-cut:$FIT_CASES tier1-cold:$T1_UNITS; do
@@ -66,4 +79,4 @@ collect() {
   echo "locate off: $OFF"; echo "locate on: $ON"; echo "saved-fit legacy: $LEG"; echo "saved-fit margin: $CUT"; echo "tier1: $T1"
 }
 
-"$@"
+cmd=${1//-/_}; shift; "$cmd" "$@"

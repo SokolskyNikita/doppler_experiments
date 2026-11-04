@@ -68,4 +68,40 @@ flights over a narrower f0 sweep than the candidates got, which biases Z upward.
 `93a5c4d` (a test reproduces the first), and A1/A3 were rerun from it. The B1/B2 run (`a50edfa`) doesn't
 score triples, so neither fix touches it, and it stands.
 
-Pending.
+**B1 and B2, first run** (`runs/2026-11-04-hypotheses-b1b2/`, `a50edfa`): **not met.**
+
+| Case, event | B1 (true flight admitted within 250 m) | admitted rows, against today's gates | hypotheses |
+|---|---|---|---|
+| Oyster Bay, 1 | yes, via fit_event | 673,107 / 16,722,629 | ls (v 80–101), fit_event (v 137–143) |
+| Oyster Bay, 2 | **no**: true 103.5 m/s, k 2.99 | 257,529 / 13,292,417 | ls (v 86–91, k 3.31–4.09), fit_event (v 79–82, k 3.25–4.81) |
+| degraded, 1 | **no**: v range 137–143 against true 136.8 | 633,396 / 16,692,860 | as Oyster Bay |
+| degraded, 2 | **no** | 360,733 / 13,300,417 | as Oyster Bay |
+| eagle cam, 1 | yes, via both sources | 289,456 / 6,912,926 | ls, fit_event |
+| eagle cam, 2 | yes, via fit_event | **35,809,547 / 11,186,276** (B2 fails) | ls, fit_event, and a fit_event optimum weak in all four |
+
+- **B1.** The ranges sit on the biased fit (E1) and are too narrow to reach the truth. Today's ±35 % box does reach it.
+- **B2.** It fails only where one fit_event optimum, flat in every profile, widened to every bound and so
+  admitted the whole table. Elsewhere the hypotheses admit 20–60× fewer rows than today.
+
+**The one retune, written before its rerun** (agreed with the PM, counted). One change, in two parts:
+1. **Thresholds scaled for model error.** A profile of a misspecified model measures spread about the
+   model's best approximation, not distance to the truth (White 1982). SDE-D measured that distance at
+   2.8–3.2× the information bound in slant range, on Livermore's trajectory curves
+   ([model-error](2026-11-04-model-error.md)), not on these cases.
+   - Taking the middle, a factor of 3, and the profile thresholds' quadratic scale, every parameter's
+     threshold is multiplied by 3² = 9: LS 3.84 × 3 × 9 residual variances, brightness 2 × 9 null sigmas.
+   - The ranges then are the "sensitivity ranges" PLAN calls them until the objective is a calibrated
+     likelihood.
+2. **The weak-hypothesis rule.** A hypothesis weak in v, k and τ together is dropped as uninformative. An
+   event left with no hypotheses admits rows as today's gates do (±35 % speed, 0.4–2.5× distance).
+
+**Expectation, before the rerun:**
+- Oyster Bay event 2's fit_event range widens about 3× and reaches about 103 m/s, so B1 holds there.
+- B2 keeps a wide margin everywhere.
+- The degraded copy's event 1 is uncertain either way.
+- The eagle cam's event 2 is handled by the weak-hypothesis rule.
+- If B1 still fails on any event, stage B is recorded not met with no further change. The next lever is
+  then item 2's turn model or item 8, not another factor.
+
+The A1/A3 rerun from `45d0bd8` stands as the comparable-score result regardless. If the retune passes B1
+and B2, A1/A3 run once more on the widened hypotheses, and both are reported.

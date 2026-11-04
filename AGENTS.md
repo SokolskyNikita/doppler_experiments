@@ -15,6 +15,11 @@ Doppler curves of propeller aircraft. `README.md` explains the method; `PLAN.md`
   - `DOPPLERTRACK_CACHE` (default `~/.cache/dopplertrack`): regenerable files. The code already keeps
     terrain tiles there; CPA tables go in `cpa/`.
   - In the main checkout `data` is a symlink to `$DOPPLERTRACK_DATA`. In a worktree, use the variable.
+- Long jobs run on AWS, one spot box per job in us-west-2, not on the shared Mac: `tools/aws/runs launch
+  <topic> --case ID -- <command>` ships the branch (bundle plus diff, nothing pushed), runs it with `$RUN`
+  set, and `runs pull` brings the run folder back; `runs dev run -- tools/check.sh` uses the dev box.
+  Profile `dopplertrack`; costs, inputs and the bucket's layout are in [tools/aws/README.md](tools/aws/README.md).
+  Run `tools/aws/check.sh` before any `cdk deploy`.
 
 ## Tests
 

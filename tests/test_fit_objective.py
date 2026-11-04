@@ -44,3 +44,15 @@ def test_fit_cli_defaults_to_brightness(tmp_path, monkeypatch):
     cli.main(["fit", str(spec), "--window", "100", "140", "--band", "100", "150"])
     cli.main(["fit", str(spec), "--window", "100", "140", "--band", "100", "150", "--objective", "contrast"])
     assert seen == ["brightness", "contrast"]
+
+
+def test_a_band_with_nothing_to_search_gives_a_weak_fit():
+    """A band too narrow for its fundamental range (f_lo*1.15 >= f_hi*0.85) returns a weak fit, not an error."""
+    sp = _uniform()
+    for f_lo, f_hi in ((140, 150), (414, 450)):
+        ev = fit_event(sp, 100, 140, f_lo, f_hi, c=340.0)
+        assert ev.weak and "no fundamental" in ev.weak and not np.isfinite(ev.score) and np.isnan(ev.f0)
+    assert fit_event(sp, 140, 100, 100, 150, c=340.0).weak            # an empty window
+    ok = fit_event(sp, 100, 140, 100, 150, c=340.0)
+    assert ok.weak is None and "weak" not in ok.to_dict()             # a fit's JSON is unchanged
+    assert EventFit(**ok.to_dict()) == ok and EventFit(**ev.to_dict()).weak == ev.weak

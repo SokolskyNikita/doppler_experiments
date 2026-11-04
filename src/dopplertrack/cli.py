@@ -144,6 +144,9 @@ def main(argv=None):
                          "reported beside it")
     lo.add_argument("--no-silence", action="store_true",
                     help="turn off the silence filter (on by default in locate, at 6 km)")
+    lo.add_argument("--start", metavar="ISO_UTC", help="the recording's stated start time, e.g. 2024-12-28T19:21:16Z; "
+                    "with --start-tolerance, a pair whose clock disagrees by more is dropped")
+    lo.add_argument("--start-tolerance", type=float, metavar="S", help="how far the stated start may be off, in seconds")
     lo.add_argument("--band", nargs=2, type=float, default=(60.0, 300.0), metavar=("FLO", "FHI"))
     lo.add_argument("--spacing", type=float, default=200.0)
     lo.add_argument("--no-dem", action="store_true")
@@ -298,6 +301,12 @@ def _locate(a, c_kw):
     from .audio import cached_spectrogram
     from .cache import cache_root
     from .result import write_record
+    if (a.start is None) != (a.start_tolerance is None):
+        raise SystemExit("--start and --start-tolerance go together")
+    start_utc = None
+    if a.start is not None:
+        import datetime
+        start_utc = datetime.datetime.fromisoformat(a.start.replace("Z", "+00:00")).timestamp()
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
     if str(a.audio).endswith(".npz"):
@@ -318,7 +327,8 @@ def _locate(a, c_kw):
             traces.append(str(path))
     box = "_".join(f"{x:g}" for x in a.bbox)
     cfg = loc.LocateConfig(band_hz=tuple(a.band), spacing_m=a.spacing, max_range_m=a.max_range,
-                           silence_d_m=None if a.no_silence else loc.DEFAULT_SILENCE_D_M, pair_rule=a.pair_rule, dem=not a.no_dem,
+                           silence_d_m=None if a.no_silence else loc.DEFAULT_SILENCE_D_M, pair_rule=a.pair_rule,
+                           start_utc=start_utc, start_tol_s=a.start_tolerance, dem=not a.no_dem,
                            c=c_kw.get("c"), temperature_c=a.temperature, workers=a.jobs, envelope=a.assume_envelope,
                            cpa_cache=str(cache_root() / "cpa" / "locate" / f"{a.date}-days{a.days}-{box}-{a.spacing:g}m.npz"))
     os.makedirs(Path(cfg.cpa_cache).parent, exist_ok=True)

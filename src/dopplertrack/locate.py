@@ -58,6 +58,8 @@ class LocateConfig:
     workers: int | None = None
     cpa_cache: str | None = None
     envelope: list[list[float]] | None = None  # a declared coverage box per trace file, for files without metadata
+    start_utc: float | None = None             # the recording's stated start (unix s) and its stated tolerance: a pair
+    start_tol_s: float | None = None           # whose clock puts the start further off than tolerance + tol_s is dropped
     extra: dict = field(default_factory=dict)  # anything else for the record's parameters
 
 
@@ -121,10 +123,30 @@ def _search(sp, ev1, ev2, traces, grid, cfg: LocateConfig, meta, bbox, comparabl
     c_kw = _air(cfg)
     if cfg.cpa_cache:             # a fresh cache root (a fleet box) has no folder for the table or its lock yet
         Path(cfg.cpa_cache).parent.mkdir(parents=True, exist_ok=True)
-    return pipeline.run_search(sp, ev1, ev2, traces, grid, harmonics=(1, 1), tol_s=cfg.tol_s, v_tol=cfg.v_tol,
-                               d_tol=tuple(cfg.d_tol), silence_d_m=cfg.silence_d_m, max_range_m=cfg.max_range_m,
-                               progress=False, cpa_cache=cfg.cpa_cache, trace_metadata=meta, search_bbox=tuple(bbox),
-                               workers=cfg.workers, triples=triples, comparable=comparable, **c_kw)
+    res, segs = pipeline.run_search(sp, ev1, ev2, traces, grid, harmonics=(1, 1), tol_s=cfg.tol_s, v_tol=cfg.v_tol,
+                                    d_tol=tuple(cfg.d_tol), silence_d_m=cfg.silence_d_m, max_range_m=cfg.max_range_m,
+                                    progress=False, cpa_cache=cfg.cpa_cache, trace_metadata=meta,
+                                    search_bbox=tuple(bbox), workers=cfg.workers, triples=triples,
+                                    comparable=comparable, **c_kw)
+    return clock_gate(res, ev1, cfg), segs
+
+
+def clock_gate(res, ev1, cfg: LocateConfig):
+    """Drop every triple whose clock puts the recording's start further from the stated start than its stated
+    tolerance plus the search's own time tolerance. A triple's score depends only on its own events, flights and
+    clock (and comparable's Z on each event's own null), so dropping triples after scoring leaves exactly the
+    candidates a gate before scoring would. The counts go into the search's funnel as clock_gate."""
+    if cfg.start_utc is None or not len(res):
+        return res
+    start = res["t_heard1"].to_numpy(float) - ev1.t_cpa - res["shift"].to_numpy(float)
+    keep = np.abs(start - cfg.start_utc) <= float(cfg.start_tol_s or 0.0) + cfg.tol_s
+    out = res[keep].reset_index(drop=True)
+    out.attrs = dict(res.attrs)
+    out.attrs["funnel"] = {**res.attrs.get("funnel", {}),
+                           "clock_gate": {"before": int(len(res)), "after": int(keep.sum()),
+                                          "start_utc": cfg.start_utc, "tolerance_s": cfg.start_tol_s,
+                                          "tol_s": cfg.tol_s}}
+    return out
 
 
 def _usable_extras(sp, row, extras, segs, cfg: LocateConfig, elevation):
@@ -311,7 +333,8 @@ def locate(spec_path, date: str, bbox, trace_paths, cfg: LocateConfig | None = N
     if not len(bp):
         rec["refined"] = unavailable("no candidate survived the search")
         return finish("insufficient_evidence", ["no_surviving_candidate"],
-                      [f"no candidate survived the gates{'' if cfg.silence_d_m is None else ' and the silence filter'}"])
+                      [f"no candidate survived the gates{'' if cfg.silence_d_m is None else ', the silence filter'}"
+                       f"{'' if cfg.start_utc is None else ' and the stated start time'}"])
 
     # 4. candidates, the clock, and the recording's UTC span against the flight data's
     for i, row in enumerate(bp.itertuples(), 1):

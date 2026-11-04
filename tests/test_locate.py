@@ -159,3 +159,23 @@ def test_the_defaults_are_comparable_with_the_silence_filter_on(monkeypatch, spe
     assert [r["rule"] for r in out.record["pair_rules"]] == ["comparable"]
     assert len(calls) == 3 and all(k["comparable"] and k["silence_d_m"] == 6000.0 for k in calls)  # 3 events: 3 pairs
     assert out.record["verdict"]["reason_codes"] == ["winner_only_refined"]
+
+
+def test_a_stated_start_time_drops_every_pair_whose_clock_disagrees(monkeypatch, spec, tmp_path):
+    _detections(monkeypatch, [_event(1000, 5.0), _event(2000, 4.0)])
+    _search_returning(monkeypatch, DAY0 + 72000.0)                 # clock: audio 0 at DAY0 + 71000
+    ok = _run(spec, [_traces(tmp_path)], tmp_path, start_utc=DAY0 + 71030.0, start_tol_s=60.0)
+    assert ok["outcome"] == "ambiguous"                             # 30 s off, inside 60 s
+    far = _run(spec, [_traces(tmp_path)], tmp_path, start_utc=DAY0 + 71100.0, start_tol_s=60.0)
+    assert far["reason_codes"] == ["no_surviving_candidate"] and "stated start time" in far["reasons"][0]
+    edge = _run(spec, [_traces(tmp_path)], tmp_path, start_utc=DAY0 + 71065.0, start_tol_s=60.0)
+    assert edge["outcome"] == "ambiguous"                           # 65 s: inside 60 s plus the search's 6 s
+
+
+def test_the_clock_gate_counts_what_it_drops():
+    import pandas as pd
+    res = pd.DataFrame({"t_heard1": [1000.0, 1100.0, 1300.0], "shift": [0.0, 0.0, 0.0], "score": [3.0, 2.0, 1.0]})
+    res.attrs["funnel"] = {"scored": 3}
+    out = locate.clock_gate(res, _event(100.0, 5.0), locate.LocateConfig(start_utc=900.0, start_tol_s=60.0))
+    assert list(out.t_heard1) == [1000.0] and out.attrs["funnel"]["clock_gate"]["after"] == 1
+    assert out.attrs["funnel"]["scored"] == 3

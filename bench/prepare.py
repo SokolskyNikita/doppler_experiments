@@ -15,8 +15,12 @@ import time
 def prepare_case(case_id: str, use_weather: bool = False, workers: int | None = None, log=print) -> dict:
     from .cases import latest_case
     from .runner import private_cache
+    from .cases import is_private
     case = latest_case(case_id)
     case.pop("labels", None)                       # never read: this is preparation, not a run
+    if is_private(case):
+        from .private import resolve_case
+        case = resolve_case(case)
     with private_cache(case):
         return _prepare(case, use_weather, workers, log)
 

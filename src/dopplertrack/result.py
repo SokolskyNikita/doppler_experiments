@@ -165,6 +165,13 @@ SCHEMA_V2 = {**SCHEMA_V1,
                                          "top_score": Maybe(NUMBER), "margin_pct": Maybe(NUMBER),
                                          "wall_s": NUMBER, "chosen": bool}))}
 SCHEMAS = {1: SCHEMA_V1, 2: SCHEMA_V2}
+# A private case's record (bench/private.py): candidates and the refined point as east and north offsets in metres from
+# the case's site, never latitude and longitude; chosen by the record's own "frame".
+OFFSET = {"east": NUMBER, "north": NUMBER}
+_REL_CANDIDATE = {k: v for k, v in CANDIDATE.items() if k not in ("lat", "lon")} | {"offset_m": OFFSET}
+_REL_REFINED = {k: v for k, v in SCHEMA_V1["refined"].spec.items() if k not in ("lat", "lon")} | {"offset_m": OFFSET}
+SCHEMA_V2_SITE_RELATIVE = {**SCHEMA_V2, "frame": OneOf("site-relative"), "site": str,
+                           "candidates": ListOf(_REL_CANDIDATE), "refined": Maybe(_REL_REFINED)}
 
 
 def _check(value, spec, where: str, problems: list[str]):
@@ -212,7 +219,8 @@ def validate(record) -> None:
     if version not in SCHEMAS:
         raise RecordError([f"schema_version: {version!r} is not one of {sorted(SCHEMAS)}"])
     problems: list[str] = []
-    _check(record, SCHEMAS[version], "record", problems)
+    schema = SCHEMA_V2_SITE_RELATIVE if version == 2 and record.get("frame") == "site-relative" else SCHEMAS[version]
+    _check(record, schema, "record", problems)
     if problems:
         raise RecordError(problems)
 

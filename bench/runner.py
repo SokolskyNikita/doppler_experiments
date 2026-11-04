@@ -136,15 +136,23 @@ def pick_detected(detected: list[dict]) -> list[dict]:
     return sorted(top, key=lambda d: d["t_cpa"])
 
 
-def sound_speed(case: dict) -> tuple[dict, dict]:
+WEATHER_KEY = "use_case_weather"     # the run setting (`bench run --weather`) that applies a case's station reading
+
+
+def sound_speed(case: dict, use_weather: bool = False) -> tuple[dict, dict]:
     """The case's speed of sound for the event fits and detection, as keyword arguments ({} keeps the pipeline's
-    15 C default untouched), and the record's account of it. With a station temperature, the geometry gives each
-    flight its own speed from its height (geometry_kw)."""
+    15 C default untouched), and the record's account of it. A case's station temperature is used only when the
+    run asks for it (use_weather, `bench run --weather`); otherwise it is recorded and the 15 C default stands. With
+    it, the geometry gives each flight its own speed from its height (geometry_kw)."""
     from dopplertrack.doppler import speed_of_sound
     w = case.get("weather") or {}
     t = w.get("temperature_c")
-    if t is None:
-        return {}, {"c_m_s": speed_of_sound(), "temperature_c": None, "basis": "the pipeline's default, 15 C"}
+    if t is None or not use_weather:
+        rec = {"c_m_s": speed_of_sound(), "temperature_c": None, "basis": "the pipeline's default, 15 C"}
+        if t is not None:
+            rec.update(basis="the pipeline's default, 15 C: the case's station reading is not used unless the run "
+                             "sets use_case_weather (bench run --weather)", case_temperature_c=t, use_case_weather=False)
+        return {}, rec
     c = speed_of_sound(t)
     return {"c": c}, {"c_m_s": c, "temperature_c": t,
                       "basis": "the ground temperature for the fits; for the geometry each flight's own speed at its "
@@ -153,10 +161,17 @@ def sound_speed(case: dict) -> tuple[dict, dict]:
                       "station_distance_km": w.get("station_distance_km"), "observed_utc": w.get("observed_utc")}
 
 
-def geometry_kw(case: dict) -> dict:
+def cpa_cache_path(case: dict, use_weather: bool = False) -> Path:
+    """The case's CPA table. A run that applies the case's temperature builds a different table (the sound speed is in
+    its fingerprint), so it gets its own file, <name>_weather.npz, and switching the setting never rebuilds either."""
+    p = resolve(case["search"]["cpa_cache"])
+    return p.with_name(f"{p.stem}_weather{p.suffix}") if sound_speed(case, use_weather)[0] else p
+
+
+def geometry_kw(case: dict, use_weather: bool = False) -> dict:
     """run_search, refine and pick_flight's speed-of-sound keywords: the fits' c, and with a station temperature
-    temperature_c, so each flight's propagation uses its own height."""
-    c_kw, rec = sound_speed(case)
+    the run uses, temperature_c, so each flight's propagation uses its own height."""
+    c_kw, rec = sound_speed(case, use_weather)
     return {**c_kw, "temperature_c": rec["temperature_c"]} if c_kw else {}
 
 
@@ -231,6 +246,7 @@ class Draft:
         assert "labels" not in case, "the runner must be given the blind case"
         self.case, self.code, self.stage, self.errors = case, code, Stages(log), []
         overrides = dict(overrides or {})
+        weather = bool(overrides.pop(WEATHER_KEY, False))
         fixed = sorted(set(overrides) & set(FIXED_BY_CASE))
         if fixed:
             raise ValueError(f"--search-param can't override {fixed}: they define the case's CPA table")
@@ -240,9 +256,12 @@ class Draft:
         s = self.search
         self.harmonics = list(overrides["harmonics"]) if "harmonics" in overrides else search_harmonics(case, profile)
         self.params = {"profile": profile, "profile_settings": PROFILES[profile], "search": s, "refine": case["refine"],
-                       "search_overrides": overrides, "events": case["events"], "search_harmonics": self.harmonics,
-                       "speed_of_sound_m_s": sound_speed(case)[1]["c_m_s"], "speed_of_sound": sound_speed(case)[1]}
-        self.c_kw, self.geo_kw = sound_speed(case)[0], geometry_kw(case)
+                       "search_overrides": {**overrides, **({WEATHER_KEY: True} if weather else {})},
+                       "events": case["events"], "search_harmonics": self.harmonics,
+                       "speed_of_sound_m_s": sound_speed(case, weather)[1]["c_m_s"],
+                       "speed_of_sound": sound_speed(case, weather)[1]}
+        self.c_kw, self.geo_kw = sound_speed(case, weather)[0], geometry_kw(case, weather)
+        self.cpa_cache = cpa_cache_path(case, weather)
         self.inputs, self.caches, self.events, self.candidates = [], [], [], []
         self.refined = unavailable("the search did not run")
         self.funnel = {k: unavailable("the search did not run") for k in (
@@ -424,7 +443,7 @@ def execute_case(case: dict, case_dir: Path, log=print, code: dict | None = None
             traces, meta = draft.load_flight_data()
         with stage("grid"):
             grid = Grid.make(*s["bbox"], s["spacing_m"], terrain.elevation if terrain else None)
-        cache_path = resolve(s["cpa_cache"])
+        cache_path = draft.cpa_cache
         cache_path.parent.mkdir(parents=True, exist_ok=True)
         triples: dict = {}
         with stage("search"):
@@ -507,15 +526,16 @@ def execute_case_at(case: dict, case_dir: Path, rev, log=print, code: dict | Non
     stage, s, rf = draft.stage, case["search"], case["refine"]
     harmonics = search_harmonics(case, profile)
     try:
-        if set(overrides or {}) - {"tol_s"}:
+        weather = bool((overrides or {}).get(WEATHER_KEY, False))
+        if set(overrides or {}) - {"tol_s", WEATHER_KEY}:
             raise ValueError(f"{rev.short}'s CLI takes only tol_s of the search overrides, not "
                              f"{sorted(set(overrides) - {'tol_s'})}")
         if overrides:
             draft = Draft(case, draft.code, profile, log, overrides)
             stage, s = draft.stage, draft.search
         verify(rev)
-        if sound_speed(case)[0]:
-            raise ValueError(f"{rev.short}'s CLI has no temperature input; this case sets one")
+        if sound_speed(case, weather)[0]:
+            raise ValueError(f"{rev.short}'s CLI has no temperature input; this run applies the case's")
         bad = {k: s[k] for k, v in FIXED_IN_CLI.items() if s[k] != v}
         if bad or s["silence_d_m"] not in (6000.0, None):
             raise ValueError(f"{rev.short}'s CLI can't take {bad or {'silence_d_m': s['silence_d_m']}}")
@@ -726,16 +746,17 @@ def execute_case_locate(case: dict, case_dir: Path, log=print, code: dict | None
     from dopplertrack import locate as loc
     assert "labels" not in case, "the runner must be given the blind case"
     overrides = dict(overrides or {})
-    unknown = set(overrides) - {"pair_rule", "silence_d_m"}
+    weather = bool(overrides.get(WEATHER_KEY, False))
+    unknown = set(overrides) - {"pair_rule", "silence_d_m", WEATHER_KEY}
     s = case["search"]
-    paths, envelope, cpa_cache = locate_flight_data(case, str(resolve(s["cpa_cache"])))
+    paths, envelope, cpa_cache = locate_flight_data(case, str(cpa_cache_path(case, weather)))
     cfg = loc.LocateConfig(spacing_m=s["spacing_m"], max_range_m=s["max_range_m"], tol_s=s["tol_s"], v_tol=s["v_tol"],
                            d_tol=tuple(s["d_tol"]), silence_d_m=overrides.get("silence_d_m"),
-                           pair_rule=overrides.get("pair_rule", "top2"), dem=s["dem"], c=sound_speed(case)[0].get("c"),
-                           temperature_c=sound_speed(case)[1]["temperature_c"],
+                           pair_rule=overrides.get("pair_rule", "top2"), dem=s["dem"], c=sound_speed(case, weather)[0].get("c"),
+                           temperature_c=sound_speed(case, weather)[1]["temperature_c"],
                            refine_spacing_m=case["refine"]["spacing_m"], refine_half_m=case["refine"]["half_m"],
                            cpa_cache=cpa_cache, envelope=envelope,
-                           extra={"search_overrides": overrides, "speed_of_sound": sound_speed(case)[1]})
+                           extra={"search_overrides": overrides, "speed_of_sound": sound_speed(case, weather)[1]})
     record = None
     try:
         if unknown:

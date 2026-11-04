@@ -239,19 +239,64 @@ def launch(a) -> str:
     s3.upload_file(str(HERE / "box" / "supervisor.py"), bucket, f"jobs/{job}/supervisor.py")
     put_status(s3, bucket, job, {"job": job, "state": "submitted", "updated": now()})
     ec2 = session().client("ec2")
-    resp = ec2.create_fleet(**fleet_request(out, job, a.size, a.on_demand))
-    ids = [i for inst in resp.get("Instances", []) for i in inst.get("InstanceIds", [])]
+    ids, errs = start_box(ec2, out, job, a.size, a.on_demand)
+    if not ids and not a.on_demand and not a.spot_only:     # no spot capacity anywhere: on demand, not a wait
+        print(f"{job}: no spot capacity ({errs}); launching on demand", flush=True)
+        ids, errs = start_box(ec2, out, job, a.size, True)
     if not ids:
-        errs = "; ".join(f"{e.get('ErrorCode')}: {e.get('ErrorMessage')}" for e in resp.get("Errors", []))
         put_status(s3, bucket, job, {"job": job, "state": "failed", "stage": "launch", "error": errs,
                                      "updated": now()})
         sys.exit(f"no capacity for {job}: {errs}")
     ec2.get_waiter("instance_exists").wait(InstanceIds=ids)     # describe lags create_fleet by a moment
     desc = ec2.describe_instances(InstanceIds=ids)["Reservations"][0]["Instances"][0]
-    print(f"{job}: {ids[0]} {desc['InstanceType']} {desc['Placement']['AvailabilityZone']} "
-          f"{desc.get('InstanceLifecycle', 'on-demand')}, commit {code['git_commit'][:7]}"
-          f"{' (dirty)' if code['git_dirty'] else ''}")
+    market = desc.get("InstanceLifecycle", "on-demand")
+    price = hourly_price(desc["InstanceType"], desc["Placement"]["AvailabilityZone"], market)
+    s3.put_object(Bucket=bucket, Key=f"jobs/{job}/launch.json", Body=json.dumps(
+        {"instance_id": ids[0], "instance_type": desc["InstanceType"], "market": market,
+         "availability_zone": desc["Placement"]["AvailabilityZone"], "usd_per_hour": price,
+         "ebs_usd_per_hour": JOB_EBS_USD_PER_HOUR, "launched": now()}, indent=1).encode())
+    print(f"{job}: {ids[0]} {desc['InstanceType']} {desc['Placement']['AvailabilityZone']} {market} "
+          f"${price:.3f}/h, commit {code['git_commit'][:7]}{' (dirty)' if code['git_dirty'] else ''}")
     return job
+
+
+# the job box's 200 GB gp3 root with 6,000 IOPS and 500 MB/s, us-west-2: (200 x 0.08 + 3000 x 0.005 + 375 x 0.04) / 730 h
+JOB_EBS_USD_PER_HOUR = 0.063
+
+
+def start_box(ec2, out: dict, job: str, size: str, on_demand: bool) -> tuple[list[str], str]:
+    resp = ec2.create_fleet(**fleet_request(out, job, size, on_demand))
+    ids = [i for inst in resp.get("Instances", []) for i in inst.get("InstanceIds", [])]
+    return ids, "; ".join(f"{e.get('ErrorCode')}: {e.get('ErrorMessage')}" for e in resp.get("Errors", []))
+
+
+def hourly_price(itype: str, az: str, market: str) -> float:
+    """The box's price now: the spot price in its AZ, or the on-demand list price."""
+    sess = session()
+    if market == "spot":
+        h = sess.client("ec2").describe_spot_price_history(
+            InstanceTypes=[itype], AvailabilityZone=az, ProductDescriptions=["Linux/UNIX"], MaxResults=1)
+        return float(h["SpotPriceHistory"][0]["SpotPrice"])
+    pricing = sess.client("pricing", region_name="us-east-1")
+    f = [{"Type": "TERM_MATCH", "Field": k, "Value": v} for k, v in (
+        ("instanceType", itype), ("regionCode", REGION), ("operatingSystem", "Linux"), ("tenancy", "Shared"),
+        ("preInstalledSw", "NA"), ("capacitystatus", "Used"))]
+    item = json.loads(pricing.get_products(ServiceCode="AmazonEC2", Filters=f)["PriceList"][0])
+    od = next(iter(item["terms"]["OnDemand"].values()))
+    return float(next(iter(od["priceDimensions"].values()))["pricePerUnit"]["USD"])
+
+
+def job_cost(s3, bucket: str, job: str, st: dict) -> str:
+    """The box's cost so far (or in all, once the job has ended), from its launch price and run time."""
+    try:
+        launch = json.loads(s3.get_object(Bucket=bucket, Key=f"jobs/{job}/launch.json")["Body"].read())
+    except s3.exceptions.NoSuchKey:
+        return ""
+    t0 = datetime.datetime.fromisoformat(launch["launched"])
+    t1 = datetime.datetime.fromisoformat(st["finished"]) if st.get("finished") else datetime.datetime.now().astimezone()
+    hours = max(0.0, (t1 - t0).total_seconds() / 3600)
+    usd = hours * (launch["usd_per_hour"] + launch["ebs_usd_per_hour"])
+    return f"${usd:.2f} ({launch['instance_type']} {launch['market']}, {hours * 60:.0f} min)"
 
 
 # ---- following a job -----------------------------------------------------------------------------------
@@ -282,14 +327,16 @@ def status(a) -> None:
     bucket = outputs()["Bucket"]
     s3 = session().client("s3")
     if a.job:
-        print(json.dumps(get_status(s3, bucket, a.job), indent=1))
+        st = get_status(s3, bucket, a.job)
+        print(json.dumps({**st, "cost": job_cost(s3, bucket, a.job, st)}, indent=1))
         return
     pages = s3.get_paginator("list_objects_v2").paginate(Bucket=bucket, Prefix="jobs/", Delimiter="/")
+    print(f"{'job':45s} {'state':12s} {'updated':26s} cost")
     for page in pages:
         for p in page.get("CommonPrefixes", []):
             job = p["Prefix"].split("/")[1]
             st = get_status(s3, bucket, job)
-            print(f"{job:45s} {st.get('state', '?'):12s} {st.get('stage', '') or ''} {st.get('updated', '')}")
+            print(f"{job:45s} {st.get('state', '?'):12s} {st.get('updated', ''):26s} {job_cost(s3, bucket, job, st)}")
 
 
 def wait(a) -> dict:
@@ -369,6 +416,7 @@ def pull(a) -> None:
             print(f"runs/{name} exists here; pulling into runs/{local}")
         aws_cli("s3", "sync", "--only-show-errors", f"s3://{bucket}/runs/{name}/", str(DATA_ROOT / "runs" / local))
         print(f"runs/{local}")
+    print(f"cost: {job_cost(s3, bucket, a.job, st)}")
     if st.get("cache_delta"):
         body = s3.get_object(Bucket=bucket, Key=st["cache_delta"])["Body"].read()
         print(f"cache: {merge_cache_delta(body, CACHE_ROOT)} new entries")
@@ -531,7 +579,8 @@ def fetch_sources(a) -> None:
     key = f"plans/{datetime.datetime.now():%Y%m%d-%H%M%S}-fetch.json"
     s3.put_object(Bucket=bucket, Key=key, Body=json.dumps({"files": plan}, indent=1).encode())
     a.topic, a.case, a.input, a.cache, a.jobs = "aws-fetch-sources", [], [], [], None
-    a.on_demand, a.max_hours, a.checkpoint_minutes, a.wait = False, 6, 5, False
+    a.on_demand, a.spot_only, a.max_hours, a.checkpoint_minutes, a.wait = False, False, 6, 5, False
+    a.resume, a.repo, a.shards, a.shard = None, None, 1, None
     a.command = ["python3", "tools/aws/box/fetch_sources.py", f"s3://{bucket}/{key}", bucket]
     launch(a)
 
@@ -650,6 +699,8 @@ def main(argv=None) -> None:
     la.add_argument("--jobs", type=int, help="DOPPLERTRACK_JOBS on the box (default: its physical cores)")
     la.add_argument("--size", default="16xlarge", help="instance size of every family (default: 16xlarge)")
     la.add_argument("--on-demand", action="store_true", help="on-demand instead of spot, for deciding runs")
+    la.add_argument("--spot-only", action="store_true", help="fail rather than fall back to on-demand when no "
+                    "spot capacity is free")
     la.add_argument("--max-hours", type=float, default=12, help="stop the command after this long (default: 12)")
     la.add_argument("--checkpoint-minutes", type=float, default=10, help="upload the run folders this often")
     la.add_argument("--repo", help="ship this checkout instead of the one runs is in (e.g. a worktree at another commit)")

@@ -224,7 +224,7 @@ def trajectory_reference(traces, icao: str, observer_enu, lat0, lon0, t0_unix: f
     """Layer 3 for one flight (PLAN 5.3): what the observer should hear from its trace, in audio seconds.
     The heard CPA, the steepest fall of the modelled curve, and the slant range and ground speed at CPA, from
     the segment whose heard CPA lies nearest near_audio_s. None if the flight has no segment in range."""
-    from dopplertrack.score import modelled_curve
+    from dopplertrack.score import modelled_curve, steepest_fall
     from dopplertrack.search import build_segments
     best = None
     for seg in build_segments([t for t in traces if t.icao == icao], lat0, lon0):
@@ -234,18 +234,22 @@ def trajectory_reference(traces, icao: str, observer_enu, lat0, lon0, t0_unix: f
             continue
         heard = seg.t[j] + r[j] / c - t0_unix
         if best is None or abs(heard - near_audio_s) < abs(best["t_heard_cpa_s"] - near_audio_s):
+            # placed like the search's own steepest-fall check: within ±60 s of the emission CPA, smoothed
             t_obs, ratio = modelled_curve(seg, observer_enu, c)
-            ok = np.isfinite(ratio) & np.isfinite(t_obs)
-            slope = np.gradient(ratio[ok], t_obs[ok]) if ok.sum() > 2 else np.array([np.nan])
-            steep = float(t_obs[ok][int(np.nanargmin(slope))] - t0_unix) if np.isfinite(slope).any() else None
+            sf = steepest_fall(t_obs, ratio, float(seg.t[j]))
+            steep = None if sf is None else float(sf - t0_unix)
             best = {"t_heard_cpa_s": float(heard), "t_steepest_fall_s": steep, "slant_range_m": float(r[j]),
                     "ground_speed_m_s": float(seg.speed[j])}
     return best
 
 
-def fit_errors(fit: dict, ref: dict) -> dict:
+def fit_errors(fit: dict, ref: dict, c: float) -> dict:
+    """A fit against layer 3; steepest falls are placed by the same function on both sides."""
+    from dopplertrack.pipeline import fitted_steepest_fall
+    from dopplertrack.tracks import EventFit
+    sf = fitted_steepest_fall(EventFit(**fit), c)
     return {"dt_heard_s": fit["t_cpa"] - ref["t_heard_cpa_s"],
-            "dt_steepest_s": None if ref["t_steepest_fall_s"] is None else fit["t_cpa_emit"] - ref["t_steepest_fall_s"],
+            "dt_steepest_s": None if ref["t_steepest_fall_s"] is None or sf is None else sf - ref["t_steepest_fall_s"],
             "df0_pct": 100 * (fit["f0"] - ref["f0_hz"]) / ref["f0_hz"],
             "dv_m_s": fit["v"] - ref["ground_speed_m_s"], "dd_m": fit["d"] - ref["slant_range_m"]}
 
@@ -274,13 +278,13 @@ def score_fits(record: dict, windows: list[dict], associations: list[dict], refe
             rows.append({**row, "errors": unavailable("the flight has no segment with a CPA in range")})
             continue
         ref["f0_hz"] = line_f0(line)
-        row["objectives"] = {f["objective"]: (fit_errors(f["fit"], ref) if "unavailable" not in f["fit"] else f["fit"])
+        row["objectives"] = {f["objective"]: (fit_errors(f["fit"], ref, c) if "unavailable" not in f["fit"] else f["fit"])
                              for f in fits if f["window"] == w["index"] and f["line"] == a["line"]}
         on_line = [d for d in dets if w["start"] - slack <= d["t_cpa"] <= w["end"] + slack
                    and _line_match(d["f0"], [line])]
         if on_line:
             d = max(on_line, key=lambda d: d["score"])
-            e = fit_errors(d, ref)
+            e = fit_errors(d, ref, c)
             row["detection"] = e
             # agreement with the flight: f0 checked against the line at any harmonic ratio, like matching
             ratio_ok = any(abs(d["f0"] * k - ref["f0_hz"]) <= KNOBS["association_df"] * ref["f0_hz"]

@@ -160,7 +160,8 @@ def pull_inputs(bucket: str, inputs: list[str], data: Path) -> None:
     for rel in inputs:
         rel = rel.strip("/")
         dest = data / rel
-        listing = s5("ls", f"s3://{bucket}/data/{rel}", check=False, capture=True).stdout
+        # without --log error: s5cmd prints a listing at its info level, so s5() would get nothing back
+        listing = subprocess.run(["s5cmd", "ls", f"s3://{bucket}/data/{rel}"], capture_output=True, text=True).stdout
         if input_kind(rel, listing) == "file":
             dest.parent.mkdir(parents=True, exist_ok=True)
             s5("cp", f"s3://{bucket}/data/{rel}", str(dest))

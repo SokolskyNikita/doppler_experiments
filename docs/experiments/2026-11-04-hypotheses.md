@@ -1,5 +1,10 @@
 # Event hypotheses instead of gates
 
+<!-- index
+question: Can each event's own hypotheses (optima with profile ranges in v, k, tau and f0) replace the speed, distance and f0 gates, keeping the true flights at no more candidates (item 7, stage B)?
+outcome: Not met: the first run kept every true flight but Oyster Bay event 2's at 20-60x fewer rows; its one retune lost B1 on every case, since 9x the brightness threshold left every fit_event hypothesis uninformative
+-->
+
 ## Question and criterion
 
 PLAN Phase 2, item 7, stage B. Can each event's own hypotheses replace the search's independent speed, distance

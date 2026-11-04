@@ -78,4 +78,69 @@ as much as the sweep and the contrast objective weights the sweep but scores an 
 
 ## Results
 
-Pending.
+Script: [`lsfit_compare.py`](../../tools/experiments/2026-11-04/lsfit_compare.py). Outputs in
+`$DOPPLERTRACK_DATA/runs/2026-11-04-least-squares-fit/`.
+
+**Run 1, set aside as a bug.** `ridge_track` padded its band by 30 % on each side, copying `fit_event`'s
+crop. But `fit_event` keeps its curve inside the band and `ridge()` takes the strongest path through
+whatever it is given, so it locked onto lines outside the stated band: 100–148 Hz on R06 for a 156–344 Hz
+band. The least-squares f0 errors came out at a median 33 %.
+- This broke the criterion's own definition ("the same window and band"). The fix (`51f59ce`) crops the
+  band exactly, is tested without real data (a strong line just outside the band), and changes no knob.
+- So it isn't counted as the retune. Run 1's outputs are kept as `run1_padded_band_*`.
+
+Before run 2 was read, `t_c` was reparametrised relative to the track's first point (`cfd466a`), after
+SDE-D found least squares stopping early on unix-scale times. Refitting all 44 tracks of run 2 with both
+versions changed no parameter by more than 2 × 10⁻¹³ relative or 10⁻¹¹ s (`lsfit_reparam_check.py`,
+`reparam_check.json`), so run 2 stands.
+
+**Run 2, Livermore.** Median absolute relative error against the reference. A fit whose speed falls
+outside 0 < v < c has no distance and counts as an infinite error:
+
+| | f0 | speed | slant range | not identified |
+|---|---|---|---|---|
+| 29 primary passes | | | | |
+| brightness | **1.13 %** | 9.8 % | 18.6 % | – |
+| contrast | 1.28 % | 12.3 % | 27.1 % | – |
+| least squares | 1.70 % | 9.6 % | 16.7 % | 2 |
+| least squares, weighted | 1.34 % | **6.7 %** | **15.2 %** | 2 |
+| 11 flagged passes | | | | |
+| brightness | 3.1 % | 21.6 % | 9.1 % | – |
+| contrast | 3.3 % | 17.2 % | 15.4 % | – |
+| least squares | 10.3 % | 61.4 % | 78.2 % | 2 |
+| least squares, weighted | 12.5 % | 63.7 % | 92.8 % | 5 |
+
+- **Criterion 1: not met.** Both variants beat both objectives on speed and slant range, but neither on f0.
+- **Residuals.** OLS residuals call for no robust loss: no primary pass has more than 2 % of points beyond
+  4 robust SDs.
+- **Speed and distance are strongly coupled**, as 6.1 says: the median speed–distance correlation is 0.96
+  (OLS) and 0.98 (weighted) on the primary passes.
+- **The two failures** (R12, R45) fit a rising curve (v < 0), with f0 12–23 % low. `ridge()` followed
+  another line in the band; the fit then did what it was given.
+- **The flagged passes** are far worse than either objective, not merely no better. `ridge()` wanders on
+  manoeuvring passes (15 % median frequency error in [freqtrack](2026-11-04-freqtrack.md)), and a track
+  that leaves the pass drags the whole-curve fit with it.
+
+**Run 2, development recordings.** Heard-CPA gap error, event 2 against event 1, with both events fitted
+by the same method. True gaps: 922.96 s and 331.61 s.
+
+| | Oyster Bay | Eagle cam |
+|---|---|---|
+| brightness | −5.0 s | +29.8 s |
+| contrast | −9.0 s | +6.3 s |
+| least squares | +16.8 s | +27.5 s |
+| least squares, weighted | no heard CPA (v < 0 on event 2) | no heard CPA (v < 0 on event 2) |
+
+- **Criterion 2: not met** on either recording.
+- **Event 2's OLS fits are slow and close on both recordings:** 52 m/s at 457 m, and 42 m/s at 424 m.
+  Their weighted fits rise. In windows of 110–240 s holding other tones, `ridge()` follows the strongest
+  path, and the weights favour exactly the stronger, wrong line.
+
+**Outcome: not met. The estimator is right; the track is the limit.**
+- **The estimator.** It recovers noiseless passes exactly and matches the full four-parameter fit (tests).
+  SDE-D's item 2 independently finds a straight-pass fit at the Cramér–Rao bound, with model error, not the
+  estimator, setting what real passes allow.
+- **Prediction.** On the straight passes the prediction held for speed and distance, not for f0. On the
+  flagged passes and the development recordings it was too kind: there the fit is only as good as
+  `ridge()`'s track, and `ridge()` leaves the pass.
+- **Not spent.** The one allowed retune is not spent here (see the report).

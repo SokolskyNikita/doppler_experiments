@@ -66,10 +66,21 @@ PRIVATE_PREFIXES = ("private/", "incoming/", "raw/seattle-home/")
 DAY_TRACE = re.compile(r"derived/traces/\d{4}-\d{2}-\d{2}(\.log|/.*)?")
 
 
+# the owner's recorder sessions, by name: seed refuses to run while one sits under derived/traces/ outside the
+# allow list (private/seed-allow.txt), even though the day-trace rule already keeps it out
+RECORDER_SESSION = re.compile(r"2026\d{4}-(ha-)?(pilot|selftest|speakertest|subtest|coexist|latency)")
+
+
+def listed(name: str) -> list[str]:
+    """Lines of a file under private/ (comments and blanks dropped); a missing file is an empty list."""
+    f = DATA_ROOT / "private" / name
+    return [l.strip() for l in f.read_text().splitlines() if l.strip() and not l.startswith("#")] if f.exists() else []
+
+
 def private_prefixes() -> tuple[str, ...]:
-    listed = DATA_ROOT / "private" / "fleet-exclude.txt"
-    extra = tuple(l.strip().strip("/") + "/" for l in listed.read_text().splitlines()
-                  if l.strip() and not l.startswith("#")) if listed.exists() else ()
+    """PRIVATE_PREFIXES plus the owner's deny list, private/exclude.txt (one data-root prefix per line; read at
+    every upload, so a prefix needs no code change; fleet-exclude.txt is read too)."""
+    extra = tuple(p.strip("/") + "/" for p in listed("exclude.txt") + listed("fleet-exclude.txt"))
     return PRIVATE_PREFIXES + extra
 
 
@@ -80,8 +91,25 @@ def is_private(rel: str) -> bool:
     return rel.startswith("derived/traces/") and not DAY_TRACE.fullmatch(rel)
 
 
+def fleet_allow() -> set[str]:
+    """What the owner has cleared for the fleet, each approved by name: private/fleet-allow.txt, one exact file
+    path (relative to the data root) or case id per line. A missing file clears nothing; the default stays refuse."""
+    return {e.strip("/") for e in listed("fleet-allow.txt")}
+
+
+def owner_allowed(rel: str) -> bool:
+    """rel is listed in fleet-allow.txt exactly, and is a file: a folder, or a path inside a listed one, is never
+    cleared (the owner approves each file by name; PM, 2026-11-04)."""
+    rel = rel.strip("/")
+    return rel in fleet_allow() and not (DATA_ROOT / rel).is_dir()
+
+
 def refuse_private(paths, what: str) -> None:
-    bad = [p for p in paths if is_private(p)]
+    """Exits on a private path unless the owner cleared that exact file."""
+    bad = [p for p in paths if is_private(p) and not owner_allowed(p)]
+    if bad and (DATA_ROOT / bad[0].strip("/")).is_dir():
+        sys.exit(f"{what} {bad[0]}: a private folder never goes as a whole; the owner clears each file by name in "
+                 "private/fleet-allow.txt, and each goes as its own --input")
     if bad:
         sys.exit(f"{what} {bad[0]}: private data (the owner's home recordings and what is derived from them) never "
                  "goes to the fleet or the bucket; it is processed on the Mac only")
@@ -176,9 +204,9 @@ def case_inputs(case_ids: list[str]) -> list[str]:
         if cid not in cases:
             sys.exit(f"no case {cid!r} in bench/cases.json")
         c = cases[cid]
-        if c.get("private") or c.get("site"):
-            sys.exit(f"--case {cid}: a private case (its site's coordinates and audio stay on the Mac) never goes to "
-                     "the fleet")
+        if (c.get("private") or c.get("site")) and cid not in fleet_allow():
+            sys.exit(f"--case {cid}: a private case (its site's coordinates and audio stay on the Mac) goes to the "
+                     "fleet only when the owner lists it in private/fleet-allow.txt")
         traces = c.get("flight_data", {}).get("traces")          # one file, or one per UTC day
         paths = [c.get("audio", {}).get("path"), c.get("spectrogram"),
                  *([traces] if isinstance(traces, str) else traces or [])]
@@ -273,6 +301,12 @@ def seed_run_inputs(s3, bucket: str, inputs: list[str]) -> None:
     them or they changed; data/ inputs come from the seed."""
     refuse_private(inputs, "input")
     for rel in inputs:
+        if is_private(rel):          # owner-allowed (refuse_private let it through): goes up from here, like a run
+            src = DATA_ROOT / rel
+            if not src.exists():
+                sys.exit(f"--input {rel}: not in {DATA_ROOT}")
+            aws_cli("s3", "cp", "--only-show-errors", str(src), f"s3://{bucket}/data/{rel}")     # a file, by owner_allowed
+            continue
         if rel.startswith("runs/"):
             src = DATA_ROOT / rel
             if not src.exists():
@@ -329,7 +363,12 @@ def launch(a) -> str:
     a.input = a.input + [check_run_input(p) for p in getattr(a, "input_run", None) or []]
     inputs = case_inputs(a.case) + [p for p in a.input if p not in case_inputs(a.case)]
     inputs = list(dict.fromkeys(inputs))
-    refuse_private(inputs, "input")
+    refuse_private(inputs, "input")      # a cleared case's files each need their own line too
+    private_job = getattr(a, "private", False) or any(is_private(i) for i in inputs) or \
+        any(cid in fleet_allow() for cid in a.case)
+    if private_job:
+        for entry in [i for i in inputs if is_private(i)] + [c for c in a.case if c in fleet_allow()]:
+            print(f"allowed by the owner (private/fleet-allow.txt): {entry}", flush=True)
     for p in inputs:
         if is_run_path(p):
             check_run_input(p)
@@ -345,7 +384,7 @@ def launch(a) -> str:
             if (DATA_ROOT / "runs" / job).exists():
                 continue
             spec = {"job": job, "run": prior["run"] if prior else job, "topic": a.topic,
-                    "resume_of": a.resume, "shard": getattr(a, "shard", None), "command": command, "inputs": inputs,
+                    "resume_of": a.resume, "shard": getattr(a, "shard", None), "private": private_job, "command": command, "inputs": inputs,
                     "caches": caches, "jobs": a.jobs, "max_hours": a.max_hours,
                     "checkpoint_minutes": a.checkpoint_minutes, "size": a.size,
                     "market": "on-demand" if a.on_demand else "spot", "submitted": now(),
@@ -571,13 +610,14 @@ def wait(a) -> dict:
         time.sleep(15)
 
 
-def free_local(name: str) -> str:
+def free_local(name: str, root: Path | None = None) -> str:
     """name, or name-2, -3, ... if a run folder of that name already exists here (never write into one)."""
-    if not (DATA_ROOT / "runs" / name).exists():
+    root = root or DATA_ROOT / "runs"
+    if not (root / name).exists():
         return name
     m = re.fullmatch(r"(.*?)-(\d+)", name)
     base, n = (m.group(1), int(m.group(2)) + 1) if m else (name, 2)
-    while (DATA_ROOT / "runs" / f"{base}-{n}").exists():
+    while (root / f"{base}-{n}").exists():
         n += 1
     return f"{base}-{n}"
 
@@ -627,12 +667,17 @@ def pull(a) -> None:
         own = json.loads(s3.get_object(Bucket=bucket, Key=f"jobs/{a.job}/spec.json")["Body"].read())["run"]
     except s3.exceptions.NoSuchKey:
         own = a.job
+    try:
+        private_job = json.loads(s3.get_object(Bucket=bucket, Key=f"jobs/{a.job}/spec.json")["Body"].read()).get("private")
+    except s3.exceptions.NoSuchKey:
+        private_job = False
+    runs_root = DATA_ROOT / "private" / "runs" if private_job else DATA_ROOT / "runs"
     for name in st.get("run_folders") or [own]:
-        local = name if name == own and same_run(DATA_ROOT / "runs" / name) else free_local(name)
+        local = name if name == own and same_run(runs_root / name) else free_local(name, runs_root)
         if local != name:
             print(f"runs/{name} exists here; pulling into runs/{local}")
-        aws_cli("s3", "sync", "--only-show-errors", f"s3://{bucket}/runs/{name}/", str(DATA_ROOT / "runs" / local))
-        print(f"runs/{local}")
+        aws_cli("s3", "sync", "--only-show-errors", f"s3://{bucket}/runs/{name}/", str(runs_root / local))
+        print(f"{runs_root.relative_to(DATA_ROOT)}/{local}")
     print(f"cost: {job_cost(s3, bucket, a.job, st)}")
     if st.get("cache_delta"):
         body = s3.get_object(Bucket=bucket, Key=st["cache_delta"])["Body"].read()
@@ -716,6 +761,12 @@ def seed_tools(a) -> None:
 def seed(a) -> None:
     """Uploads SEED_DATA and the caches a job can use. Only new or changed files are sent; nothing in the
     bucket is deleted."""
+    sessions = [d.name for d in (DATA_ROOT / "derived" / "traces").glob("*")
+                if RECORDER_SESSION.match(d.name) and d.name not in listed("seed-allow.txt")]
+    if sessions:
+        sys.exit(f"derived/traces/ holds recorder sessions ({', '.join(sorted(sessions))}): they derive from the home "
+                 "point and belong under private/. Move them there, or name each in private/seed-allow.txt to "
+                 "confirm it stays excluded, before seeding")
     bucket = outputs()["Bucket"]
     dry = ["--dryrun"] if a.dry_run else []
     if a.run:        # only these run folders, for jobs that read them (--input runs/<folder>)
@@ -726,6 +777,19 @@ def seed(a) -> None:
                     f"s3://{bucket}/data/runs/{name}")
             print(f"data/runs/{name}", flush=True)
         return
+    print("uploading: " + ", ".join(f"data/{x}/" for x in SEED_DATA) + ", " + ", ".join(f"cache/{k}/" for k in CACHE_KINDS))
+    print("excluded: " + ", ".join(private_prefixes()) + ", any */private/*, derived/traces/ except YYYY-MM-DD day traces",
+          flush=True)
+    allowed = sorted(e for e in fleet_allow() if (DATA_ROOT / e).is_file())
+    skipped = sorted(e for e in fleet_allow() if (DATA_ROOT / e).is_dir())
+    for e in allowed:
+        print(f"allowed by the owner (private/fleet-allow.txt): {e}", flush=True)
+    if not allowed:
+        print("allowed by the owner (private/fleet-allow.txt): nothing", flush=True)
+    for e in skipped:
+        print(f"not uploaded: {e} is a folder; the owner clears files one by one", flush=True)
+    for e in allowed:
+        aws_cli("s3", "cp", "--only-show-errors", *dry, str(DATA_ROOT / e), f"s3://{bucket}/data/{e}")
     for sub in SEED_DATA:
         aws_cli("s3", "sync", "--only-show-errors", "--exclude", ".DS_Store", *seed_excludes(sub), *dry, str(DATA_ROOT / sub),
                 f"s3://{bucket}/data/{sub}")
@@ -926,6 +990,8 @@ def main(argv=None) -> None:
                     "(1..n) and DOPPLERTRACK_SHARDS=n, as jobs <topic>-s<k>of<n>")
     la.add_argument("--case", action="append", default=[], help="a bench case whose inputs the box needs")
     la.add_argument("--input", action="append", default=[], help="a file or folder under the data root, not runs/")
+    la.add_argument("--private", action="store_true", help="treat the job as private (its run folder under "
+                    "private/runs/, its cache apart) even without a private input")
     la.add_argument("--input-run", action="append", default=[], metavar="runs/FOLDER", help="a run folder the job "
                     "reads (or a file in one), uploaded from here first; never runs/ itself")
     la.add_argument("--cache", action="append", default=[], help=f"a cache kind to bring: {', '.join(CACHE_KINDS)}")

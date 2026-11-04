@@ -63,6 +63,10 @@ def _case_files(out: _Lists, case: dict, profile: str, who: str, cpa: bool = Tru
 
 
 def run_inputs(case_ids: list[str], profile: str) -> dict:
+    from .cases import is_private
+    private = [c for c in case_ids if is_private(latest_case(c))]
+    if private:
+        raise ValueError(f"{private} are private: their inputs never leave this Mac, so a job can't list them")
     out = _Lists()
     for cid in case_ids:
         _case_files(out, latest_case(cid), profile, cid)

@@ -1788,6 +1788,13 @@
    "licence": null
   },
   {
+   "path": "raw/aux/opensky/doc8643AircraftTypes.csv",
+   "bytes": 695252,
+   "sha256": "c1dc1b1d74a15bd88df5ff0152815c32014c4c01dabc500504db5b3d998f1402",
+   "source": null,
+   "licence": null
+  },
+  {
    "path": "raw/models/rnnoise/bd.rnnn",
    "bytes": 299693,
    "sha256": "ae3f7411e1e6a884f839a4a145c394408398f09854dbc1216ee02faafc98a17b",

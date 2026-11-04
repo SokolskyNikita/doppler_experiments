@@ -144,7 +144,8 @@ class _Context:
             stage = "scored" if "scored__score" in z.files else None
             if stage is None:
                 return None, "the triples sidecar has no scored stage"
-            lat, lon, score, g = (z[f"scored__{k}"] for k in ("lat", "lon", "score", "gidx"))
+            x, y = ("east", "north") if "scored__east" in z.files else ("lat", "lon")
+            lat, lon, score, g = (z[f"scored__{k}"] for k in (y, x, "score", "gidx"))
         if not len(g):
             return None, "no triple was scored"
         order = np.argsort(-score, kind="stable")
@@ -232,14 +233,27 @@ def _top(rec):
     return c[0] if c else None
 
 
+def _relative(rec: dict) -> bool:
+    """A private case's record (bench/private.py): positions are offsets from its site, never coordinates."""
+    return rec.get("frame") == "site-relative"
+
+
+def _where(item: dict) -> str:
+    if "offset_m" in item:
+        o = item["offset_m"]
+        return f"{o['east'] / 1000:+.3f} km east, {o['north'] / 1000:+.3f} km north of the site"
+    return f"{item['lat']:.6f}, {item['lon']:.6f}"
+
+
 def _answer(ctx: _Context) -> str:
     rec, top = ctx.record, _top(ctx.record)
     if top is None:
         return '<p class="na">No candidate: the search found none, or did not run.</p>'
     amu = top["clock"]["audio_minus_utc_s"]
-    rows = [["top candidate", f"{top['lat']:.6f}, {top['lon']:.6f} ({' + '.join(map(_esc, top['flights']))})"]]
+    rows = [["top candidate", f"{_where(top)} ({' + '.join(map(_esc, top['flights']))})"]]
     ref = rec.get("refined")
-    rows.append(["refined point", f"{ref['lat']:.6f}, {ref['lon']:.6f}" if isinstance(ref, dict) and "lat" in ref else _fmt(ref)])
+    rows.append(["refined point", _where(ref) if isinstance(ref, dict) and ("lat" in ref or "offset_m" in ref)
+                 else _fmt(ref)])
     sp = ctx.spectrogram()
     end = f" to {_iso(float(sp.t[-1]) - amu)}" if sp is not None else ""
     rows.append(["recording start (UTC)", f"{_iso(-amu)}{end}, from the top candidate's clock "
@@ -250,7 +264,47 @@ def _answer(ctx: _Context) -> str:
     return _table(rows)
 
 
+def _map_relative(ctx: _Context) -> str:
+    """The site-relative map: east and north km from the site, no site marker, no latitude or longitude."""
+    import matplotlib.pyplot as plt
+    rec = ctx.record
+    cands = rec.get("candidates") or []
+    best, why = ctx.triples()
+    fig, ax = plt.subplots(figsize=(7.5, 6))
+    if best is not None:
+        north, east, score = best
+        sc = ax.scatter(east / 1000, north / 1000, c=score, s=4, cmap="viridis", linewidths=0)
+        fig.colorbar(sc, ax=ax, label="best score per grid point")
+    for c in cands[:10]:
+        e, n = c["offset_m"]["east"] / 1000, c["offset_m"]["north"] / 1000
+        ax.plot(e, n, "o", mfc="none", mec="red", ms=9)
+        ax.annotate(str(c["rank"]), (e, n), xytext=(4, 4), textcoords="offset points", color="red", fontsize=9)
+    ref = rec.get("refined")
+    if isinstance(ref, dict) and "offset_m" in ref:
+        ax.plot(ref["offset_m"]["east"] / 1000, ref["offset_m"]["north"] / 1000, "*", color="orange", ms=14, mec="k",
+                label="refined")
+        ax.legend(loc="upper right")
+    box = ((rec.get("provenance") or {}).get("parameters") or {}).get("search", {}).get("bbox")
+    if isinstance(box, dict) and "offset_box_m" in box:
+        s_, n_, w_, e_ = (v / 1000 for v in box["offset_box_m"])
+        ax.plot([w_, e_, e_, w_, w_], [s_, s_, n_, n_, s_], "k-", lw=1)
+    ax.set_aspect(1)
+    ax.grid(True, lw=0.4, alpha=0.6)
+    ax.set_xlabel("east of the site (km)"); ax.set_ylabel("north of the site (km)")
+    out = [_png(fig), "<p>A private case: positions are offsets from its site, which isn't drawn, and no latitude or "
+                      "longitude is shown. Solid box: the search box. Red circles: candidates 1–10.</p>"]
+    if why:
+        out.append(f'<p class="na">No score map: {_esc(why)}. The candidates are drawn alone.</p>')
+    rows = [[c["rank"], _esc(_where(c)), _esc(" + ".join(c["flights"])), _fmt(c["score"]), _fmt(c["event_scores"])]
+            for c in cands[:MAX_CANDIDATE_ROWS]]
+    if rows:
+        out.append(_table(rows, ["rank", "position", "flights", "score", "event scores"]))
+    return "".join(out)
+
+
 def _map(ctx: _Context) -> str:
+    if _relative(ctx.record):
+        return _map_relative(ctx)
     import matplotlib.pyplot as plt
     rec = ctx.record
     cands = rec.get("candidates") or []
@@ -364,8 +418,9 @@ def _events(ctx: _Context) -> str:
         return '<p class="na">No events: detection found none usable, or the run stopped before it.</p>'
     sp, traces, top = ctx.spectrogram(), ctx.traces(), _top(rec)
     ref = rec.get("refined")
-    point = (ref["lat"], ref["lon"], "refined point") if isinstance(ref, dict) and "lat" in ref else \
-        ((top["lat"], top["lon"], "top candidate") if top else None)
+    point = None if _relative(rec) else \
+        ((ref["lat"], ref["lon"], "refined point") if isinstance(ref, dict) and "lat" in ref else
+         ((top["lat"], top["lon"], "top candidate") if top else None))
     params = (rec.get("provenance") or {}).get("parameters") or {}
     c = (params.get("speed_of_sound") or {}).get("c_m_s") if isinstance(params.get("speed_of_sound"), dict) else None
     out = []
@@ -424,7 +479,8 @@ def _overlay(sp, f, e, flight, traces, top, point, obs, elev_note, c) -> str:
     for ax in axes:
         ax.title.set_fontsize(8)
     if not drawn:
-        caption = "no modelled curve: " + ("no matched flight" if not flight else
+        caption = "no modelled curve: " + ("a private case's record holds no absolute position" if point is None
+                                           and flight else "no matched flight" if not flight else
                                            "flight data not on this machine" if traces is None else
                                            "no trace of the flight at that time")
         axes[1].axis("off")
@@ -611,14 +667,18 @@ def render_report(result_json, out_dir=None, data_root=None, case_meta: dict | N
     out.mkdir(parents=True, exist_ok=True)
     record = json.loads(path.read_text())
     ctx = _Context(path, record, Path(data_root) if data_root else None, case_meta)
-    gj = json.dumps(geojson(record), indent=1)
-    km = kml(record)
-    (out / "candidates.geojson").write_text(gj + "\n")
-    (out / "candidates.kml").write_text(km)
-    links = (f'<p>Exports: <a download="candidates.geojson" href="data:application/geo+json;base64,'
-             f'{base64.b64encode(gj.encode()).decode()}">GeoJSON</a> · <a download="candidates.kml" '
-             f'href="data:application/vnd.google-earth.kml+xml;base64,{base64.b64encode(km.encode()).decode()}">KML</a> '
-             f"(also written beside this page)</p>")
+    if _relative(record):
+        links = ("<p>Exports: none. GeoJSON and KML are absolute by nature, and this private case's record holds only "
+                 "offsets from its site.</p>")
+    else:
+        gj = json.dumps(geojson(record), indent=1)
+        km = kml(record)
+        (out / "candidates.geojson").write_text(gj + "\n")
+        (out / "candidates.kml").write_text(km)
+        links = (f'<p>Exports: <a download="candidates.geojson" href="data:application/geo+json;base64,'
+                 f'{base64.b64encode(gj.encode()).decode()}">GeoJSON</a> · <a download="candidates.kml" '
+                 f'href="data:application/vnd.google-earth.kml+xml;base64,{base64.b64encode(km.encode()).decode()}">'
+                 f"KML</a> (also written beside this page)</p>")
     title = _esc((record.get("case") or {}).get("id", "result"))
     page = (f'<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" '
             f'content="width=device-width,initial-scale=1"><title>{title}: dopplertrack report</title><style>{CSS}</style>'

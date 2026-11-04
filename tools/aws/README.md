@@ -77,11 +77,28 @@ Several invocations on one box: a driver that runs them at once with `DOPPLERTRA
 The owner's home recordings (household audio, exact home coordinates, the ADS-B the recorder fetches for a circle
 around the home) and everything derived from them stay on the Mac. In runs.py: `PRIVATE_PREFIXES` (`private/`,
 `incoming/`, `raw/seattle-home/`), any path with a `private` folder in it, every prefix listed one per line in
-`$DOPPLERTRACK_DATA/private/fleet-exclude.txt`, and under `derived/traces/` everything but the date-named day traces
+`$DOPPLERTRACK_DATA/private/exclude.txt` (read at every upload; a missing file adds nothing), and under `derived/traces/` everything but the date-named day traces
 (`YYYY-MM-DD/`, `YYYY-MM-DD.log`), since the recorder writes its sessions there. `runs launch` refuses those paths
 from `--input`, `--input-run`, `--inputs-from` and a case's files, and any case marked `private: true` or naming a
 `site`; `runs seed` turns them into `--exclude` filters on every sync (day traces kept by `--include`), and
-`fetch-sources` skips them. A new private location goes into fleet-exclude.txt before data lands there.
+`fetch-sources` skips them. A new private location goes into exclude.txt before data lands there. `runs seed` also prints what it uploads and
+excludes, and refuses to run while a recorder session (`2026MMDD-` then ha-pilot, pilot, selftest, speakertest,
+subtest, coexist or latency) sits under `derived/traces/`, unless `private/seed-allow.txt` names it: the recorder's
+output belongs under `private/`.
+
+**The owner's allow list.** The default is refuse. `$DOPPLERTRACK_DATA/private/fleet-allow.txt` lists the private
+files the owner has approved for the fleet, each by name and one exact path per line, added only after that
+approval; a case id there only permits that case's launch, and each of its files still needs its own line. A folder
+is never cleared (a listed one is refused, and nothing inside it passes unless listed itself). `runs launch` prints
+each allowed file, ships it from the Mac and marks the job private: on the box its run folder is
+`private/runs/<job>`, its cache `private/cache/`, and no cache entry comes back to the shared cache; `runs pull`
+brings the run folder to `$DOPPLERTRACK_DATA/private/runs/`. `runs seed` prints each allowed file and uploads only
+those. The exact home location still never goes into git, docs or records (the site-relative frame).
+
+**What a box can't reach.** opensky-network.org refuses the boxes, so `dopplertrack.adsb.AircraftTypes()`, which
+fetches Doc 8643 from there into the cache on first use, would fail on a box; the supervisor copies the bucket's
+`data/raw/aux/opensky/doc8643AircraftTypes.csv` into every job's cache first (`CACHE_ROOT_FILES` in supervisor.py,
+for any other file like it).
 
 ## Sizing
 

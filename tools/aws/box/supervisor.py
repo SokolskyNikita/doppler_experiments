@@ -140,12 +140,29 @@ def uv_sync(repo: Path) -> None:
                    env={**os.environ, **PYTHON_ENV, "UV_CACHE_DIR": str(SCRATCH / "uv-cache")})
 
 
+def input_kind(rel: str, listing: str) -> str:
+    """"file" or "folder" for data-root path rel, from `s5cmd ls s3://<bucket>/data/<rel>`'s output (an object as
+    "<date> <time> <size> <its full key>", a common prefix as "DIR <last part>/"; checked against s5cmd 2.3.0). A
+    path that is both an object and a folder is read as the file. Raises FileNotFoundError when it is neither."""
+    rel = rel.strip("/")
+    name = rel.rsplit("/", 1)[-1]
+    lines = [line.split() for line in listing.splitlines() if line.strip()]
+    if any(len(f) >= 4 and f[0] != "DIR" and f[-1] in (f"data/{rel}", rel, name) for f in lines):
+        return "file"
+    if any(f[:1] == ["DIR"] and f[-1] == f"{name}/" for f in lines):
+        return "folder"
+    raise FileNotFoundError(f"input {rel} is neither a file nor a folder in the bucket's data/: seed it from the Mac "
+                            "(runs seed, or --input-run for a run folder) and relaunch")
+
+
 def pull_inputs(bucket: str, inputs: list[str], data: Path) -> None:
     """Each input is a file or a folder under the data root; folders come over whole."""
     for rel in inputs:
         rel = rel.strip("/")
         dest = data / rel
-        if s3_exists(f"s3://{bucket}/data/{rel}") and not s3_exists(f"s3://{bucket}/data/{rel}/*"):
+        # without --log error: s5cmd prints a listing at its info level, so s5() would get nothing back
+        listing = subprocess.run(["s5cmd", "ls", f"s3://{bucket}/data/{rel}"], capture_output=True, text=True).stdout
+        if input_kind(rel, listing) == "file":
             dest.parent.mkdir(parents=True, exist_ok=True)
             s5("cp", f"s3://{bucket}/data/{rel}", str(dest))
         else:
@@ -175,6 +192,18 @@ def pull_caches(bucket: str, kinds: list[str], cache: Path, work: Path) -> int:
     return applied
 
 
+# public files a tool fetches into the cache root on first use from a host the boxes can't reach: each comes from
+# the bucket's copy instead (dopplertrack.adsb.AircraftTypes reads opensky-network.org's Doc 8643 table)
+CACHE_ROOT_FILES = {"doc8643AircraftTypes.csv": "data/raw/aux/opensky/doc8643AircraftTypes.csv"}
+
+
+def seed_cache_root(bucket: str, cache: Path) -> None:
+    cache.mkdir(parents=True, exist_ok=True)
+    for name, key in CACHE_ROOT_FILES.items():
+        if not (cache / name).exists():
+            s5("cp", f"s3://{bucket}/{key}", str(cache / name), check=False)
+
+
 def cache_files(cache: Path) -> set[str]:
     """Every cache file that belongs to an entry, relative to the cache root."""
     out = set()
@@ -198,14 +227,13 @@ def write_delta(cache: Path, files: list[str], out: Path) -> None:
             t.add(cache / rel, arcname=rel)
 
 
-def run_folders(data: Path) -> set[str]:
-    runs = data / "runs"
+def run_folders(runs: Path) -> set[str]:
     return {p.name for p in runs.iterdir() if p.is_dir()} if runs.exists() else set()
 
 
-def upload_runs(bucket: str, data: Path, names: list[str]) -> None:
+def upload_runs(bucket: str, runs: Path, names: list[str]) -> None:
     for name in names:
-        s5("cp", f"{data / 'runs' / name}/*", f"s3://{bucket}/runs/{name}/")
+        s5("cp", f"{runs / name}/*", f"s3://{bucket}/runs/{name}/")
 
 
 class Job:
@@ -258,8 +286,13 @@ def main(argv=None) -> int:
     job = Job(args.bucket, args.job, md)
     spec = json.loads(s5("cat", f"{job.prefix}/spec.json", capture=True).stdout)
     data, cache, work = SCRATCH / "data", SCRATCH / "cache", SCRATCH / "work"
+    if spec.get("private"):      # a case the owner cleared: its cache stays apart and none of it comes back
+        cache = SCRATCH / "data" / "private" / "cache"
     repo = SCRATCH / "dopplertrack"
-    run = data / "runs" / spec["run"]
+    # a private job's run folder sits under private/runs/, where a private case's records must be written; it
+    # comes back under the same path on the Mac (`runs pull`)
+    runs_dir = data / "private" / "runs" if spec.get("private") else data / "runs"
+    run = runs_dir / spec["run"]
     host = host_info(md)
     job.report(host=host)
     try:
@@ -267,6 +300,7 @@ def main(argv=None) -> int:
         job.stage("uv_sync", uv_sync, repo)
         job.stage("inputs", pull_inputs, args.bucket, spec.get("inputs", []), data)
         deltas = job.stage("caches", pull_caches, args.bucket, spec.get("caches", []), cache, work)
+        seed_cache_root(args.bucket, cache)
     except Exception:
         job.report(state="failed", error=traceback.format_exc(limit=5))
         s5("cp", "/var/log/dopplertrack-boot.log", f"{job.prefix}/boot.log", check=False)
@@ -294,7 +328,7 @@ def main(argv=None) -> int:
         info = {**resumed, "resumed": resumed.get("resumed", []) + [stint]}
         info.pop("finished", None)
     (run / "run.json").write_text(json.dumps(info, indent=1) + "\n")
-    runs_before, cache_before = run_folders(data) - {spec["run"]}, cache_files(cache)
+    runs_before, cache_before = run_folders(runs_dir) - {spec["run"]}, cache_files(cache)
 
     env = {**os.environ, "DOPPLERTRACK_DATA": str(data), "DOPPLERTRACK_CACHE": str(cache), "RUN": str(run),
            "DOPPLERTRACK_JOB": args.job,
@@ -329,7 +363,7 @@ def main(argv=None) -> int:
                            mem_peak_gb=round(mem_peak, 1))
                 last_beat = time.time()
             if time.time() - last_ckpt > checkpoint_s:
-                upload_runs(args.bucket, data, sorted(run_folders(data) - runs_before))
+                upload_runs(args.bucket, runs_dir, sorted(run_folders(runs_dir) - runs_before))
                 last_ckpt = time.time()
         if proc.poll() is None:
             job.report(state=state, notice=notice)
@@ -346,9 +380,9 @@ def main(argv=None) -> int:
                 mem_total_gb=round(mem_total, 1), mem_peak_gb=round(mem_peak, 1))
     (run / "run.json").write_text(json.dumps(info, indent=1) + "\n")
 
-    made = sorted(run_folders(data) - runs_before)
-    upload_runs(args.bucket, data, made)
-    added = new_cache_entries(cache_before, cache_files(cache), spec.get("caches", []))
+    made = sorted(run_folders(runs_dir) - runs_before)
+    upload_runs(args.bucket, runs_dir, made)
+    added = [] if spec.get("private") else new_cache_entries(cache_before, cache_files(cache), spec.get("caches", []))
     delta = None
     if added:
         write_delta(cache, added, work / "delta.tar")

@@ -276,7 +276,7 @@ def test_private_data_never_reaches_the_fleet_or_the_bucket(tmp_path, monkeypatc
         assert not runs.is_private(p), p
     # prefixes the private folder lists are private too
     (tmp_path / "private").mkdir()
-    (tmp_path / "private" / "fleet-exclude.txt").write_text("# home sessions\nderived/home-spectrograms/\n")
+    (tmp_path / "private" / "exclude.txt").write_text("# home sessions\nderived/home-spectrograms/\n")
     assert runs.is_private("derived/home-spectrograms/a.npz")
     # the seed's sync of derived/ keeps only day traces under traces/, and excludes the listed prefixes
     ex = runs.seed_excludes("derived")
@@ -294,3 +294,71 @@ def test_private_data_never_reaches_the_fleet_or_the_bucket(tmp_path, monkeypatc
     for cid in ("home-1", "home-2"):
         with pytest.raises(SystemExit, match="private case"):
             runs.case_inputs([cid])
+
+
+def test_seed_refuses_while_a_recorder_session_sits_in_derived_traces(tmp_path, monkeypatch):
+    monkeypatch.setattr(runs, "DATA_ROOT", tmp_path)
+    monkeypatch.setattr(runs, "outputs", lambda region=None: pytest.fail("seed went on to upload"))
+    traces = tmp_path / "derived" / "traces"
+    for name in ("2026-11-01", "20261104-ha-pilot-2", "20261105-pilot", "20261104-ha-latency", "20261104-selftest-3"):
+        (traces / name).mkdir(parents=True)
+    a = runs.argparse.Namespace(dry_run=True, run=[])
+    with pytest.raises(SystemExit, match="recorder sessions .*20261104-ha-latency, 20261104-ha-pilot-2, 20261104-selftest-3, 20261105-pilot"):
+        runs.seed(a)
+    # each named on the allow list: seed goes on (here, to the stubbed bucket lookup)
+    (tmp_path / "private").mkdir()
+    (tmp_path / "private" / "seed-allow.txt").write_text("20261104-ha-pilot-2\n20261105-pilot\n20261104-ha-latency\n20261104-selftest-3\n")
+    with pytest.raises(pytest.fail.Exception, match="went on"):
+        runs.seed(a)
+    assert not runs.RECORDER_SESSION.match("2026-11-04") and runs.RECORDER_SESSION.match("20261104-coexist")
+
+
+def test_an_input_is_read_as_a_file_a_folder_or_missing():
+    # s5cmd 2.3.0's own output, from the dev box: an object by its full key, a prefix by its last part
+    file_ls = "2026/11/04 21:05:31             11614  data/derived/swfl/detected_top40_15C.json\n"
+    folder_ls = "                                  DIR  swfl/\n                                  DIR  swfl_clip/\n"
+    both_ls = ("2026/11/04 21:05:31   11614  data/derived/swfl/detected.json\n"
+               "                     DIR  detected.json/\n")
+    assert supervisor.input_kind("derived/swfl/detected_top40_15C.json", file_ls) == "file"
+    assert supervisor.input_kind("derived/swfl", folder_ls) == "folder"
+    assert supervisor.input_kind("derived/swfl/", folder_ls) == "folder"
+    assert supervisor.input_kind("derived/swfl/detected.json", both_ls) == "file"
+    # a sibling with a longer name is not a match, and nothing at all is a clear error
+    with pytest.raises(FileNotFoundError, match="neither a file nor a folder"):
+        supervisor.input_kind("derived/swfl/detected", file_ls)
+    with pytest.raises(FileNotFoundError):       # swfl_clip/ alone doesn't make derived/swf a folder
+        supervisor.input_kind("derived/swf", folder_ls)
+    with pytest.raises(FileNotFoundError, match="seed it"):
+        supervisor.input_kind("derived/missing.npz", "")
+
+
+def test_the_owner_clears_private_files_one_by_one(tmp_path, monkeypatch):
+    import json
+    monkeypatch.setattr(runs, "DATA_ROOT", tmp_path)
+    pilot = tmp_path / "private" / "traces" / "20261104-ha-pilot-2"
+    pilot.mkdir(parents=True)
+    (pilot / "area.npz").write_text("x")
+    (pilot / "area.log").write_text("x")
+    (tmp_path / "bench").mkdir()
+    (tmp_path / "bench" / "cases.json").write_text(json.dumps({"cases": [
+        {"id": "seattle-home-20261104-ha-pilot-2", "private": True, "site": "seattle-home",
+         "audio": {"path": "private/audio/ha-pilot-2.flac"}}]}))
+    monkeypatch.setattr(runs, "REPO", tmp_path)
+    # nothing cleared: every private file and case is refused, as before
+    with pytest.raises(SystemExit, match="fleet-allow"):
+        runs.case_inputs(["seattle-home-20261104-ha-pilot-2"])
+    with pytest.raises(SystemExit, match="private data"):
+        runs.refuse_private(["private/traces/20261104-ha-pilot-2/area.npz"], "--input")
+    (tmp_path / "private" / "fleet-allow.txt").write_text(
+        "# each approved by name by the owner\nseattle-home-20261104-ha-pilot-2\n"
+        "private/traces/20261104-ha-pilot-2/area.npz\nprivate/traces/20261104-ha-pilot-2/\n")
+    # the case id permits the launch; its files still need their own lines
+    assert runs.case_inputs(["seattle-home-20261104-ha-pilot-2"]) == ["private/audio/ha-pilot-2.flac"]
+    with pytest.raises(SystemExit, match="private data"):
+        runs.refuse_private(["private/audio/ha-pilot-2.flac"], "--input")
+    # exactly the listed file passes; its unlisted sibling doesn't, and a listed folder never does
+    runs.refuse_private(["private/traces/20261104-ha-pilot-2/area.npz"], "--input")
+    with pytest.raises(SystemExit, match="private data"):
+        runs.refuse_private(["private/traces/20261104-ha-pilot-2/area.log"], "--input")
+    with pytest.raises(SystemExit, match="clears each file by name"):
+        runs.refuse_private(["private/traces/20261104-ha-pilot-2"], "--input")

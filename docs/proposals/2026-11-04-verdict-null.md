@@ -32,12 +32,16 @@ single cell's score.
   shift the clock it finds. The maximum doesn't change.
 - **The statistic per draw:** for each number of matched flights m, the best penalised score S_m over every
   distinct mode (below), and the two best modes.
-- **The days:** a fixed, seeded list from the 120 days around each recording's date, skipping ±2 days. That is 100
-  draws per recording box. Each day is cut to the case's margin-padded box, with extraction metadata, as the case's
+- **The days:** a fixed, seeded list from the 120 days around each recording's date, skipping ±2 days. It starts at
+  50 per recording group (PM, 2026-11-04). It grows to 100 only if the fitted 1 % point's bootstrap interval is wider
+  than the gap between the positives' scores and the threshold. Each day is cut to the case's margin-padded box, with extraction metadata, as the case's
   own traces are.
-- **Why 100 draws, and a Gumbel fit.** With 0 exceedances in B draws the 95 % upper bound on the tail is 3/B, so an
+- **A caveat the record keeps.** Another day's traffic flies the same routes, so it can come close to matching the
+  audio by construction. That makes this null conservative in the direction we want, and the probability plot is
+  what shows it behaves.
+- **Why a Gumbel fit.** With 0 exceedances in B draws the 95 % upper bound on the tail is 3/B, so an
   empirical 1 % claim alone needs B ≥ 300.
-  - The 1 % point is taken instead from a Gumbel fit to the 100 maxima. A maximum over many weakly dependent cells
+  - The 1 % point is taken instead from a Gumbel fit to the maxima. A maximum over many weakly dependent cells
     has an exponential tail, as in Kay's L · P_FA(cell).
   - The fit is checked by a probability plot and by the 3/B bound.
   - The fit is reported per case and per m, with its 95 % interval from a bootstrap over draws.
@@ -62,7 +66,7 @@ locate record) or their clocks differ by more than a pass resolves.
 - **Located:** exactly one mode's S_m clears its threshold γ_m.
 - **Ambiguous, reason `competing_mode`:** two or more modes clear it. Each region is listed, never merged.
 - **Ambiguous, reason `below_null_threshold`:** none clears it.
-- The two reason codes are additions to B's v2 list.
+- The two reason codes are in B's v2 list (`988a0df`).
 - The eagle cam's true pair and its 14.6 km wrong pair are this case today: two modes about 0.02 apart in Z. A third
   flyover that only the true clock explains is what can separate them, and it does, via m = 3
   ([frozen-clock](../experiments/2026-11-04-comparable-score.md)).
@@ -95,8 +99,21 @@ Criteria, each case judged against its own null's γ_m:
   - It runs on 4xlarge boxes, one search per box where memory decides. Stage B's d4 + d3 pairs exceed 128 GB, so
     `hypotheses` stays off.
   - Its merge fits γ_m and κ per case, then judges the Tier 2 cases.
-- The null days' traces are cut on the fleet first, from adsb.lol's daily archives, one job per day. They are
-  recorded in the data manifest.
+- **The null days' traces** come first ([`verdict_null_days.py`](../../tools/experiments/2026-11-04/verdict_null_days.py),
+  planned in `verdict_null_days.json`).
+  - Each day is streamed once from adsb.lol's release and cut into every box its group needs, by `extract_boxes.py
+    --stream`, with the same recipe and margin as the cases' own cuts.
+  - The groups: Oyster Bay with its WSW and north boxes, on 2026-09-08's side, and the eagle cam's SWFL box, on
+    2024-12-28's.
+  - A day already in derived/ is never fetched again.
+  - The cuts are published read-only to `derived/traces/<day>/` and recorded in the data manifest (adsb.lol,
+    ODbL 1.0).
+- **The clock gate.** `locate`'s clock gate ([clock-gate](../experiments/2026-11-04-clock-gate.md)) keeps only
+  triples whose clock lies within the case's stated start and tolerance. Another day's flights would all fail it.
+  - So the locate arm shifts each null day's traces by whole days onto the recording's date, keeping the time of
+    day, and runs with the gate on, as the case does.
+  - The saved-fit arm runs `run_search`, which has no gate, so its days need no shift.
+  - The null block's names follow B's schema v3 (`verdict.null`).
 - The null replicates the pair rule and silence filter that `locate`'s verdict uses. A `comparable` draw is ten
   searches, like the case itself, and the `saved-fit` arm is one. B's final locate record sets the rule; the null
   waits on it.

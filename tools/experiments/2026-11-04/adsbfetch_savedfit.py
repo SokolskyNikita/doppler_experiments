@@ -13,7 +13,8 @@ import json
 import sys
 from pathlib import Path
 
-from bench import runner
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))      # the repo root, for bench/
+from bench import runner  # noqa: E402
 
 CASES = {"oyster-bay": "ny_mirror_union.npz", "eagle-cam-clip-18000s": "swfl_mirror_union.npz"}
 

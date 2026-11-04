@@ -50,9 +50,9 @@ def private_cache_root() -> Path:
 
 
 def resolve(path: str) -> Path:
-    """A manifest path on this machine: raw/ and derived/ under the data root, cpa/ under the cache root,
-    anything else relative to the repo."""
-    if path.startswith(("raw/", "derived/")):
+    """A manifest path on this machine: raw/, derived/, private/ and incoming/ under the data root, cpa/ under the
+    cache root, anything else relative to the repo."""
+    if path.startswith(("raw/", "derived/", "private/", "incoming/")):
         return data_root() / path
     if path.startswith("cpa/"):
         return cache_root() / path

@@ -595,3 +595,10 @@ def test_a_private_case_entry_carries_nothing_that_places_it(private_home):
     bad["search"]["bbox"] = [40.4, 41.3, -74.4, -72.6]
     with pytest.raises(cases.CaseError, match="search box"):
         cases.validate_case(bad, cases.manifest_files())
+
+
+def test_private_and_incoming_paths_resolve_under_the_data_root(monkeypatch, tmp_path):
+    monkeypatch.setenv("DOPPLERTRACK_DATA", str(tmp_path))
+    for p in ("private/traces/x/area.npz", "incoming/seattle-home/site.json", "raw/a", "derived/b"):
+        assert cases.resolve(p) == tmp_path / p
+    assert cases.resolve("docs/results/x.json") == cases.REPO / "docs/results/x.json"

@@ -133,6 +133,30 @@ Scored triples change by under 0.1 %: Oyster Bay 40,889 to 40,861, the eagle cam
   - **The saved-fit path has a non-identifiability the bound work hasn't seen.** The brightness and contrast objectives that `fit_event` and `detect` maximise have a flat ridge along v and d with many near-equal local maxima. A 1.9 % change in c moves the chosen fit by 14–45 % in v and d. The Cramér–Rao bound, being local, measures a single maximum's curvature, not the choice between maxima.
   - **This bears on Phase 2 item 4, the event fit's replacement.** A least-squares fit on a tracked ridge has one well-conditioned minimum on Livermore's straight passes (model-error stage 1), so it should be tested here for whether it makes the event fit stable under c. Until then a station temperature can't be tested fairly, because any change in c reshuffles the fits.
 
+**Is the least-squares fit on a tracked ridge stable instead?** (`runs/2026-11-04-merge-ls-stability/`, from `runs/2026-11-04-ls-stability-s{1..6}of6`; fleet, commit e4e4695; `tools/experiments/2026-11-04/ls_stability.py`).
+- **Setup.** The four events were fitted with `tracks.ridge_track` + `tracks.fit_track` (unweighted) in the committed windows, at 15 °C and at the station temperature, then searched. Oyster Bay used the README's bands. The eagle cam used 0.9 × f_post to 1.1 × f_pre of its committed curve.
+- **Expectation, written before the run.** `fit_track` solves the curve's α, β, t_c and s with no c in them, and c only maps them to v and d, both proportional to c. So on one track the criterion (v and d move 2 ± 1 % on all four events) holds by construction.
+- **Stable, as constructed.** v and d move by 1.82 % on both Oyster Bay events and 1.91 % on both eagle-cam events. Each fit has one optimum (`n_optima` 1).
+- **One minimum against fifty.** Oyster Bay event 2's least-squares objective over the brightness profile's v–d grid has a single local minimum at either temperature, against fifty maxima for brightness.
+
+**But the tracks are wrong, so the fits are too.**
+- **The fits are far from the committed ones.**
+
+| Event | Least squares (15 °C) | Committed (brightness, 15 °C) | Track RMS |
+|---|---|---|---|
+| Oyster Bay 1 (harmonic 2) | 26 m/s, 108 m | 140 m/s, 6.43 km | 4.3 Hz |
+| Oyster Bay 2 | 52 m/s, 457 m | 141 m/s, 5.92 km | 15.2 Hz |
+| eagle cam 1 | 90 m/s, 1.60 km | 99 m/s, 2.29 km | 11.2 Hz |
+| eagle cam 2 | 40 m/s, 461 m | 79 m/s, 3.07 km | 14.5 Hz |
+
+- **No true pair in the searches.** With these events, neither case ranks its true pair at either temperature. Oyster Bay keeps 6 flight pairs, and the eagle cam's top pair is 21.8 km off.
+- **The single minimum sits at the grid's edge.** On Oyster Bay event 2's surface it is at v = 100 m/s, d 3.9–4.0 km, with an RSS of about 1.2 × 10⁵ Hz² over 440 points: the track, not the curve.
+
+**Outcome.**
+- **The least-squares fit does what it should with c.** It has one basin and moves exactly with c, unlike brightness.
+- **On these recordings `ridge()` doesn't follow the aircraft's line.** Its tracks give fits 2–60 times too close. So the event fit can move to least squares only on a tracker that holds the line. That is the case the PM named: the ridge tracker is the suspect, and the switch waits for C's tracker.
+- **The temperature stays off by default.**
+
 - **"Weather on" is now a run switch, not a case version.** Each case keeps its station reading as data. The runner uses it only when a run sets `use_case_weather`: `bench run --weather`. That run's overrides, run.json and folder tag record the switch.
   - The default is the 15 °C path, with the case's reading recorded in the record's `speed_of_sound` (`case_temperature_c`) but unused.
   - Tier 1 always runs the default.

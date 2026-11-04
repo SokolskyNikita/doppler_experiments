@@ -18,7 +18,8 @@ REPO = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(REPO))
 from bench import cases                                            # noqa: E402
 from dopplertrack import search                                    # noqa: E402
-from dopplertrack.adsb import load_traces                          # noqa: E402
+from bench.runner import trace_paths                               # noqa: E402
+from dopplertrack.adsb import join_days                            # noqa: E402
 from dopplertrack.doppler import speed_of_sound                    # noqa: E402
 from dopplertrack.terrain import Terrain                           # noqa: E402
 
@@ -29,7 +30,7 @@ def build(cid: str, out: Path):
     case = cases.latest_case(cid)
     s = case["search"]
     grid = search.Grid.make(*s["bbox"], s["spacing_m"], Terrain().elevation if s["dem"] else None)
-    traces = load_traces(DATA / case["flight_data"]["traces"])
+    traces, _ = join_days(trace_paths(case))         # as the runner reads them
     r, c = s["max_range_m"], speed_of_sound()
     clip = (grid.enu[:, 0].min() - r, grid.enu[:, 0].max() + r, grid.enu[:, 1].min() - r, grid.enu[:, 1].max() + r)
     segs = search.build_segments(traces, grid.lat0, grid.lon0, clip_enu=clip)

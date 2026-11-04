@@ -135,3 +135,28 @@ def test_a_fundamental_needs_its_harmonic_and_an_unambiguous_line():
     assert not tier1._line_match(170, two)          # between the lines at every k
     assert not tier1._line_match(70, [[130, 65]])   # a 2x-wide band: 70 and 140 both on it, so which harmonic is unclear
     assert tier1._line_match(100, [[235, 165]])     # one line: 200 on it for k = 2 only
+
+
+def test_window_fits_are_cached_on_their_inputs(tmp_path, monkeypatch):
+    import numpy as np
+    from dopplertrack import tracks
+    from dopplertrack.audio import Spectrogram
+    from dopplertrack.cache import spectrogram_sha256
+    monkeypatch.setenv("DOPPLERTRACK_CACHE", str(tmp_path))
+    calls = []
+
+    class Fit:
+        def to_dict(self):
+            return {"t_cpa": 1.0}
+
+    def fake(sp, t0, t1, lo, hi, objective):
+        calls.append((lo, hi, objective))
+        return Fit()
+    monkeypatch.setattr(tracks, "fit_event", fake)
+    sp = Spectrogram(np.arange(10.0), np.arange(5.0), np.zeros((5, 10), np.float32))
+    tier1._set_fit_crop(sp, spectrogram_sha256(sp))
+    task = (0, 0, 1.0, 8.0, 100.0, 200.0, "brightness")
+    assert tier1._fit_window(task)["fit"] == {"t_cpa": 1.0}
+    assert tier1._fit_window(task)["fit"] == {"t_cpa": 1.0} and len(calls) == 1
+    tier1._fit_window((0, 0, 1.0, 8.0, 100.0, 210.0, "brightness"))
+    assert len(calls) == 2

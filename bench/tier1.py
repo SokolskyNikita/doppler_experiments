@@ -132,7 +132,8 @@ def execute_span(span: dict, out_dir: Path, code: dict, log=print, workers: int 
         with stage("window_fits"):
             from dopplertrack.parallel import ordered_map, resolve_jobs
             jobs = min(resolve_jobs(workers), max(len(tasks), 1))
-            done = iter(list(ordered_map(_fit_window, tasks, jobs, _set_fit_crop, (crop,))))
+            from dopplertrack.cache import spectrogram_sha256
+            done = iter(list(ordered_map(_fit_window, tasks, jobs, _set_fit_crop, (crop, spectrogram_sha256(crop)))))
             fits = [x if x is not None else next(done) for x in slots]
     except Exception as exc:
         errors.append(f"{type(exc).__name__}: {exc}")
@@ -149,18 +150,31 @@ def execute_span(span: dict, out_dir: Path, code: dict, log=print, workers: int 
 _FIT_CROP = {}
 
 
-def _set_fit_crop(crop):
-    _FIT_CROP["sp"] = crop
+FIT_MODULES = ("dopplertrack.tracks", "dopplertrack.doppler", "dopplertrack.audio")
+
+
+def _set_fit_crop(crop, crop_sha256):
+    _FIT_CROP.update(sp=crop, sha256=crop_sha256)
 
 
 def _fit_window(task) -> dict:
-    """One labelled line fitted in its window and band; a line the fitter can't follow is a missing fit."""
+    """One labelled line fitted in its window and band; a line the fitter can't follow is a missing fit. Cached
+    on the crop's contents, the window, the band, the objective and fit_event's source, under the cache rules."""
+    import scipy
+
+    from dopplertrack.cache import cached, source_sha256
     from dopplertrack.tracks import fit_event
     window, line, t0, t1, lo, hi, objective = task
-    try:
-        fit = fit_event(_FIT_CROP["sp"], t0, t1, lo, hi, objective=objective).to_dict()
-    except Exception as exc:
-        fit = unavailable(f"{type(exc).__name__}: {exc}")
+
+    def produce():
+        try:
+            return fit_event(_FIT_CROP["sp"], t0, t1, lo, hi, objective=objective).to_dict()
+        except Exception as exc:
+            return unavailable(f"{type(exc).__name__}: {exc}")
+    parts = {"spectrogram": _FIT_CROP["sha256"], "window_s": [t0, t1], "band_hz": [lo, hi], "objective": objective,
+             "producer": "tracks.fit_event", "source": source_sha256(*FIT_MODULES),
+             "versions": {"numpy": np.__version__, "scipy": scipy.__version__}}
+    fit = cached("window_fits", parts, produce)
     return {"window": window, "line": line, "band_hz": [lo, hi], "objective": objective, "fit": fit}
 
 

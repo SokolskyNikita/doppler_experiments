@@ -100,7 +100,7 @@ interpolated in SNR from the 27 synthetic passes' (SNR, σ) pairs.
 0.10–0.16 % at 7.8–9.2 dB, and 0.08–0.13 % at 13–15 dB.
 
 **The Livermore passes.** The 29 primary passes span 2.5–20.6 dB. Their matched σ has a median of **0.137 %** of
-f0, against the 0.45 % assumed. Six passes lie above the synthetic range and are clamped to 0.125 %; one, at
+f0, against the 0.45 % assumed. Five passes lie above the synthetic range and are clamped to 0.125 %; one, at
 2.5 dB, is clamped to 11 %.
 
 **Median slant-range bound, 29 primary passes:**

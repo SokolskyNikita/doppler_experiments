@@ -497,7 +497,7 @@ The measuring stick has to be trustworthy before it gets big: caches that can't 
    - incomplete flight data (an hour of traces removed);
    - a recording crossing UTC midnight: ESID 375 and 937 do;
    - a true location within a few km of the box edge;
-   - the three A2O soundscapes, whose published coordinates are shifted by up to about 270 m and whose aircraft are unlabelled: a coarse check of the 1 km verdict at unseen sites in other airspace, once their days' flight data is fetched and `site_traffic.py` confirms propeller passes. Never calibration or evaluation.
+   - the three A2O soundscapes, whose published coordinates are shifted by up to about 270 m and whose aircraft are unlabelled: a coarse check of the 1 km verdict at unseen sites in other airspace, once their days' flight data is fetched and `site_traffic.py` confirms propeller passes. Never calibration or evaluation (decided 2026-11-04: the Townsville filename GPS fix stays the unverified working position, and no A2O site is asked for its true coordinates unless one is ever to count).
 5. **Independent recordings** (5.6), the only source of calibration and evaluation data.
 
 **Synthetic failure matrix.** Small cases that run in seconds as Tier 0–1 tests. Each phase adds the ones it needs.

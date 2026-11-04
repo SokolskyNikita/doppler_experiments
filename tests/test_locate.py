@@ -89,6 +89,18 @@ def test_flight_data_short_of_the_day(monkeypatch, spec, tmp_path):
     assert v["reason_codes"] == ["flight_data_missing_time"]
 
 
+def test_with_a_stated_start_the_flight_data_need_cover_only_the_gated_recording(monkeypatch, spec, tmp_path):
+    """Audio second 1000 at DAY0 + 72000 puts the start at DAY0 + 71000; the 3600 s recording, the stated 1 s, the
+    6 s tol_s and GATE_PAD_S need the data from DAY0 + 70693 to DAY0 + 74906, not the whole day."""
+    _detections(monkeypatch, [_event(1000, 5.0), _event(2000, 4.0)])
+    _search_returning(monkeypatch, DAY0 + 72000.0)
+    gate = dict(start_utc=DAY0 + 71000.0, start_tol_s=1.0)
+    v = _run(spec, [_traces(tmp_path, covered=[DAY0, DAY0 + 76000.0])], tmp_path, **gate)
+    assert v["outcome"] == "ambiguous"
+    v = _run(spec, [_traces(tmp_path, covered=[DAY0, DAY0 + 74000.0], name="short.npz")], tmp_path, **gate)
+    assert v["reason_codes"] == ["flight_data_missing_time"] and "stated start" in v["reasons"][0]
+
+
 def test_no_surviving_candidate(monkeypatch, spec, tmp_path):
     _detections(monkeypatch, [_event(1000, 5.0), _event(2000, 4.0)])
     _search_returning(monkeypatch, DAY0 + 72000.0, empty=True)

@@ -35,6 +35,7 @@ TOP_K = 5
 DEFAULT_SILENCE_D_M = 6000.0  # the silence filter's distance; on by default in locate (S4, changed 2026-11-04)
 USABLE_VALID_SHARE = 0.5      # a recording more than half gaps is not searched (S6)
 DAY_SLACK_S = 600.0           # flight data counts as covering a day if it reaches within this of each end
+GATE_PAD_S = 300.0            # with a stated start, flight data must reach this far past the gated recording
 RULES = ("top2", "comparable")
 
 
@@ -277,9 +278,15 @@ def locate(spec_path, date: str, bbox, trace_paths, cfg: LocateConfig | None = N
     covered = _covered_days(paths, metas, traces, declared_date=date if cfg.envelope else None)
     flight["covered_utc"] = list(covered)
     day0, day1 = _day_bounds(date)
-    if covered[0] > day0 + DAY_SLACK_S or covered[1] < day1 - DAY_SLACK_S:
+    need_t, what = (day0 + DAY_SLACK_S, day1 - DAY_SLACK_S), f"the whole of {date}"
+    if cfg.start_utc is not None:   # the clock gate keeps only clocks near the stated start: the data need cover just
+        pad = float(cfg.start_tol_s or 0.0) + cfg.tol_s + GATE_PAD_S     # those, and never more than the whole day
+        need_t = (max(cfg.start_utc + float(sp.t[0]) - pad, need_t[0]), min(cfg.start_utc + float(sp.t[-1]) + pad, need_t[1]))
+        what = f"the recording at its stated start, {_iso(need_t[0])} to {_iso(need_t[1])}"
+    flight["needed_utc"] = list(need_t)
+    if covered[0] > need_t[0] or covered[1] < need_t[1]:
         return finish("insufficient_evidence", ["flight_data_missing_time"],
-                      [f"the flight data covers {_iso(covered[0])} to {_iso(covered[1])}, not the whole of {date}"])
+                      [f"the flight data covers {_iso(covered[0])} to {_iso(covered[1])}, not {what}"])
 
     # 3. the grid, then each pair rule's search
     elevation = Terrain().elevation if cfg.dem else None

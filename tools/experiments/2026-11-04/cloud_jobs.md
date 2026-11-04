@@ -170,7 +170,8 @@ its search, so it never builds its table.
    - Measured on the Mac, 4 workers under load, eagle-cam clip, before the run was stopped: the top2 search took
      41 s from a cached table. Four of comparable's ten searches had finished, at 62–170 s each, when the run
      stopped 507 s in.
-   - Each comparable search reloads the case's CPA table (1.15 GB for the eagle cam), so a box's disk speed counts.
+   - Each comparable search reloads the case's CPA table (1.15 GB for the eagle cam), but a load took about 1 s;
+     a search's time is its pairing and scoring, which scale with the workers.
 2. **Tier 2 locate, silence filter on.** The same with `--search-param silence_d_m=6000`. It reuses job 1's CPA
    tables, so run it after job 1 or with job 1's tables copied in.
 3. **Tier 2 saved-fit**, the five development cases with saved fits.
@@ -189,7 +190,7 @@ its search, so it never builds its table.
    - The 788 s run predates the nine background spans. With them, a cold Tier 1 took about 50 minutes under load
      (`docs/experiments/2026-11-04-cache-keys.md`), so the background spans are the bulk of a cold run.
 
-Jobs 1, 2 and 5 are independent of each other. Job 4 waits for the case bump and job 3.
+All five launch at once, one box per case or Tier 1 unit: `tools/experiments/2026-11-04/sde_b_cloud.sh launch`, then `... collect` pulls, merges the shards, compares (silence off against on; legacy against margin-padded cut) and renders the reports. Job 3 runs at the commit before the case bump, from a worktree, so it needs no wait.
 
 ## SDE-A
 

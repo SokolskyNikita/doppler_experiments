@@ -1,0 +1,257 @@
+{
+ "candidates": [
+  {
+   "clock": {
+    "audio_minus_utc_s": -1788898650.7,
+    "drift": {
+     "unavailable": "no drift"
+    },
+    "shift_s": -1.0
+   },
+   "event_scores": [
+    16.1,
+    11.0
+   ],
+   "flights": [
+    "a1dfeb",
+    "ace391"
+   ],
+   "lat": 40.8861,
+   "lon": -73.5236,
+   "mode": {
+    "unavailable": "no modes"
+   },
+   "rank": 1,
+   "score": 27.1
+  },
+  {
+   "clock": {
+    "audio_minus_utc_s": -1788865766.2,
+    "drift": {
+     "unavailable": "no drift"
+    },
+    "shift_s": 0.0
+   },
+   "event_scores": [
+    15.4,
+    10.4
+   ],
+   "flights": [
+    "a53001",
+    "a19b2f"
+   ],
+   "lat": 41.0755,
+   "lon": -72.7255,
+   "mode": {
+    "unavailable": "no modes"
+   },
+   "rank": 2,
+   "score": 25.8
+  }
+ ],
+ "case": {
+  "id": "synthetic",
+  "version": 1
+ },
+ "conventions": {
+  "coordinates": "WGS-84 latitude and longitude, decimal degrees",
+  "distances": "slant range at closest approach, metres; not altitude or ground range",
+  "height": {
+   "aircraft": "ADS-B geometric altitude (WGS-84 ellipsoidal) where present, else barometric pressure altitude; no geoid or pressure correction",
+   "observer": "terrain height from the Terrarium DEM (orthometric, clamped at 0 m), or 0 m with --no-dem"
+  },
+  "times": {
+   "audio": "seconds from the recording's first sample",
+   "cpa_kinds": {
+    "emission": "when the aircraft is at closest approach",
+    "heard": "when sound emitted at closest approach reaches the observer (emission + slant range / c)",
+    "steepest_fall": "when the heard frequency falls fastest; equals the emission CPA for a straight, constant-speed pass"
+   },
+   "utc": "Unix seconds"
+  }
+ },
+ "data_limitations": {
+  "ads_b": "A complete archive download does not mean every aircraft broadcast ADS-B.",
+  "altitude_sources": {
+   "unavailable": "not loaded"
+  },
+  "candidate_gaps": [],
+  "flight_data": {
+   "traces_loaded": 3
+  },
+  "possible_edits": {
+   "unavailable": "no edit detection"
+  }
+ },
+ "events": [
+  {
+   "assignment": {
+    "basis": "top candidate",
+    "flight": "a1dfeb"
+   },
+   "diagnostics": {
+    "covariance": {
+     "unavailable": "none yet"
+    },
+    "score": 16.5,
+    "score_kind": "brightness"
+   },
+   "fit": {
+    "f0_hz": 112.6,
+    "f_post_hz": 79.8,
+    "f_pre_hz": 191.2,
+    "slant_range_m": 6433.5,
+    "speed_m_s": 139.9,
+    "t_emission_cpa_audio_s": 2137.05,
+    "t_heard_cpa_audio_s": 2155.96,
+    "t_steepest_fall_audio_s": 2137.05,
+    "window_s": [
+     2090.0,
+     2200.0
+    ]
+   },
+   "harmonics": 2,
+   "id": "ev1",
+   "source": "saved_fit",
+   "utc": {
+    "basis": "top candidate",
+    "t_emission_cpa": 1788900786.8,
+    "t_heard_cpa": 1788900805.7
+   }
+  },
+  {
+   "assignment": {
+    "unavailable": "unmatched"
+   },
+   "diagnostics": {
+    "covariance": {
+     "unavailable": "none yet"
+    },
+    "score": 11.1,
+    "score_kind": "brightness"
+   },
+   "fit": {
+    "f0_hz": 112.6,
+    "f_post_hz": 79.8,
+    "f_pre_hz": 191.2,
+    "slant_range_m": 6433.5,
+    "speed_m_s": 139.9,
+    "t_emission_cpa_audio_s": 2137.05,
+    "t_heard_cpa_audio_s": 2155.96,
+    "t_steepest_fall_audio_s": 2137.05,
+    "window_s": [
+     2090.0,
+     2200.0
+    ]
+   },
+   "harmonics": 1,
+   "id": "ev2",
+   "source": "saved_fit",
+   "utc": {
+    "unavailable": "no clock"
+   }
+  }
+ ],
+ "execution": {
+  "errors": [],
+  "stages": [
+   {
+    "cpu_s": 0.9,
+    "name": "search",
+    "wall_s": 1.0
+   }
+  ],
+  "warnings": []
+ },
+ "funnel": {
+  "after_distance_gate": {
+   "unavailable": "one call"
+  },
+  "after_silence_filter": 2,
+  "after_speed_gate": {
+   "unavailable": "one call"
+  },
+  "after_time_gate": {
+   "unavailable": "one call"
+  },
+  "before_silence_filter": 5,
+  "cpa_records": 10,
+  "flight_pairs_after_silence_filter": [
+   [
+    "a1dfeb",
+    "ace391"
+   ],
+   [
+    "a53001",
+    "a19b2f"
+   ]
+  ],
+  "flight_pairs_before_silence_filter": [
+   [
+    "a1dfeb",
+    "ace391"
+   ],
+   [
+    "a53001",
+    "a19b2f"
+   ]
+  ],
+  "scored": 2,
+  "unevaluated_budget": 0
+ },
+ "kind": "dopplertrack.result",
+ "provenance": {
+  "caches": [],
+  "code": {
+   "git_commit": "abc",
+   "git_dirty": false,
+   "package_version": "0.2.0"
+  },
+  "created": "2026-11-04T00:00:00+00:00",
+  "inputs": [
+   {
+    "bytes": 3,
+    "path": "rec.npz",
+    "role": "spectrogram",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+   }
+  ],
+  "parameters": {
+   "search": {
+    "bbox": [
+     40.4,
+     41.3,
+     -74.4,
+     -72.6
+    ],
+    "max_range_m": 12000.0
+   },
+   "speed_of_sound": {
+    "basis": "the pipeline's default, 15 C",
+    "c_m_s": 340.28,
+    "temperature_c": null
+   }
+  }
+ },
+ "refined": {
+  "event_scores": [
+   16.0,
+   12.9
+  ],
+  "extra_flights": [],
+  "from_rank": 1,
+  "half_width_m": 600.0,
+  "lat": 40.8761,
+  "lon": -73.5248,
+  "score": 28.9,
+  "shift_s": -0.5,
+  "spacing_m": 50.0
+ },
+ "region": {
+  "unavailable": "no region before Phase 4"
+ },
+ "schema_version": 1,
+ "verdict": {
+  "unavailable": "no verdict before Phase 4"
+ }
+}

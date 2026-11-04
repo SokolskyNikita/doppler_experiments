@@ -15,7 +15,7 @@ outcome: The nearest ASOS within 1 h of the recording's midpoint, 4.9–24.3 km 
   - Oyster Bay's a1dfeb and ace391: 5.5 and 1.1 km;
   - the eagle cam's a2baea and a336e4: 2.5 and 5.7 km.
 - **Versions:** a change to a case is a new version of it (`bench/cases.json`'s note). Each case's latest version is left as it was, and the next version carries the weather.
-  - B's version 2 of oyster-bay, oyster-bay-hp150-aac32k, eagle-cam-clip-18000s and xenocanto-xc990819 landed first, so those four get version 3. Every other case gets version 2.
+  - On dev the weather is version 2 of every case: B merged this record's first commit (0e95a3a) and put its locate changes on top as version 3, then a version 4 (`_cut2` CPA tables) for some. B's cases.json is taken as is, and this branch's own interim renumbering, with weather as v3, was dropped.
   - The runner takes the latest version, so every run now uses the measured temperature.
   - Earlier versions stay runnable by id and version, and by the a16b700 CLI, which refuses a temperature.
   - Each new version with a CPA cache gets its own file, `<name>_<T>C.npz`, because the sound speed is part of the table's fingerprint.

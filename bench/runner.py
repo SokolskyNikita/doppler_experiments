@@ -503,7 +503,8 @@ def compare_case(case_dir: Path, meta: dict, read_labels) -> dict:
     except (OSError, IndexError, RecordError, ValueError) as exc:
         return {**entry, "status": "discarded", "reason": f"record does not match the hash written before the "
                 f"truth was read: {exc}"}
-    entry.update(status="scored", record_sha256=expected,
+    # a run that failed is reported as an error, never scored as if it had abstained or found nothing
+    entry.update(status="error" if record["execution"]["errors"] else "scored", record_sha256=expected,
                  stages=record["execution"]["stages"], errors=record["execution"]["errors"])
     lab = read_labels()
     ref = lab["reference"]

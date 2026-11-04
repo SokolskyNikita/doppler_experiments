@@ -37,7 +37,7 @@ Doppler curves of propeller aircraft. `README.md` explains the method; `PLAN.md`
   With a cold CPA table it is a long job: say so first and run it in the background.
   `--profile saved-fit|raw-audio` picks the events; `--revision a16b700` runs another commit through its own
   CLI in an exported, hash-verified environment under `$DOPPLERTRACK_CACHE/revisions/` (`bench/revisions.py`).
-  Never run Python from that export without `-X pycache_prefix=...`: bytecode in its tree fails the check.
+  Run Python from that export only with `-B`: bytecode in its tree fails the check.
 
 ## Data rules
 

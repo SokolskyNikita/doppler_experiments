@@ -203,3 +203,12 @@ def test_a_revision_that_fails_verification_yields_an_error_not_a_result(tmp_pat
     finally:
         revisions.verify = orig
     assert rec["candidates"] == [] and any("stale export" in e for e in rec["execution"]["errors"])
+
+
+def test_a_record_with_execution_errors_is_an_error_entry(tmp_path, one_case):
+    def failing(case, case_dir, log=print, code=None):
+        rec = _fake_execute(case, case_dir, code=code)
+        rec["execution"]["errors"] = ["RuntimeError: search failed"]
+        return rec
+    entry = runner.bench_case("synthetic", tmp_path / "out", execute=failing, cases_path=one_case)
+    assert entry["status"] == "error"

@@ -43,9 +43,10 @@ class Revision:
         return self.root / "venv" / "bin" / "python"
 
     def cli(self, *args) -> list[str]:
-        # -I keeps the user's site and the working directory off sys.path; bytecode goes outside src so
-        # running the revision never changes the tree that is verified
-        return [str(self.python), "-I", "-X", f"pycache_prefix={self.root / 'pycache'}", "-m", "dopplertrack.cli", *args]
+        # -I keeps the user's site and the working directory off sys.path. -B writes no bytecode, so running
+        # the revision never changes the tree that is verified; unlike -X pycache_prefix, multiprocessing
+        # passes -B on to the worker processes detect starts
+        return [str(self.python), "-I", "-B", "-m", "dopplertrack.cli", *args]
 
     def provenance(self) -> dict:
         info = json.loads((self.root / "export.json").read_text())

@@ -20,6 +20,26 @@ tools/aws/runs dev start | stop | status | shell | sync | run -- <command>
 tools/aws/runs seed | seed-tools | fetch-sources
 ```
 
+## Before a real launch: check, then rehearse
+
+Add one flag to the launch command you are about to run:
+
+- **`--check`** (seconds; writes nothing): resolves every input as the launch would, applies the private-data
+  guard, checks each input is in the bucket (or here, for run folders and owner-allowed files), checks the
+  caches and the code bundle, and prints the plan: boxes, size, market, code, and how many start now in each
+  region and how many would queue. It runs no code.
+- **`--rehearse [--rehearse-minutes 3]`** (a few minutes; no fleet box): ships the job as a launch would and runs
+  it on the dev box through its own supervisor, in a private mount namespace with a fresh folder at `/scratch`,
+  so it sees a fleet box's layout (`/scratch/data`, `/scratch/dopplertrack`, `private/runs/` for a private job),
+  environment and network. At the cut-off the command is stopped; the verdict is `rehearsal-ok` (still running,
+  or finished) or `rehearsal-failed`, with the log's tail. Nothing comes back and the dev box stays up. With
+  `--shards N` it rehearses one shard (`--rehearse-shard K`, default 1); with `--resume JOB` it replays that job's
+  code, inputs and command. Set the minutes to cover the job's first full stage: a bug is only caught once the
+  job reaches it (the Seattle pilot-2 path bug showed in 10 s, pilot-3's missing folder after 300 s). The dev box
+  has 8 cores and 16 GB, so it is slower than a fleet box and can't rehearse a job that needs more memory.
+
+What neither catches: anything after the cut-off, and what needs a fleet box's cores or memory.
+
 ## A job, end to end
 
 `runs launch` (from the checkout whose branch should run, or with `--repo`):

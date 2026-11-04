@@ -364,7 +364,8 @@ def launch(a) -> str:
     inputs = list(dict.fromkeys(inputs))
     cleared = case_inputs([c for c in a.case if c in fleet_allow()])      # a cleared case's own files
     refuse_private(inputs, "input", cleared)
-    private_job = any(is_private(i) for i in inputs) or any(cid in fleet_allow() for cid in a.case)
+    private_job = getattr(a, "private", False) or any(is_private(i) for i in inputs) or \
+        any(cid in fleet_allow() for cid in a.case)
     if private_job:
         print("allowed by the owner (private/fleet-allow.txt): " + ", ".join(
             [i for i in inputs if is_private(i)] + [c for c in a.case if c in fleet_allow()]), flush=True)
@@ -987,6 +988,8 @@ def main(argv=None) -> None:
                     "(1..n) and DOPPLERTRACK_SHARDS=n, as jobs <topic>-s<k>of<n>")
     la.add_argument("--case", action="append", default=[], help="a bench case whose inputs the box needs")
     la.add_argument("--input", action="append", default=[], help="a file or folder under the data root, not runs/")
+    la.add_argument("--private", action="store_true", help="treat the job as private (its run folder under "
+                    "private/runs/, its cache apart) even without a private input")
     la.add_argument("--input-run", action="append", default=[], metavar="runs/FOLDER", help="a run folder the job "
                     "reads (or a file in one), uploaded from here first; never runs/ itself")
     la.add_argument("--cache", action="append", default=[], help=f"a cache kind to bring: {', '.join(CACHE_KINDS)}")

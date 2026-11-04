@@ -5,6 +5,51 @@ instance per job, started in about 30 s, terminated when the job ends. A persist
 `tools/check.sh` and interactive work. Why this design and what it was measured against:
 [docs/experiments/2026-11-04-aws-fleet.md](../../docs/experiments/2026-11-04-aws-fleet.md).
 
+## Handoff (2026-11-04, 23:15 UTC)
+
+For a fresh operator, Codex or a new session, taking the fleet over:
+
+1. **Credentials:** the AWS profile `dopplertrack` (IAM user dopplertrack-admin, region us-west-2); never the root
+   profile. Every command below reads it from `$AWS_PROFILE`, defaulting to that name.
+2. **What is running:** `tools/aws/runs fleet` lists every box with its job and price; `tools/aws/runs status`
+   lists every job with its state and cost; `tools/aws/runs fleet --util` shows each box's CPU and memory use.
+   At handoff: 10 boxes, $2.32/h (SDE-A's synth-suite shards in us-west-1, three detector-roc-s2 shards
+   in us-west-2 that started at 20:03 UTC and are worth a look if they are still running, Seattle pilot-12, the
+   dev box). Spot boxes terminate themselves when their job ends, after `--max-hours` (12) at the latest.
+3. **Finished jobs:** `runs pull JOB` copies the run folder into `$DOPPLERTRACK_DATA/runs/` (a private job's into
+   `private/runs/`) and merges new cache entries; sharded jobs are pulled one by one and merged by the job's own
+   `--merge` step. A job stuck in a state: `runs cancel JOB`; an interrupted one: `runs launch --resume JOB`.
+4. **The dev box** (`runs dev status`; it was running at handoff): it stops itself after 30 minutes with no
+   `runs dev run`, command, shell or load (a timer on the box, `box/devbox-idle.sh`, which replaced a CloudWatch
+   alarm that stopped it under running checks). Stop it at once with `runs dev stop`. Full checks run there:
+   `runs dev run -- tools/check.sh` (about 80 s); no doppler_track compute runs on the Mac.
+5. **Before any new or changed job:** the same launch command with `--check`, then `--rehearse` long enough to
+   reach the job's first full stage (section below).
+6. **Private data:** refused by default. Only the exact files and case ids in
+   `$DOPPLERTRACK_DATA/private/fleet-allow.txt` pass, each added after the owner approved that file by name; at
+   handoff it clears the Seattle pilot (seattle-home-20261104-ha-pilot-2: 10 files). The home location never goes
+   into git, docs or records.
+
+**Costs to watch.** `runs status` shows each job's cost and `runs fleet` the hourly total. 2026-11-04 cost about
+$25 in all, with a peak of about $36/h. Fixed costs: the dev box at $0.32/h while running plus about $39/month
+for its disk; S3 about $2/month; spot c8g.16xlarge about $0.92–1.05/h, 4xlarge about $0.21–0.28/h. Cost Explorer
+lags by a day.
+
+**Open quota cases.** The vCPU increases (spot to 1,024, on-demand to 512) are support cases, CASE_OPENED, in
+us-west-2, us-west-1 and us-east-2. AWS raised all six limits from 256 to 320 while the cases stay open, a
+partial grant. us-east-1 and eu-central-1 are at the default 256 + 256 with no request filed: the owner asked to
+be consulted before any more filings. Check with
+`aws service-quotas list-requested-service-quota-change-history --service-code ec2 --region <r>`.
+
+**Needs attention in the next day.**
+- The dev box's idle timer is new: confirm it stopped the box once idle (`runs dev status` should read stopped
+  an hour after the last use), and that no check was cut off by it.
+- The partial quota grant: answer any AWS follow-up in the Support console, where the cases are.
+- Two 0-byte files, `data/derived/traces/day1.launch.log` and `full-24h.launch.log`, are the recorder's empty launch
+  logs, in the bucket since the first seed; they reveal only their names and wait for the owner's decision to
+  remove them.
+- The three detector-roc-s2 shards (above), if still running long past their siblings.
+
 **How to launch.** `tools/aws/runs launch TOPIC --shards N [--size 8xlarge] [--on-demand] [--repo CHECKOUT]
 --inputs-from '<the job's --inputs or bench inputs command>' -- <command>`: one box per shard, each with
 `DOPPLERTRACK_SHARD_SPEC=k/N`; spot in us-west-2, then us-west-1, then us-east-2, waiting up to

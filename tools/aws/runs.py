@@ -37,7 +37,9 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent.parent
 STACK = "DopplertrackFleet"
-REGION = "us-west-2"
+REGION = "us-west-2"     # the bucket's and the dev box's
+# where a job box may run, tried in this order (app.py deploys a compute stack in each)
+JOB_REGIONS = ("us-west-2", "us-west-1", "us-east-2")
 FAMILIES = {"arm64": ("c8g", "c8gd", "c7g"), "amd64": ("c7a",)}
 TERMINAL = ("done", "failed", "interrupted", "timeout", "cancelled")
 # the caches a job box can use; cpa/ rebuilds on the box in under a minute and revisions/ is per machine
@@ -58,13 +60,13 @@ def profile() -> str:
     return os.environ.get("AWS_PROFILE", "dopplertrack")
 
 
-def session():
+def session(region: str = REGION):
     import boto3
-    return boto3.Session(profile_name=profile(), region_name=REGION)
+    return boto3.Session(profile_name=profile(), region_name=region)
 
 
-def outputs() -> dict:
-    cf = session().client("cloudformation")
+def outputs(region: str = REGION) -> dict:
+    cf = session(region).client("cloudformation")
     stack = cf.describe_stacks(StackName=STACK)["Stacks"][0]
     return {o["OutputKey"]: o["OutputValue"] for o in stack.get("Outputs", [])}
 
@@ -238,11 +240,21 @@ def launch(a) -> str:
             s3.upload_file(str(f), bucket, f"jobs/{job}/code/{f.name}")
     s3.upload_file(str(HERE / "box" / "supervisor.py"), bucket, f"jobs/{job}/supervisor.py")
     put_status(s3, bucket, job, {"job": job, "state": "submitted", "updated": now()})
-    ec2 = session().client("ec2")
-    ids, errs = start_box(ec2, out, job, a.size, a.on_demand)
-    if not ids and not a.on_demand and not a.spot_only:     # no spot capacity anywhere: on demand, not a wait
-        print(f"{job}: no spot capacity ({errs}); launching on demand", flush=True)
-        ids, errs = start_box(ec2, out, job, a.size, True)
+    # spot in each region in turn, then on demand in each: never a wait for capacity or quota
+    markets = [True] if a.on_demand else [False] if a.spot_only else [False, True]
+    ids, errs, region = [], [], None
+    for od in markets:
+        for region in (a.region or JOB_REGIONS):
+            ec2 = session(region).client("ec2")
+            ids, err = start_box(ec2, outputs(region), job, a.size, od)
+            if ids:
+                break
+            errs.append(f"{region} {'on-demand' if od else 'spot'}: {err}")
+        if ids:
+            break
+    if errs and ids:
+        print(f"{job}: " + "; ".join(e.split(':')[0] + ' full' for e in errs), flush=True)
+    errs = " | ".join(errs)
     if not ids:
         put_status(s3, bucket, job, {"job": job, "state": "failed", "stage": "launch", "error": errs,
                                      "updated": now()})
@@ -250,9 +262,9 @@ def launch(a) -> str:
     ec2.get_waiter("instance_exists").wait(InstanceIds=ids)     # describe lags create_fleet by a moment
     desc = ec2.describe_instances(InstanceIds=ids)["Reservations"][0]["Instances"][0]
     market = desc.get("InstanceLifecycle", "on-demand")
-    price = hourly_price(desc["InstanceType"], desc["Placement"]["AvailabilityZone"], market)
+    price = hourly_price(desc["InstanceType"], desc["Placement"]["AvailabilityZone"], market, region)
     s3.put_object(Bucket=bucket, Key=f"jobs/{job}/launch.json", Body=json.dumps(
-        {"instance_id": ids[0], "instance_type": desc["InstanceType"], "market": market,
+        {"instance_id": ids[0], "instance_type": desc["InstanceType"], "market": market, "region": region,
          "availability_zone": desc["Placement"]["AvailabilityZone"], "usd_per_hour": price,
          "ebs_usd_per_hour": JOB_EBS_USD_PER_HOUR, "launched": now()}, indent=1).encode())
     print(f"{job}: {ids[0]} {desc['InstanceType']} {desc['Placement']['AvailabilityZone']} {market} "
@@ -270,16 +282,16 @@ def start_box(ec2, out: dict, job: str, size: str, on_demand: bool) -> tuple[lis
     return ids, "; ".join(f"{e.get('ErrorCode')}: {e.get('ErrorMessage')}" for e in resp.get("Errors", []))
 
 
-def hourly_price(itype: str, az: str, market: str) -> float:
+def hourly_price(itype: str, az: str, market: str, region: str = REGION) -> float:
     """The box's price now: the spot price in its AZ, or the on-demand list price."""
-    sess = session()
+    sess = session(region)
     if market == "spot":
         h = sess.client("ec2").describe_spot_price_history(
             InstanceTypes=[itype], AvailabilityZone=az, ProductDescriptions=["Linux/UNIX"], MaxResults=1)
         return float(h["SpotPriceHistory"][0]["SpotPrice"])
     pricing = sess.client("pricing", region_name="us-east-1")
     f = [{"Type": "TERM_MATCH", "Field": k, "Value": v} for k, v in (
-        ("instanceType", itype), ("regionCode", REGION), ("operatingSystem", "Linux"), ("tenancy", "Shared"),
+        ("instanceType", itype), ("regionCode", region), ("operatingSystem", "Linux"), ("tenancy", "Shared"),
         ("preInstalledSw", "NA"), ("capacitystatus", "Used"))]
     item = json.loads(pricing.get_products(ServiceCode="AmazonEC2", Filters=f)["PriceList"][0])
     od = next(iter(item["terms"]["OnDemand"].values()))
@@ -316,11 +328,16 @@ def get_status(s3, bucket: str, job: str) -> dict:
         return {"job": job, "state": "unknown"}
 
 
-def job_instances(job: str, states=("pending", "running", "stopping", "shutting-down")) -> list[str]:
-    ec2 = session().client("ec2")
-    r = ec2.describe_instances(Filters=[{"Name": "tag:dopplertrack-job", "Values": [job]},
-                                        {"Name": "instance-state-name", "Values": list(states)}])
-    return [i["InstanceId"] for res in r["Reservations"] for i in res["Instances"]]
+def job_instances(job: str, states=("pending", "running", "stopping", "shutting-down")) -> dict[str, list[str]]:
+    """The job's boxes by region."""
+    out = {}
+    for region in JOB_REGIONS:
+        r = session(region).client("ec2").describe_instances(Filters=[
+            {"Name": "tag:dopplertrack-job", "Values": [job]}, {"Name": "instance-state-name", "Values": list(states)}])
+        ids = [i["InstanceId"] for res in r["Reservations"] for i in res["Instances"]]
+        if ids:
+            out[region] = ids
+    return out
 
 
 def status(a) -> None:
@@ -435,8 +452,8 @@ def log(a) -> None:
 
 def cancel(a) -> None:
     ids = job_instances(a.job)
-    if ids:
-        session().client("ec2").terminate_instances(InstanceIds=ids)
+    for region, these in ids.items():
+        session(region).client("ec2").terminate_instances(InstanceIds=these)
     s3 = session().client("s3")
     bucket = outputs()["Bucket"]
     st = get_status(s3, bucket, a.job)
@@ -448,18 +465,19 @@ def cancel(a) -> None:
 def interrupt(a) -> None:
     """Sends the job's spot box a real interruption through AWS Fault Injection Service (the supervisor's
     tested path): the 2-minute notice, then termination."""
-    ids = job_instances(a.job, states=("running",))
-    if not ids:
+    boxes = job_instances(a.job, states=("running",))
+    if not boxes:
         sys.exit(f"no running box for {a.job}")
-    sess = session()
+    region, ids = next(iter(boxes.items()))
+    sess = session(region)
     account = sess.client("sts").get_caller_identity()["Account"]
-    role_arn = outputs()["FisRoleArn"]
+    role_arn = outputs(region)["FisRoleArn"]
     fis = sess.client("fis")
     tmpl = fis.create_experiment_template(
         description=f"dopplertrack: interrupt {a.job}", roleArn=role_arn,
         stopConditions=[{"source": "none"}], tags={"project": "dopplertrack"},
         targets={"box": {"resourceType": "aws:ec2:spot-instance", "selectionMode": "ALL",
-                         "resourceArns": [f"arn:aws:ec2:{REGION}:{account}:instance/{i}" for i in ids]}},
+                         "resourceArns": [f"arn:aws:ec2:{region}:{account}:instance/{i}" for i in ids]}},
         actions={"interrupt": {"actionId": "aws:ec2:send-spot-instance-interruptions", "targets": {"SpotInstances": "box"},
                                "parameters": {"durationBeforeInterruption": "PT2M"}}})["experimentTemplate"]
     exp = fis.start_experiment(experimentTemplateId=tmpl["id"], tags={"project": "dopplertrack"})["experiment"]
@@ -580,7 +598,7 @@ def fetch_sources(a) -> None:
     s3.put_object(Bucket=bucket, Key=key, Body=json.dumps({"files": plan}, indent=1).encode())
     a.topic, a.case, a.input, a.cache, a.jobs = "aws-fetch-sources", [], [], [], None
     a.on_demand, a.spot_only, a.max_hours, a.checkpoint_minutes, a.wait = False, False, 6, 5, False
-    a.resume, a.repo, a.shards, a.shard = None, None, 1, None
+    a.resume, a.repo, a.shards, a.shard, a.region = None, None, 1, None, None
     a.command = ["python3", "tools/aws/box/fetch_sources.py", f"s3://{bucket}/{key}", bucket]
     launch(a)
 
@@ -699,6 +717,8 @@ def main(argv=None) -> None:
     la.add_argument("--jobs", type=int, help="DOPPLERTRACK_JOBS on the box (default: its physical cores)")
     la.add_argument("--size", default="16xlarge", help="instance size of every family (default: 16xlarge)")
     la.add_argument("--on-demand", action="store_true", help="on-demand instead of spot, for deciding runs")
+    la.add_argument("--region", action="append", choices=JOB_REGIONS, help="only this region (repeatable; "
+                    f"default: {', '.join(JOB_REGIONS)}, in that order)")
     la.add_argument("--spot-only", action="store_true", help="fail rather than fall back to on-demand when no "
                     "spot capacity is free")
     la.add_argument("--max-hours", type=float, default=12, help="stop the command after this long (default: 12)")

@@ -10,10 +10,10 @@ shutdown -h +30     # a boot that hangs before the supervisor starts still ends;
 IMDS=http://169.254.169.254/latest
 TOKEN=$(curl -sfX PUT "$IMDS/api/token" -H 'X-aws-ec2-metadata-token-ttl-seconds: 21600')
 md() { curl -sf -H "X-aws-ec2-metadata-token: $TOKEN" "$IMDS/meta-data/$1"; }
-AWS_REGION=$(md placement/region)
-export AWS_REGION HOME=/root DEBIAN_FRONTEND=noninteractive
+# s5cmd talks to the bucket's region, which may not be the box's
+export AWS_REGION=@@BUCKET_REGION@@ HOME=/root DEBIAN_FRONTEND=noninteractive
 JOB=$(md tags/instance/dopplertrack-job) || { echo "no dopplertrack-job tag"; shutdown -h now; exit 1; }
-echo "dopplertrack job $JOB on $(md instance-type) in $(md placement/availability-zone)"
+echo "dopplertrack job $JOB on $(md instance-type) in $(md placement/availability-zone), bucket in $AWS_REGION"
 
 fail() {
   echo "bootstrap failed: $*"

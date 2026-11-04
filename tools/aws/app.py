@@ -22,8 +22,11 @@ from aws_cdk import aws_s3 as s3
 from constructs import Construct
 
 HERE = Path(__file__).parent
-REGION = "us-west-2"
-AZS = ["us-west-2a", "us-west-2b", "us-west-2c", "us-west-2d"]
+REGION = "us-west-2"        # the home region: the bucket and the dev box
+# where job boxes can run, nearest first, with the AZs that offer the fleet's families (c8gd: us-west-2, us-east-2)
+REGIONS = {"us-west-2": ["us-west-2a", "us-west-2b", "us-west-2c", "us-west-2d"],
+           "us-west-1": ["us-west-1a", "us-west-1c"],
+           "us-east-2": ["us-east-2a", "us-east-2b", "us-east-2c"]}
 UBUNTU = "/aws/service/canonical/ubuntu/server/24.04/stable/current/{arch}/hvm/ebs-gp3/ami-id"
 JOB_ROOT_GB = 200
 DEV_TYPE = "c8g.2xlarge"
@@ -31,7 +34,8 @@ DEV_ROOT_GB = 300
 
 
 def user_data(name: str, bucket: s3.IBucket) -> ec2.UserData:
-    return ec2.UserData.custom((HERE / "box" / name).read_text().replace("@@BUCKET@@", bucket.bucket_name))
+    text = (HERE / "box" / name).read_text().replace("@@BUCKET@@", bucket.bucket_name)
+    return ec2.UserData.custom(text.replace("@@BUCKET_REGION@@", REGION))
 
 
 def root_volume(gb: int, throughput: int | None = 500) -> ec2.BlockDevice:
@@ -42,8 +46,14 @@ def root_volume(gb: int, throughput: int | None = 500) -> ec2.BlockDevice:
 
 
 class FleetStack(cdk.Stack):
-    def __init__(self, scope: Construct, cid: str, **kw):
+    """The home stack (bucket, dev box, job boxes) in REGION, or a compute-only one elsewhere: the same VPC,
+    role, launch templates and FIS role, its boxes using the home bucket across regions."""
+
+    def __init__(self, scope: Construct, cid: str, home: bool = True, **kw):
         super().__init__(scope, cid, **kw)
+        if not home:
+            self.compute(s3.Bucket.from_bucket_name(self, "Data", f"dopplertrack-{self.account}-{REGION}"), None)
+            return
         bucket = s3.Bucket(
             self, "Data", bucket_name=f"dopplertrack-{self.account}-{self.region}",
             block_public_access=s3.BlockPublicAccess.BLOCK_ALL, encryption=s3.BucketEncryption.S3_MANAGED,
@@ -54,8 +64,11 @@ class FleetStack(cdk.Stack):
                              s3.LifecycleRule(prefix="jobs/", expiration=cdk.Duration.days(60)),
                              s3.LifecycleRule(prefix="dev/", expiration=cdk.Duration.days(7))])
 
+        self.compute(bucket, bucket)
+
+    def compute(self, bucket: s3.IBucket, home_bucket: s3.Bucket | None) -> None:
         vpc = ec2.Vpc(
-            self, "Vpc", availability_zones=AZS, nat_gateways=0, ip_addresses=ec2.IpAddresses.cidr("10.42.0.0/16"),
+            self, "Vpc", availability_zones=REGIONS[self.region], nat_gateways=0, ip_addresses=ec2.IpAddresses.cidr("10.42.0.0/16"),
             subnet_configuration=[ec2.SubnetConfiguration(name="public", subnet_type=ec2.SubnetType.PUBLIC,
                                                           cidr_mask=20)],
             gateway_endpoints={"S3": ec2.GatewayVpcEndpointOptions(service=ec2.GatewayVpcEndpointAwsService.S3)})
@@ -80,6 +93,20 @@ class FleetStack(cdk.Stack):
                 instance_initiated_shutdown_behavior=ec2.InstanceInitiatedShutdownBehavior.TERMINATE,
                 require_imdsv2=True, instance_metadata_tags=True, block_devices=[root_volume(JOB_ROOT_GB)])
 
+        fis = iam.Role(self, "FisRole", assumed_by=iam.ServicePrincipal("fis.amazonaws.com"))
+        fis.add_to_policy(iam.PolicyStatement(actions=["ec2:SendSpotInstanceInterruptions"], resources=["*"],
+                                              conditions={"StringEquals": {"aws:ResourceTag/project": "dopplertrack"}}))
+        fis.add_to_policy(iam.PolicyStatement(actions=["ec2:DescribeInstances"], resources=["*"]))
+        out = {"Bucket": bucket.bucket_name, "FisRoleArn": fis.role_arn, "SecurityGroup": sg.security_group_id,
+               "Subnets": ",".join(s.subnet_id for s in vpc.public_subnets),
+               "TemplateArm64": templates["arm64"].launch_template_id,
+               "TemplateAmd64": templates["amd64"].launch_template_id}
+        if home_bucket is not None:
+            out["DevBoxId"] = self.dev_box(vpc, role, sg, bucket)
+        for k, v in out.items():
+            cdk.CfnOutput(self, k, value=v)
+
+    def dev_box(self, vpc, role, sg, bucket) -> str:
         dev = ec2.Instance(
             self, "DevBox", instance_name="dopplertrack-dev", instance_type=ec2.InstanceType(DEV_TYPE),
             machine_image=ec2.MachineImage.from_ssm_parameter(UBUNTU.format(arch="arm64")), vpc=vpc,
@@ -96,22 +123,12 @@ class FleetStack(cdk.Stack):
                              period=cdk.Duration.minutes(5)))
         idle.add_alarm_action(cwa.Ec2Action(cwa.Ec2InstanceAction.STOP))
 
-        # what `runs interrupt` hands Fault Injection Service: it may interrupt this project's spot boxes only
-        fis = iam.Role(self, "FisRole", assumed_by=iam.ServicePrincipal("fis.amazonaws.com"))
-        fis.add_to_policy(iam.PolicyStatement(actions=["ec2:SendSpotInstanceInterruptions"], resources=["*"],
-                                              conditions={"StringEquals": {"aws:ResourceTag/project": "dopplertrack"}}))
-        fis.add_to_policy(iam.PolicyStatement(actions=["ec2:DescribeInstances"], resources=["*"]))
-
-        out = {"Bucket": bucket.bucket_name, "FisRoleArn": fis.role_arn, "SecurityGroup": sg.security_group_id,
-               "Subnets": ",".join(s.subnet_id for s in vpc.public_subnets),
-               "TemplateArm64": templates["arm64"].launch_template_id,
-               "TemplateAmd64": templates["amd64"].launch_template_id,
-               "DevBoxId": dev.instance_id}
-        for k, v in out.items():
-            cdk.CfnOutput(self, k, value=v)
+        return dev.instance_id
 
 
 app = cdk.App()
-stack = FleetStack(app, "DopplertrackFleet", env=cdk.Environment(region=REGION))
-cdk.Tags.of(stack).add("project", "dopplertrack")
+for region in REGIONS:     # the same stack name in every region; `cdk deploy --all` deploys them all
+    stack = FleetStack(app, "DopplertrackFleet" if region == REGION else f"DopplertrackFleet-{region}",
+                       home=region == REGION, stack_name="DopplertrackFleet", env=cdk.Environment(region=region))
+    cdk.Tags.of(stack).add("project", "dopplertrack")
 app.synth()

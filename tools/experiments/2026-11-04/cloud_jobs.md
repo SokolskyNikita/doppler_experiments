@@ -151,8 +151,16 @@ the units with `python3 tools/experiments/2026-11-04/copy_new.py SRC_RUN DST_RUN
 **Item 6, the detector** ([record so far](../../../docs/experiments/2026-11-04-detector-threshold.md), proposal
 `docs/proposals/2026-11-04-detector-threshold.md`):
 
-1. **Running:** the S₂ retune on 2026-11-04-detector-roc-s2-s7of9, -s8of9 and -s9of9 (settings S2B0, S2B1, S2B2,
-   one per box), about 4× slower than the others. When they're done:
+1. **Interrupted, not running:** the S₂ retune on 2026-11-04-detector-roc-s2-s7of9, -s8of9 and -s9of9 (settings
+   S2B0, S2B1, S2B2, one per box). All three were spot-interrupted after 208–224 min, about $3 in all.
+   - Only s7 saved units (5, pulled). s8 and s9 never finished their noise unit.
+   - The cause is that the noise unit calls `tracks.rescore_null` serially over about 200 candidates, one full
+     `fit_event` on a reversed window each.
+   - **Before relaunching:** run those fits in a process pool (`DOPPLERTRACK_JOBS`), as `detect_events` does with
+     its windows. Then launch `--shards 9 --only-shard 7 --only-shard 8 --only-shard 9` on 4xlarge, or larger
+     boxes, so the noise unit fits a spot lifetime.
+
+   When they're done:
    - pull all three;
    - copy their `detector_roc/` into a new run folder beside the six finished settings (S₀: detector-roc-s{1,2,3}of6;
      S₁: detector-roc-s1-s{4,5,6}of6), or into 2026-11-04-detector-roc-collect;
@@ -182,7 +190,7 @@ After a rebuild, rerun the privacy check: no ICAO, registration or site coordina
 
 **Half-built:** item 6's Tier 1 driver (above). The frame-covariance and window records are done.
 
-**Next step:** finish item 6 (gate S₂, Tier 1, the record's outcome), then propose the next drawing-board step on
+**Next step:** parallelise `rescore_null`, relaunch S₂, then finish item 6 (gate S₂, Tier 1, the record's outcome), then propose the next drawing-board step on
 the detector's statistic if S₂ also fails.
 
 ## SDE-B

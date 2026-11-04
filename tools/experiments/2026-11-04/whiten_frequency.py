@@ -82,4 +82,4 @@ if __name__ == "__main__":
     t2 = run / f"{arm}-t2"; t2.mkdir(parents=True, exist_ok=True)
     BR.run_bench(SEED, tier="t2", run_dir=t2, profile="saved-fit", parallel=1)
     t1 = run / f"{arm}-t1"; t1.mkdir(parents=True, exist_ok=True)
-    print(BT.run_tier1(("development",), run_dir=t1, workers=2))
+    print(BT.run_tier1(("development",), run_dir=t1, workers=int(os.environ["DOPPLERTRACK_JOBS"])))

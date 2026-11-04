@@ -156,7 +156,7 @@ def launch(a) -> str:
     inputs = case_inputs(a.case) + [p for p in a.input if p not in case_inputs(a.case)]
     caches = list(dict.fromkeys(a.cache or (["terrarium"] if a.case else [])))
     with tempfile.TemporaryDirectory() as tmp:
-        code = code_bundle(Path(tmp) / "code")
+        code = code_bundle(Path(tmp) / "code", repo=Path(a.repo).resolve() if getattr(a, "repo", None) else REPO)
         for job in candidate_ids(a.topic, datetime.date.today()):
             if (DATA_ROOT / "runs" / job).exists():
                 continue
@@ -563,6 +563,7 @@ def main(argv=None) -> None:
     la.add_argument("--on-demand", action="store_true", help="on-demand instead of spot, for deciding runs")
     la.add_argument("--max-hours", type=float, default=12, help="stop the command after this long (default: 12)")
     la.add_argument("--checkpoint-minutes", type=float, default=10, help="upload the run folders this often")
+    la.add_argument("--repo", help="ship this checkout instead of the one runs is in (e.g. a worktree at another commit)")
     la.add_argument("--wait", action="store_true", help="wait for it, then pull")
     la.epilog = "then -- and the command, run with bash in the checkout"
     la.set_defaults(command=[])

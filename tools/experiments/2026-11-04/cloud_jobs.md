@@ -170,7 +170,8 @@ its search, so it never builds its table.
    - Measured on the Mac, 4 workers under load, eagle-cam clip, before the run was stopped: the top2 search took
      41 s from a cached table. Four of comparable's ten searches had finished, at 62–170 s each, when the run
      stopped 507 s in.
-   - Each comparable search reloads the case's CPA table (1.15 GB for the eagle cam), so a box's disk speed counts.
+   - Each comparable search reloads the case's CPA table (1.15 GB for the eagle cam), but a load took about 1 s;
+     a search's time is its pairing and scoring, which scale with the workers.
 2. **Tier 2 locate, silence filter on.** The same with `--search-param silence_d_m=6000`. It reuses job 1's CPA
    tables, so run it after job 1 or with job 1's tables copied in.
 3. **Tier 2 saved-fit**, the five development cases with saved fits.
@@ -189,7 +190,7 @@ its search, so it never builds its table.
    - The 788 s run predates the nine background spans. With them, a cold Tier 1 took about 50 minutes under load
      (`docs/experiments/2026-11-04-cache-keys.md`), so the background spans are the bulk of a cold run.
 
-Jobs 1, 2 and 5 are independent of each other. Job 4 waits for the case bump and job 3.
+All five launch at once, one box per case or Tier 1 unit: `tools/experiments/2026-11-04/sde_b_cloud.sh launch`, then `... collect` pulls, merges the shards, compares (silence off against on; legacy against margin-padded cut) and renders the reports. Job 3 runs at the commit before the case bump, from a worktree, so it needs no wait.
 
 ## SDE-A
 
@@ -238,20 +239,35 @@ Splitting a job across boxes can't bring it under its longest unit.
 
 **Null draws.** These run inside the units above. Each comparable-score search draws each event's null, and each
 B1/B2 case draws its events' nulls. Each draw is seeded from the event's fit, so a unit gives the same null on any
-box. N is fixed at `pipeline.NULL_N` = 1,000. A larger-N job would first need N as a search parameter. That only
-happens if stage B's retune is spent on N, which hasn't happened.
+box. The pairs driver keeps each search's nulls in `null.json`, beside its record. N is `run_search`'s `null_n`,
+1,000 by default; `--null-n` changes it. The follow-up runs at N = 250,000, the PM's cap.
 
-### For SDE-E's wrapper
+### Launching, and after
 
-- **The baseline detections live in a run folder.** All the pairs and B1/B2 jobs read `detected.json` from
-  `runs/2026-11-04-bench-5314396-raw-audio-t2/`. `seed` uploads only `raw/` and `derived/`, so `--input` needs
-  that run's files in the bucket, or a job that remakes them first.
-- **Merging shards.** Each `runs launch` makes its own `$RUN`, so a sharded job is N launches with `--shard k/N`.
-  After `runs pull`, the merge is the same command on the Mac:
-  `--merge RUN_1 --resume RUN_2 ... RUN_N`.
-  - A spot interruption is resumed the same way: a new launch with `--resume` pointing at the interrupted
-    folder, once it has been pulled.
-- **The pinned code.** Stage B's A1/A3 must run the first run's hypotheses (`45d0bd8`), not the retune's. The
-  drivers' shard support is newer, so that job launches from `claude/sde-stageb-pairs-45d0bd8` (`1702067`):
-  `45d0bd8` with the shard commit cherry-picked, keeping B1/B2's `event_hypotheses` call as it was at
-  `45d0bd8`. The other jobs launch from `dev`.
+[`launch_sde_a.sh`](launch_sde_a.sh) has every step as one command:
+- `launch PINNED` starts five jobs at once, each sharded over its own boxes. Each box takes its shard from
+  `$DOPPLERTRACK_SHARD_SPEC`.
+  - Stage B's A1/A3 runs on 10 boxes, on demand.
+  - Its null-N follow-up, N = 250,000, runs on 30 boxes, on demand, with 64 workers per search. It runs now and is
+    read only if A1 needs it.
+  - Stage A runs on 5 boxes, B1/B2 on 3, and the timing sweep on 15.
+  - That is 63 .16xlarge boxes. `SHARDS_B`, `SHARDS_N`, `SHARDS_A`, `SHARDS_B12` and `SHARDS_SWEEP` change the
+    counts.
+  - A launch that fails, for example on a vCPU quota, is reported and the others go on.
+- `merge KIND S1 S2 ...` merges a job's pulled shards into a new run folder, from a checkout at the job's commit
+  (`PINNED=` for the two stage B jobs). A merge refuses units from another commit or other settings.
+- `a1 MERGED_B [MERGED_N]` judges A1 with [`a1_noise.py`](a1_noise.py), and reads the N run only when the record's
+  rule says to.
+
+A spot interruption is `runs launch --resume JOB`. It continues the same run folder, and finished units are skipped.
+
+### The pinned code
+
+Stage B's A1/A3 must run the first run's hypotheses (`45d0bd8`), not the retune's. So that job launches from
+`claude/sde-stageb-pairs-45d0bd8` (`6f0ce38`), as does its N follow-up:
+- `45d0bd8`, plus the shard commit;
+- `run_search`'s `null_n`, which defaults to 1,000, as before;
+- the pairs driver's kept nulls and `--null-n`, and `a1_noise.py`;
+- B1/B2's `event_hypotheses` call, kept as it was at `45d0bd8`.
+
+The other jobs launch from `dev`.

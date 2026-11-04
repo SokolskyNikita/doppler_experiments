@@ -15,6 +15,11 @@ Doppler curves of propeller aircraft. `README.md` explains the method; `PLAN.md`
   - `DOPPLERTRACK_CACHE` (default `~/.cache/dopplertrack`): regenerable files. The code already keeps
     terrain tiles there; CPA tables go in `cpa/`.
   - In the main checkout `data` is a symlink to `$DOPPLERTRACK_DATA`. In a worktree, use the variable.
+- Long jobs run on AWS, one spot box per job in us-west-2, not on the shared Mac: `tools/aws/runs launch
+  <topic> --case ID -- <command>` ships the branch (bundle plus diff, nothing pushed), runs it with `$RUN`
+  set, and `runs pull` brings the run folder back; `runs dev run -- tools/check.sh` uses the dev box.
+  Profile `dopplertrack`; costs, inputs and the bucket's layout are in [tools/aws/README.md](tools/aws/README.md).
+  Run `tools/aws/check.sh` before any `cdk deploy`.
 
 ## Tests
 
@@ -104,7 +109,7 @@ Doppler curves of propeller aircraft. `README.md` explains the method; `PLAN.md`
 | `tools/experiments/<date>/` | scripts behind the numbers in `docs/experiments/`; records, not tools |
 | `bench/manifest.json` | size, SHA-256, source and licence of every raw input |
 | `bench/cases.json` | benchmark cases: sources, start times, recipes for derived files, search parameters, labels |
-| `bench/*.py` | `uv run python -m bench validate\|build\|run\|compare`: rebuild a case's derived files, run cases blind into a run folder, compare two runs |
+| `bench/*.py` | `uv run python -m bench validate\|build\|run\|merge\|inputs\|tier1\|report\|compare`: rebuild a case's derived files, run cases blind into a run folder (`--shard`, `--resume`), merge shards, list a job's inputs, render each record's HTML report into a new run folder, compare two runs |
 | `docs/architecture.md` | edit map: the detector and CPA-build code paths and the tests that check them |
 | `docs/experiments/` | one record per experiment: question, setup, numbers, outcome, script and run folder |
 | `docs/reference/README.md` | reading list for the papers in `$DOPPLERTRACK_DATA/reference/` |

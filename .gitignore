@@ -35,3 +35,7 @@ Thumbs.db
 
 # Secrets
 .env
+
+# Fork: data lives outside the repo in $DOPPLERTRACK_DATA; in the main checkout `data` is a symlink to it
+/data
+.claude/settings.local.json

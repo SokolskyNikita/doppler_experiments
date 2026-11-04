@@ -24,10 +24,10 @@ def test_s1_is_a_named_statistic_with_unit_spread_in_noise():
 
 
 def test_s2_measures_an_event_against_its_window_reversed_in_time():
-    x = (0.4 * np.random.default_rng(7).standard_normal(240 * 4000)).astype(np.float32)
-    sp = audio.compute_spectrogram(x, 4000, fmax=450.0, whiten_window_s=None)
-    ef = tracks.fit_event(sp, 60.0, 180.0, 100.0, 250.0, c=340.0)
+    x = (0.4 * np.random.default_rng(7).standard_normal(120 * 4000)).astype(np.float32)
+    sp = audio.compute_spectrogram(x, 4000, fmax=300.0, whiten_window_s=None)
+    ef = tracks.fit_event(sp, 40.0, 80.0, 120.0, 220.0, c=340.0)
     diag: list = []
-    (e,) = tracks.rescore_null(sp, [ef], 100.0, 250.0, c=340.0, diagnostics=diag)
+    (e,) = tracks.rescore_null(sp, [ef], 120.0, 220.0, c=340.0, diagnostics=diag)
     assert np.isfinite(diag[0]["s0_reversed"]) and e.score == ef.score - diag[0]["s0_reversed"]
     assert (e.f0, e.v, e.d) == (ef.f0, ef.v, ef.d)                        # the fit is unchanged

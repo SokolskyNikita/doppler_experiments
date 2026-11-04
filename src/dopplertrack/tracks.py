@@ -308,9 +308,14 @@ def fit_track(track: Track, c: float | None = None, weighted: bool = False,
     projection doesn't remove local optima. weighted=True weights each point by its amplitude squared
     (Quinn 1995). Raises ValueError with fewer than 8 usable points."""
     c = speed_of_sound() if c is None else c
-    t, g, a = track.usable()
-    if len(t) < 8:
-        raise ValueError(f"a track needs at least 8 usable points, got {len(t)}")
+    t_abs, g, a = track.usable()
+    if len(t_abs) < 8:
+        raise ValueError(f"a track needs at least 8 usable points, got {len(t_abs)}")
+    # t_c is searched relative to the track's first point: in recording or unix seconds the optimiser's
+    # steps and tolerances would scale with the clock's magnitude (SDE-D's item 2 found least_squares
+    # stopping early that way)
+    t_ref = float(t_abs[0])
+    t = t_abs - t_ref
     w = a ** 2 if weighted else np.ones_like(g)
     w = w / w.mean()
 
@@ -386,7 +391,7 @@ def fit_track(track: Track, c: float | None = None, weighted: bool = False,
     z_span = float(z.max() - z.min())
     identified = bool(z_span >= LS_Z_SPAN_MIN and beta < 0 and ok_v and converged
                       and not ({"v", "d"} & set(at_bound)))
-    return TrackFit(f0=f0, v=v, d=d, t_cpa_emit=tc, t_cpa=tc + d / c, t_start=float(t[0]), t_end=float(t[-1]),
+    return TrackFit(f0=f0, v=v, d=d, t_cpa_emit=t_ref + tc, t_cpa=t_ref + tc + d / c, t_start=float(t_abs[0]), t_end=float(t_abs[-1]),
                     alpha=float(alpha), beta=float(beta), s=s, weighted=weighted, n=n,
                     rms_hz=float(np.sqrt((w * resid ** 2).sum() / w.sum())), z_span=z_span, cond=cond,
                     converged=converged, n_starts=len(sols), n_optima=len(distinct),

@@ -100,3 +100,10 @@ def test_ridge_track_follows_a_painted_pass():
     assert tr.amplitude.min() >= 1.0 and tr.valid.all()
     fit = tracks.fit_track(tr, c=C)
     assert fit.identified and abs(fit.f0 - f0) < 1 and abs(fit.v - v) / v < 0.1 and abs(fit.t_cpa_emit - tc) < 2
+
+
+def test_unix_scale_times_are_recovered():
+    """t_c is searched relative to the track, so a clock of 1.8e9 s costs no precision."""
+    f0, v, d = PASSES[3]
+    fit = tracks.fit_track(_track(f0, v, d, tc=1.8e9), c=C)
+    assert fit.t_cpa_emit == pytest.approx(1.8e9, abs=1e-3) and fit.d == pytest.approx(d, rel=1e-4)

@@ -19,7 +19,8 @@ SRC=${2:-}
 
 from_src() {
     [ -n "$SRC" ] || { echo "$STEP needs SRC" >&2; exit 2; }
-    cp -Rn "$DOPPLERTRACK_DATA/runs/$SRC/." "$RUN/"
+    [ -d "$DOPPLERTRACK_DATA/runs/$SRC" ] || { echo "no runs/$SRC on this box: launch with --input runs/$SRC" >&2; exit 2; }
+    python3 "$D/copy_new.py" "$DOPPLERTRACK_DATA/runs/$SRC" "$RUN"
 }
 
 case $STEP in

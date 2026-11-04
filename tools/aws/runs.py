@@ -39,7 +39,8 @@ REPO = HERE.parent.parent
 STACK = "DopplertrackFleet"
 REGION = "us-west-2"     # the bucket's and the dev box's
 # where a job box may run, tried in this order (app.py deploys a compute stack in each)
-JOB_REGIONS = ("us-west-2", "us-west-1", "us-east-2")
+JOB_REGIONS = ("us-west-2", "us-west-1", "us-east-2", "us-east-1", "eu-central-1")
+NOT_OFFERED = {"us-west-1": {"c8gd"}}     # families a region lacks, so the fleet doesn't ask for them
 FAMILIES = {"arm64": ("c8g", "c8gd", "c7g"), "amd64": ("c7a",)}
 TERMINAL = ("done", "failed", "interrupted", "timeout", "cancelled")
 # the caches a job box can use; cpa/ rebuilds on the box in under a minute and revisions/ is per machine
@@ -65,10 +66,23 @@ def session(region: str = REGION):
     return boto3.Session(profile_name=profile(), region_name=region)
 
 
+_OUTPUTS: dict[str, dict | None] = {}
+
+
 def outputs(region: str = REGION) -> dict:
-    cf = session(region).client("cloudformation")
-    stack = cf.describe_stacks(StackName=STACK)["Stacks"][0]
-    return {o["OutputKey"]: o["OutputValue"] for o in stack.get("Outputs", [])}
+    if _OUTPUTS.get(region) is None:
+        cf = session(region).client("cloudformation")
+        stack = cf.describe_stacks(StackName=STACK)["Stacks"][0]
+        _OUTPUTS[region] = {o["OutputKey"]: o["OutputValue"] for o in stack.get("Outputs", [])}
+    return _OUTPUTS[region]
+
+
+def deployed(region: str) -> bool:
+    """Whether the region has its compute stack (a region listed here may not be deployed yet)."""
+    try:
+        return bool(outputs(region).get("TemplateArm64"))
+    except Exception:       # noqa: BLE001 - no stack, or the region not reachable: skip it
+        return False
 
 
 def aws_cli(*args: str) -> None:
@@ -138,11 +152,12 @@ def listed_inputs(doc: dict) -> tuple[list[str], list[str], list[str]]:
     return cases, list(dict.fromkeys(paths)), [k for k in dict.fromkeys(kinds) if k in CACHE_KINDS]
 
 
-def fleet_request(out: dict, job: str, size: str, on_demand: bool, families=FAMILIES) -> dict:
+def fleet_request(out: dict, job: str, size: str, on_demand: bool, families=FAMILIES, region: str = REGION) -> dict:
     """The create_fleet arguments: one instance, any listed family of `size` in any of the subnets."""
     subnets = out["Subnets"].split(",")
     configs = []
     for arch, fams in families.items():
+        fams = [f for f in fams if f not in NOT_OFFERED.get(region, ())]
         overrides = [{"InstanceType": f"{fam}.{size}", "SubnetId": s} for fam in fams for s in subnets]
         if overrides:
             configs.append({"LaunchTemplateSpecification": {"LaunchTemplateId": out[f"Template{arch.capitalize()}"],
@@ -163,16 +178,31 @@ def launch_all(a) -> list[str]:
     if a.shards <= 1:
         return [launch(a)]
     a.only_shard = getattr(a, "only_shard", None)
-    jobs, failed = [], []
+    pending = []        # every shard claimed and shipped first, then placed together
     for k in (a.only_shard or range(1, a.shards + 1)):
         b = argparse.Namespace(**vars(a))
-        b.topic, b.shard = f"{a.topic}-s{k}of{a.shards}", [k, a.shards]
-        try:
-            jobs.append(launch(b))
-        except SystemExit as e:      # one shard without capacity doesn't stop the others
-            print(f"shard {k}/{a.shards} not launched: {e}", file=sys.stderr)
-            failed.append(k)
-    if failed:
+        b.topic, b.shard, b.defer = f"{a.topic}-s{k}of{a.shards}", [k, a.shards], True
+        pending.append((k, launch(b), b))
+    s3, bucket = session().client("s3"), outputs()["Bucket"]
+    deadline = time.time() + 60 * (getattr(a, "wait_for_capacity", 0) or 0)
+    jobs = []
+    while True:         # one round: each waiting shard tries every region once; no shard holds back another
+        still = []
+        for k, job, b in pending:
+            if place(b, job, s3, bucket, 0, final=False):
+                jobs.append(job)
+            else:
+                still.append((k, job, b))
+        pending = still
+        if not pending or time.time() >= deadline:
+            break
+        print(f"{len(pending)} of {a.shards} shards waiting for capacity: {[k for k, _, _ in pending]}; "
+              "next round in 60 s", flush=True)
+        time.sleep(60)
+    for k, job, b in pending:
+        place(b, job, s3, bucket, 0, final=True)
+    if pending:
+        failed = [k for k, _, _ in pending]
         sys.exit(f"{len(failed)} of {a.shards} shards not launched: {failed}; relaunch them with "
                  f"`--shards {a.shards} --only-shard K` once capacity frees")
     return jobs
@@ -250,34 +280,52 @@ def launch(a) -> str:
             s3.upload_file(str(f), bucket, f"jobs/{job}/code/{f.name}")
     s3.upload_file(str(HERE / "box" / "supervisor.py"), bucket, f"jobs/{job}/supervisor.py")
     put_status(s3, bucket, job, {"job": job, "state": "submitted", "updated": now()})
+    a._code = code
+    if getattr(a, "defer", False):       # launch_all places shards together
+        return job
+    if not place(a, job, s3, bucket, 60 * (getattr(a, "wait_for_capacity", 0) or 0), final=True):
+        sys.exit(f"no capacity for {job}")
+    return job
+
+
+def try_regions(a, job: str) -> tuple[list[str], str | None, list[str]]:
+    """One fleet request per allowed region and market, nearest first: (instance ids, region, errors)."""
     # spot in each region in turn; then on demand in each only with --fallback-on-demand, so a job never eats
     # the on-demand quota that deciding runs (--on-demand) count on
     markets = [True] if a.on_demand else [False, True] if a.fallback_on_demand else [False]
-    deadline = time.time() + 60 * (getattr(a, "wait_for_capacity", 0) or 0)
-    while True:      # every region and market in turn; while all are full, wait for capacity rather than fail
-        ids, errs, region = [], [], None
-        for od in markets:
-            for region in (a.region or JOB_REGIONS):
-                ec2 = session(region).client("ec2")
-                ids, err = start_box(ec2, outputs(region), job, a.size, od)
-                if ids:
-                    break
-                errs.append(f"{region} {'on-demand' if od else 'spot'}: {err}")
+    errs = []
+    for od in markets:
+        for region in (r for r in (a.region or JOB_REGIONS) if deployed(r)):
+            ids, err = start_box(session(region).client("ec2"), outputs(region), job, a.size, od)
             if ids:
-                break
-        if ids or time.time() > deadline:
+                return ids, region, errs
+            errs.append(f"{region} {'on-demand' if od else 'spot'}: {err}")
+    return [], None, errs
+
+
+def place(a, job: str, s3, bucket: str, wait_s: float, final: bool) -> bool:
+    """Starts the job's box, retrying every 60 s while every region is full, for up to wait_s. With final,
+    a job still without a box is marked failed; else it stays submitted, waiting for capacity."""
+    deadline = time.time() + wait_s
+    while True:
+        ids, region, errs = try_regions(a, job)
+        if ids or time.time() >= deadline:
             break
         put_status(s3, bucket, job, {"job": job, "state": "submitted", "stage": "waiting for capacity",
                                      "error": " | ".join(errs), "updated": now()})
         print(f"{job}: every region full ({' | '.join(errs)}); retrying in 60 s", flush=True)
         time.sleep(60)
-    if errs and ids:
-        print(f"{job}: " + "; ".join(e.split(':')[0] + ' full' for e in errs), flush=True)
-    errs = " | ".join(errs)
     if not ids:
-        put_status(s3, bucket, job, {"job": job, "state": "failed", "stage": "launch", "error": errs,
-                                     "updated": now()})
-        sys.exit(f"no capacity for {job}: {errs}")
+        if final:
+            put_status(s3, bucket, job, {"job": job, "state": "failed", "stage": "launch",
+                                         "error": " | ".join(errs), "updated": now()})
+        else:
+            put_status(s3, bucket, job, {"job": job, "state": "submitted", "stage": "waiting for capacity",
+                                         "error": " | ".join(errs), "updated": now()})
+        return False
+    if errs:
+        print(f"{job}: " + "; ".join(e.split(':')[0] + ' full' for e in errs), flush=True)
+    ec2 = session(region).client("ec2")
     ec2.get_waiter("instance_exists").wait(InstanceIds=ids)     # describe lags create_fleet by a moment
     desc = ec2.describe_instances(InstanceIds=ids)["Reservations"][0]["Instances"][0]
     market = desc.get("InstanceLifecycle", "on-demand")
@@ -286,9 +334,10 @@ def launch(a) -> str:
         {"instance_id": ids[0], "instance_type": desc["InstanceType"], "market": market, "region": region,
          "availability_zone": desc["Placement"]["AvailabilityZone"], "usd_per_hour": price,
          "ebs_usd_per_hour": JOB_EBS_USD_PER_HOUR, "launched": now()}, indent=1).encode())
+    code = a._code
     print(f"{job}: {ids[0]} {desc['InstanceType']} {desc['Placement']['AvailabilityZone']} {market} "
-          f"${price:.3f}/h, commit {code['git_commit'][:7]}{' (dirty)' if code['git_dirty'] else ''}")
-    return job
+          f"${price:.3f}/h, commit {code['git_commit'][:7]}{' (dirty)' if code['git_dirty'] else ''}", flush=True)
+    return True
 
 
 # the job box's 200 GB gp3 root with 6,000 IOPS and 500 MB/s, us-west-2: (200 x 0.08 + 3000 x 0.005 + 375 x 0.04) / 730 h
@@ -296,7 +345,7 @@ JOB_EBS_USD_PER_HOUR = 0.063
 
 
 def start_box(ec2, out: dict, job: str, size: str, on_demand: bool) -> tuple[list[str], str]:
-    resp = ec2.create_fleet(**fleet_request(out, job, size, on_demand))
+    resp = ec2.create_fleet(**fleet_request(out, job, size, on_demand, region=ec2.meta.region_name))
     ids = [i for inst in resp.get("Instances", []) for i in inst.get("InstanceIds", [])]
     codes = sorted({e.get("ErrorCode") for e in resp.get("Errors", [])})     # one per code, not per type and AZ
     return ids, ", ".join(c for c in codes if c)
@@ -351,7 +400,7 @@ def get_status(s3, bucket: str, job: str) -> dict:
 def job_instances(job: str, states=("pending", "running", "stopping", "shutting-down")) -> dict[str, list[str]]:
     """The job's boxes by region."""
     out = {}
-    for region in JOB_REGIONS:
+    for region in (r for r in JOB_REGIONS if deployed(r)):
         r = session(region).client("ec2").describe_instances(Filters=[
             {"Name": "tag:dopplertrack-job", "Values": [job]}, {"Name": "instance-state-name", "Values": list(states)}])
         ids = [i["InstanceId"] for res in r["Reservations"] for i in res["Instances"]]
@@ -382,7 +431,7 @@ def fleet(a) -> None:
     """Every project box running now, by region, with its job and hourly price; the jobs whose launch failed
     for capacity or quota in the last day; and the hourly total."""
     total, rows, launches = 0.0, [], {}
-    for region in JOB_REGIONS:
+    for region in (r for r in JOB_REGIONS if deployed(r)):
         ec2 = session(region).client("ec2")
         r = ec2.describe_instances(Filters=[{"Name": "tag:project", "Values": ["dopplertrack"]},
                                             {"Name": "instance-state-name", "Values": ["pending", "running"]}])

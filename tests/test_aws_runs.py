@@ -175,3 +175,14 @@ def test_shards_launch_one_job_per_box_and_resumed_runs_come_back_home(tmp_path,
     assert runs.same_run(run)
     (run / "run.json").write_text('{"job": "2026-11-04-other"}')
     assert not runs.same_run(run)
+
+
+def test_both_input_listings_become_cases_paths_and_cache_kinds():
+    shards = {"cases": ["oyster-bay"], "inputs": ["derived/swfl/rec.npz", "runs/2026-11-04-livermore-audit"],
+              "cache_kinds": ["terrarium", "detections"], "cpa_tables": ["bench/oyster-bay_200m_dem.npz"]}
+    assert runs.listed_inputs(shards) == (["oyster-bay"], ["derived/swfl/rec.npz", "runs/2026-11-04-livermore-audit"],
+                                          ["terrarium", "detections"])
+    bench = {"data": [{"path": "derived/oyster_bay/rec.npz"}, {"path": "derived/oyster_bay/rec.npz"}],
+             "repo": [{"path": "bench/cases.json"}],
+             "cache": [{"path": "terrarium/10/301/385.png"}, {"path": "cpa/bench/oyster-bay_200m_dem.npz"}]}
+    assert runs.listed_inputs(bench) == ([], ["derived/oyster_bay/rec.npz"], ["terrarium"])

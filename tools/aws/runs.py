@@ -123,6 +123,17 @@ def case_inputs(case_ids: list[str]) -> list[str]:
     return out
 
 
+def listed_inputs(doc: dict) -> tuple[list[str], list[str], list[str]]:
+    """(cases, data-root paths, cache kinds) from a job's own listing: tools/data/shards.py --inputs
+    ({cases, inputs, cache_kinds, cpa_tables}) or `bench inputs` ({data, repo, cache} entries). CPA tables
+    and repo files need nothing: the box rebuilds the one and has the other."""
+    cases = list(doc.get("cases", []))
+    paths = list(doc.get("inputs", [])) + [e["path"] for e in doc.get("data", [])]
+    kinds = list(doc.get("cache_kinds", []))
+    kinds += [e["path"].split("/", 1)[0] for e in doc.get("cache", []) if "/" in e["path"]]
+    return cases, list(dict.fromkeys(paths)), [k for k in dict.fromkeys(kinds) if k in CACHE_KINDS]
+
+
 def fleet_request(out: dict, job: str, size: str, on_demand: bool, families=FAMILIES) -> dict:
     """The create_fleet arguments: one instance, any listed family of `size` in any of the subnets."""
     subnets = out["Subnets"].split(",")
@@ -190,7 +201,14 @@ def launch(a) -> str:
     for k in a.cache:
         if k not in CACHE_KINDS:
             sys.exit(f"--cache takes {', '.join(CACHE_KINDS)}")
+    if getattr(a, "inputs_from", None):     # the job lists its own inputs; run that listing in its checkout
+        repo = Path(a.repo).resolve() if a.repo else REPO
+        listing = subprocess.run(a.inputs_from, shell=True, cwd=repo, capture_output=True, text=True, check=True)
+        cases, paths, kinds = listed_inputs(json.loads(listing.stdout))
+        a.case, a.input, a.cache = a.case + cases, a.input + paths, a.cache + kinds
+        print(f"inputs from the job: {len(cases)} cases, {len(paths)} paths, caches {kinds}")
     inputs = case_inputs(a.case) + [p for p in a.input if p not in case_inputs(a.case)]
+    inputs = list(dict.fromkeys(inputs))
     seed_run_inputs(s3, bucket, inputs)
     caches = list(dict.fromkeys(a.cache or (["terrarium"] if a.case else [])))
     with tempfile.TemporaryDirectory() as tmp:
@@ -627,6 +645,8 @@ def main(argv=None) -> None:
     la.add_argument("--input", action="append", default=[], help="a file or folder under the data root; "
                     "runs/<folder> paths are uploaded from here first")
     la.add_argument("--cache", action="append", default=[], help=f"a cache kind to bring: {', '.join(CACHE_KINDS)}")
+    la.add_argument("--inputs-from", metavar="COMMAND", help="a command (run here, in the checkout) that prints "
+                    "the job's inputs as JSON: `tools/data/shards.py`'s --inputs or `bench inputs`")
     la.add_argument("--jobs", type=int, help="DOPPLERTRACK_JOBS on the box (default: its physical cores)")
     la.add_argument("--size", default="16xlarge", help="instance size of every family (default: 16xlarge)")
     la.add_argument("--on-demand", action="store_true", help="on-demand instead of spot, for deciding runs")

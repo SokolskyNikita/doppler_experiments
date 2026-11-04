@@ -286,7 +286,8 @@ def main(argv=None) -> int:
 
     env = {**os.environ, "DOPPLERTRACK_DATA": str(data), "DOPPLERTRACK_CACHE": str(cache), "RUN": str(run),
            "DOPPLERTRACK_JOB": args.job,
-           **({"DOPPLERTRACK_SHARD": str(spec["shard"][0]), "DOPPLERTRACK_SHARDS": str(spec["shard"][1])}
+           **({"DOPPLERTRACK_SHARD": str(spec["shard"][0]), "DOPPLERTRACK_SHARDS": str(spec["shard"][1]),
+               "DOPPLERTRACK_SHARD_SPEC": f"{spec['shard'][0]}/{spec['shard'][1]}"}
               if spec.get("shard") else {}),
            "UV_CACHE_DIR": str(SCRATCH / "uv-cache"), "PYTHONUNBUFFERED": "1"}
     env.pop("DOPPLERTRACK_JOBS", None)

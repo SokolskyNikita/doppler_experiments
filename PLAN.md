@@ -210,7 +210,7 @@ Each phase below gives its goal, the approach we expect to take given what we kn
 
 **Done when** each fix has its test and is in `dev`.
 
-#### Between Phases 0 and 1: architecture preparation (S–M)
+#### Between Phases 0 and 1: architecture preparation
 
 After Phase 0 merges and passes its checks, complete the bounded preparation in
 [architecture requirements](docs/rearchitecture-requirements.md) before starting any Phase 1 item,
@@ -223,9 +223,8 @@ baselines before code moves and keep independent physics/time checks beside them
 scientific values and rankings of existing development workflows; document schema migrations separately.
 
 The result record, benchmark runner and cases, new caches, gap-aware audio and parallel execution
-remain Phase 1 work. Broader module reshuffles and universal typing/fixture cleanup are optional and
-do not extend this preparation. Fork restructuring can already combine code, tests and documentation
-under AGENTS.md; no upstream-policy change is a prerequisite.
+remain Phase 1 work. Further module splits, annotation work and fixture cleanup need a specific
+downstream task.
 
 **Done when** the requirements document's R1–R12 acceptance checks pass, both development recordings
 retain their scientific results under declared comparison rules, and a fresh session can follow the

@@ -297,4 +297,15 @@ Never judged on the residual: RSS ratios are reported only. Curve D (the publish
 
 **Compute.** synth, fit and profile run here at two workers. The bootstraps wait for the cloud fleet: 200 moving-block replicates (2 s blocks of the sub-5 s residuals) per pass, refitting both branches. Every unit writes its own jsonl line, every replicate's seed comes from (pass, replicate), and a stopped or split run resumes and merges to the same numbers.
 
+**Before any real curve: the synthetic check finds the design over-parametrized.**
+- **Recovery.** On all 10 synthetic arcs (`runs/2026-11-04-turn-model-synth/`) the turn model recovers slant range exactly. At ω = 0 it matches `straight_pass_ls`.
+- **What a straight fit misses.** On the same arcs it misses slant range by −30 % at 1°/s and −90 to −105 % at 3°/s.
+- **The sign is not recovered.** On 3 of the 8 turning arcs the sign comes back wrong, and both branches fit to RSS ~10⁻²⁵ with different speeds. For example, the toward-turn at φ = 20° fits as an away-turn with v 41.5 m/s instead of 65 m/s.
+- **Why.** For this path the range history is r(u)² = R² + 2K(1 − cos ωu), with K = (v/ω)(v/ω + s·R cos φ). This is exact: verified to 10⁻¹² m. One microphone hears only the range history, so the curve fixes R, ω and K, and nothing else.
+  - Speed, the split φ and the sign trade freely along constant K. Of the three new parameters, only the turn rate is identifiable. K replaces v², which a turning fit no longer measures.
+  - A straight pass is the limit r² = R² + v²u², so the turn model adds one parameter, ω, not three.
+- **Consequences for the approved criterion.** Criteria (1)–(3), on R, stand. (4) is read on |ω|: the sign is not a parameter of the curve. (5) can't be met by construction: the sign and φ are unidentifiable. The φ–R trade becomes a K–R and ω–R trade.
+- **The parametrization to use.** (f0, τ, R, K, ω). Its bound needs ω fixed where ω's interval includes 0, since K and ω merge into Kω² there.
+- **Status.** Nothing has run on Livermore. The amendment waits for the PM.
+
 **Scripts (stage 1):** `tools/experiments/2026-11-04/straight_pass_ls.py`, `model_error.py`, `model_error_summary.py`, `crb.py`. **Outputs:** `runs/2026-11-04-model-error-2/` (`fits.csv`, `perturbations.csv`, `halves.csv`, `noise.csv`, `summary.json`) and `runs/2026-11-04-crb-2/` (`crb.csv`, `crb_summary.json`; `runs/2026-11-04-crb/` used the invalid truncated covariance and is superseded). Weather: `raw/aux/metar/KLVK_*`, `RAOB_KOAK_*`.

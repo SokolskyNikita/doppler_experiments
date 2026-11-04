@@ -2,7 +2,7 @@
 
 <!-- index
 question: Can each event's own hypotheses (optima with profile ranges in v, k, tau and f0) replace the speed, distance and f0 gates, keeping the true flights at no more candidates (item 7, stage B)?
-outcome: Not met: the first run kept every true flight but Oyster Bay event 2's at 20-60x fewer rows; its one retune lost B1 on every case, since 9x the brightness threshold left every fit_event hypothesis uninformative
+outcome: Not met: B1 fails before and after the one retune; with the first run's hypotheses A1 is not met outside the null's noise (true pair 3rd) and A3 is not met
 -->
 
 ## Question and criterion
@@ -198,3 +198,42 @@ Written 2026-11-04, before the fleet run, which is the first A1/A3 run whose ran
 - **The scale to expect.** On a synthetic version of stage A's eagle-cam gap (0.03 in Z, z ≈ 4 per event), the
   gap's standard deviation at n = 1,000 is about 0.22. The N needed would then be about 220,000. The MAD's error,
   multiplied by z, is most of that spread.
+
+## The A1/A3 result with the first run's hypotheses
+
+Run on the fleet on 2026-11-04 from `6f0ce38`, N = 1,000, under the rule above.
+- **Shards:** `runs/2026-11-04-hypotheses-pairs-s1of8/` to `-s8of8`, 8 × 8xlarge spot, 200–3,272 s wall each, about
+  $1.80 with the reruns.
+- **Merged:** `runs/2026-11-04-merge-pairs-b-partial/`. The ranking was written and hashed before any label was read.
+- **28 of the 30 searches finished.** The two that didn't are Oyster Bay's d4 + d3 and the moved box's d4 + d3.
+  - Both were killed for memory (exit −9): two to a 64 GB box, then alone on 64 GB, then alone on 128 GB, as on the
+    48 GB Mac before.
+  - Stage B's pairing doesn't fit in memory for those event pairs. That is a finding about the method, not a
+    shortfall of the boxes, and no larger box was tried.
+  - The partial merge used the driver's own `rank` and `evaluate` over the 28 finished units. Neither missing pair
+    is the eagle cam's, so A1 is complete. A3 has 9 of Oyster Bay's 10 pairs.
+
+| | Criterion | Result |
+|---|---|---|
+| A1 | the eagle cam's true pair (2 + 5) first of ten | **not met, outside the null's noise**: 3rd at Z 8.97, behind 4 + 5 (10.03) and 4 + 2 (9.92) |
+| A3 | Oyster Bay's 1 + 2 first | **not met**: 8th of the 9 finished at Z 5.97 (1 + 5 first at 15.51). The missing pair can't make 1 + 2 first |
+| A2 | reported only | WSW's top margin 4.39 |
+
+**The noise test** (`a1_noise.py` on the kept nulls):
+- the gap to the best other pair is −1.05, with standard deviation 0.42;
+- the true pair is first in 0 % of 20,000 redraws;
+- so the call is **not met**, and the N = 250,000 run is not read, under the rule.
+
+**The eagle cam's ten pairs by Z:** 4 + 5 10.03, 4 + 2 9.92, 2 + 5 8.97, 1 + 4 8.65, 1 + 2 7.31, 2 + 3 7.04,
+5 + 3 6.38, 4 + 3 6.25, 1 + 5 4.87, 1 + 3 4.36. Both pairs ahead of the true one contain event 4, and the top
+candidate of 4 + 5 is the 14.6 km wrong pair a0e90b/a25807 again.
+
+**The N = 250,000 follow-up** (`hypotheses-pairs-n250000-s1of10` to `-s10of10`) was cancelled once A1 was decided.
+- 4 of its 10 shards had finished; they are left unread.
+- It cost about $11.50.
+
+**Outcome.**
+- Stage B's hypotheses don't help event choice. With them, the true pair falls from stage A's 2nd to 3rd on the eagle
+  cam, and Oyster Bay's true pair from 1st to 8th, while B1 is not met on any case.
+- `hypotheses=True` stays off.
+- What blocks Phase 3 is the fit's bias, as B1 says.

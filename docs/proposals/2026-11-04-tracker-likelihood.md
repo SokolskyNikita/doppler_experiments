@@ -40,8 +40,9 @@ This round replaces that reward with a likelihood, so that no dB threshold is le
   - **End of pass:** ON or DIP → OFF with probability Δt/T_pass.
   - **Into a dip:** ON → DIP with probability Δt/T_run.
   - **Out of a dip:** DIP → ON with probability Δt/T_dip.
-  - **Frequency moves:** ON or DIP(k) → ON or DIP(k′) with a Laplace kernel in k′ − k, of scale 0.1·f·Δt per
-    second, capped at round 2's physical bound of 0.25·f per second.
+  - **Frequency moves:** ON or DIP(k) → ON or DIP(k′) with a Laplace kernel in k′ − k, of scale 0.02·f per
+    second, capped at round 2's physical bound of 0.25·f per second. The first draft's 0.1·f was amended before any
+    run: a 60 m/s pass at 500 m CPA peaks at |df/dt|/f ≈ v²/(cR) ≈ 0.02 per second.
 - **Fixed constants.** T_pass, T_run and T_dip are fixed before the run, from the development labels (Oyster Bay,
   the eagle cam): the median audible span, the median run between frames under noise and the median dip length.
   They never come from Livermore.
@@ -56,7 +57,10 @@ This round replaces that reward with a likelihood, so that no dB threshold is le
 There are two knobs: the design SNR a and the birth prior β.
 - **The ROC.** On round 2's synthetic set (2 h of white noise in 12 windows over 150–250 Hz, and the weak pass:
   two straight passes, 3 seeds, amplitude 0.03 in 0.4 noise), compute the false-track rate and the weak-pass
-  coverage at every point of a fixed grid: a ∈ {1, 2, 4, 8} and β ∈ 10^{−8, −7, …, −2} per Hz per second.
+  coverage at every point of a fixed grid: a ∈ {1, 2, 4, 8} and β ∈ 10^{−12, −11, …, −2} per Hz per second. The
+  first draft stopped at 10⁻⁸. It was widened before any run, after the first Tier 0 run of the noise test: in noise,
+  the best of about 500 fundamentals scores ℓ ≈ 4 in every frame, so the prior that keeps births rare can sit far
+  below 10⁻⁸.
 - **The pick, pre-registered:** among the grid points with at most 1 false track per hour per 100 Hz and a median
   weak-pass coverage of at least 0.5, the lowest β. Ties go to fewest fragments, then the higher a. If no point
   qualifies, the round stops there, and the record says so before any real recording is tracked.

@@ -41,3 +41,10 @@ def select(all_units: list[str], chosen: list[str]) -> list[str]:
     if bad:
         raise SystemExit(f"unknown units: {bad}; known: {all_units}")
     return [u for u in all_units if not chosen or u in chosen]
+
+
+def shard(items: list) -> list:
+    """This box's share of items: every DOPPLERTRACK_SHARDS-th from the DOPPLERTRACK_SHARD-th (1-based), as
+    `runs launch --shards n` sets them; all of them when unset."""
+    k, n = int(os.environ.get("DOPPLERTRACK_SHARD", 1)), int(os.environ.get("DOPPLERTRACK_SHARDS", 1))
+    return list(items)[k - 1::n]

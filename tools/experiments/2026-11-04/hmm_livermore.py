@@ -189,12 +189,7 @@ def dev_one(job):
     p = params(tc, tb)
     name, src, (a, b), band, trp, (lat, lon), icao, heard, clock, _ = ev
     x, a0 = dev_audio(ev)
-    el = Terrain().elevation(np.array([lat]), np.array([lon]))
-    obs = lla_to_enu(np.array([lat]), np.array([lon]), el, lat, lon)[0]
-    seg = next(s for s in build_segments(load_traces(DATA / trp), lat, lon) if s.icao == icao and s.t[0] == ref["seg_t0"])
-    to, r = modelled_curve(seg, obs, C)
-    T = ref["clock_T0"] + ref["shift_s"]
-    fref = lambda t: ref["f0"] * np.interp(np.asarray(t), to + T, r, left=np.nan, right=np.nan)
+    fref = dev_fref(ev, ref)
     sp = spectrogram(x, whiten, fmax=1000.0); st = ft.SampleSTFT(x, SR, N, HOP)
     res = track_all(x, sp, st, (a - a0, b - a0), band, fref, p)
     row = dict(event=name, judged=ref["judged"], **{k: FL.score(res[k], (a - a0, b - a0), fref, sp.df, 0.02) for k in ("A", "H", "B1")},
@@ -202,6 +197,17 @@ def dev_one(job):
     U.write(out_path, row)
     print(name, " | ".join(f"{k} err {row[k]['error']:.4f} br {row[k]['bridges']} fr {row[k]['fragments']}" for k in ("A", "H", "B1")), flush=True)
     return row
+
+
+def dev_fref(ev, ref):
+    """The event's reference curve in its audio's seconds (dev_audio's), from dev_references.json."""
+    name, src, (a, b), band, trp, (lat, lon), icao, heard, clock, _ = ev
+    el = Terrain().elevation(np.array([lat]), np.array([lon]))
+    obs = lla_to_enu(np.array([lat]), np.array([lon]), el, lat, lon)[0]
+    seg = next(s for s in build_segments(load_traces(DATA / trp), lat, lon) if s.icao == icao and s.t[0] == ref["seg_t0"])
+    to, r = modelled_curve(seg, obs, C)
+    T = ref["clock_T0"] + ref["shift_s"]
+    return lambda t: ref["f0"] * np.interp(np.asarray(t), to + T, r, left=np.nan, right=np.nan)
 
 
 def _pool(fn, jobs, init=None):

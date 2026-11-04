@@ -42,6 +42,7 @@ def example_record():
                    "flight_pairs_after_silence_filter": [["a1dfeb", "ace391"], ["a53001", "a19b2f"]],
                    "scored": 2, "unevaluated_budget": 0},
         "verdict": unavailable("no verdict before Phase 4"), "region": unavailable("no region before Phase 4"),
+        "pair_rules": unavailable("chosen by profile"),
         "data_limitations": {"flight_data": {"traces_loaded": 3}, "altitude_sources": unavailable("not loaded"),
                              "candidate_gaps": [], "possible_edits": unavailable("no edit detection"),
                              "ads_b": "A complete archive download does not mean every aircraft broadcast ADS-B."},
@@ -109,3 +110,15 @@ def test_a_changed_record_fails_its_hash(tmp_path):
     (tmp_path / "result.json").write_bytes(dumps(rec))
     with pytest.raises(RecordError):
         read_record(tmp_path / "result.json", expected_sha256=sha)
+
+
+def test_a_version_1_record_still_validates_and_version_2_checks_the_verdict():
+    rec = example_record()
+    v1 = {k: v for k, v in rec.items() if k != "pair_rules"}
+    v1["schema_version"] = 1
+    validate(v1)
+    rec["verdict"] = {"outcome": "ambiguous", "reason_codes": ["winner_only_refined"], "reasons": ["only the winner"]}
+    validate(rec)
+    rec["verdict"]["reason_codes"] = ["made_up"]
+    with pytest.raises(RecordError):
+        validate(rec)

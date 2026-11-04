@@ -2,6 +2,7 @@
 with its window moved by -10, -5, 0, 5 and 10 s."""
 import sys; from pathlib import Path; sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "tests"))
 import numpy as np
+from dopplertrack.parallel import default_jobs
 from concurrent.futures import ProcessPoolExecutor
 import test_gaps as G
 from dopplertrack import tracks
@@ -12,7 +13,7 @@ def job(a):
     e = tracks.fit_event(sp, G.T_CPA - 45 + sh, G.T_CPA + 45 + sh, 90, 135, c=G.C)
     return seed, sh, e.v, e.d, e.t_cpa, e.f0
 if __name__ == '__main__':
-    with ProcessPoolExecutor(10) as ex: R = list(ex.map(job, [(s, h) for s in range(8) for h in SH]))
+    with ProcessPoolExecutor(default_jobs()) as ex: R = list(ex.map(job, [(s, h) for s in range(8) for h in SH]))
     R = np.array(R)
     for j, k in ((2, 'v'), (3, 'd'), (4, 't_cpa'), (5, 'f0')):
         per_seed = [R[R[:, 0] == s, j] for s in range(8)]

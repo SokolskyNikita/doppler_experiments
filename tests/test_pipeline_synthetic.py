@@ -13,6 +13,10 @@ def _synth_trace(icao, t, enu, lat0, lon0, gs):
 
 
 def test_true_observer_ranks_first(monkeypatch):
+    """To fit the Tier 0 budget, detect runs on a 7x7 speed and distance grid and each fit starts from its
+    detection with init=, so this test doesn't exercise fit_event's grid search over a whole window and
+    band without a starting point. The opt-in Oyster Bay test covers that on real data, and
+    test_fit_objective on a uniform spectrogram."""
     c = 340.0
     lat0, lon0 = 40.8765, -73.525
     sr = 4000

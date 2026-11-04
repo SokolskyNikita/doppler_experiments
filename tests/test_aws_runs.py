@@ -160,3 +160,18 @@ def test_everything_after_the_double_dash_is_the_command(monkeypatch):
     runs.main(["launch", "t2", "--case", "oyster-bay", "--jobs", "8", "--", "python", "-m", "bench", "run", "--tier", "t2"])
     assert seen["case"] == ["oyster-bay"] and seen["jobs"] == 8
     assert seen["command"] == ["python", "-m", "bench", "run", "--tier", "t2"]
+
+
+def test_shards_launch_one_job_per_box_and_resumed_runs_come_back_home(tmp_path, monkeypatch):
+    seen = []
+    monkeypatch.setattr(runs, "launch", lambda a: seen.append((a.topic, a.shard)) or a.topic)
+    a = runs.argparse.Namespace(topic="whiten", shards=3, shard=None)
+    assert runs.launch_all(a) == ["whiten-s1of3", "whiten-s2of3", "whiten-s3of3"]
+    assert [s for _, s in seen] == [[1, 3], [2, 3], [3, 3]]
+    run = tmp_path / "2026-11-04-whiten"
+    run.mkdir()
+    assert not runs.same_run(run)
+    (run / "run.json").write_text('{"job": "2026-11-04-whiten"}')
+    assert runs.same_run(run)
+    (run / "run.json").write_text('{"job": "2026-11-04-other"}')
+    assert not runs.same_run(run)

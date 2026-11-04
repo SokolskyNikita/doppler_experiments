@@ -1,10 +1,11 @@
 """runs: long dopplertrack jobs on their own AWS box, and the dev box.
 
     tools/aws/runs launch <topic> [--case ID] [--input PATH] [--cache KIND] [--jobs N] [--size 16xlarge]
-                          [--on-demand] [--max-hours H] [--wait] -- <command>
+                          [--on-demand] [--shards N] [--repo CHECKOUT] [--max-hours H] [--wait] -- <command>
+    tools/aws/runs launch --resume JOB      (the same run folder, continued on a fresh box)
     tools/aws/runs status [JOB]      tools/aws/runs wait JOB      tools/aws/runs pull JOB
     tools/aws/runs log JOB           tools/aws/runs cancel JOB    tools/aws/runs interrupt JOB
-    tools/aws/runs seed-tools        tools/aws/runs seed [--dry-run]
+    tools/aws/runs seed-tools        tools/aws/runs seed [--dry-run] [--run FOLDER ...]
     tools/aws/runs fetch-sources [--dry-run]
     tools/aws/runs dev start|stop|status|shell|sync|run -- <command>
 
@@ -141,8 +142,47 @@ def fleet_request(out: dict, job: str, size: str, on_demand: bool, families=FAMI
                 {"Key": "Name", "Value": f"dopplertrack-job {job}"}]}]}
 
 
+def launch_all(a) -> list[str]:
+    """One job, or with --shards n, n jobs <topic>-s<k>of<n>, each on its own box with DOPPLERTRACK_SHARD=k
+    and DOPPLERTRACK_SHARDS=n set."""
+    if a.shards <= 1:
+        return [launch(a)]
+    jobs = []
+    for k in range(1, a.shards + 1):
+        b = argparse.Namespace(**vars(a))
+        b.topic, b.shard = f"{a.topic}-s{k}of{a.shards}", [k, a.shards]
+        jobs.append(launch(b))
+    return jobs
+
+
+def seed_run_inputs(s3, bucket: str, inputs: list[str]) -> None:
+    """Inputs under runs/ (small reference files from earlier runs) go up from here when the bucket lacks
+    them or they changed; data/ inputs come from the seed."""
+    for rel in inputs:
+        if rel.startswith("runs/"):
+            src = DATA_ROOT / rel
+            if not src.exists():
+                sys.exit(f"--input {rel}: not in {DATA_ROOT}")
+            if src.is_dir():
+                aws_cli("s3", "sync", "--only-show-errors", str(src), f"s3://{bucket}/data/{rel}")
+            else:
+                aws_cli("s3", "cp", "--only-show-errors", str(src), f"s3://{bucket}/data/{rel}")
+
+
 def launch(a) -> str:
-    if not TOPIC.fullmatch(a.topic):
+    out = outputs()
+    s3 = session().client("s3")
+    bucket = out["Bucket"]
+    prior = None
+    if a.resume:     # the same run folder, continued on a fresh box: the command, inputs and caches as before
+        prior = json.loads(s3.get_object(Bucket=bucket, Key=f"jobs/{a.resume}/spec.json")["Body"].read())
+        a.topic = a.topic or prior["topic"]
+        a.command = a.command or [prior["command"]]
+        a.input, a.case = a.input or prior["inputs"], []
+        a.cache = a.cache or prior["caches"]
+        a.jobs = a.jobs or prior.get("jobs")
+        a.shard = prior.get("shard")
+    if not a.topic or not TOPIC.fullmatch(a.topic):
         sys.exit("topic: lowercase letters, digits and hyphens")
     command = " ".join(a.command).strip()
     if not command:
@@ -150,17 +190,20 @@ def launch(a) -> str:
     for k in a.cache:
         if k not in CACHE_KINDS:
             sys.exit(f"--cache takes {', '.join(CACHE_KINDS)}")
-    out = outputs()
-    s3 = session().client("s3")
-    bucket = out["Bucket"]
     inputs = case_inputs(a.case) + [p for p in a.input if p not in case_inputs(a.case)]
+    seed_run_inputs(s3, bucket, inputs)
     caches = list(dict.fromkeys(a.cache or (["terrarium"] if a.case else [])))
     with tempfile.TemporaryDirectory() as tmp:
         code = code_bundle(Path(tmp) / "code", repo=Path(a.repo).resolve() if getattr(a, "repo", None) else REPO)
-        for job in candidate_ids(a.topic, datetime.date.today()):
+        ids = candidate_ids(f"{prior['run']}-resume", datetime.date.min) if prior else \
+            candidate_ids(a.topic, datetime.date.today())
+        for job in ids:
+            if prior:
+                job = job.split("-", 3)[-1]      # candidate_ids put a date in front; a resume keeps the run's
             if (DATA_ROOT / "runs" / job).exists():
                 continue
-            spec = {"job": job, "run": job, "topic": a.topic, "command": command, "inputs": inputs,
+            spec = {"job": job, "run": prior["run"] if prior else job, "topic": a.topic,
+                    "resume_of": a.resume, "shard": getattr(a, "shard", None), "command": command, "inputs": inputs,
                     "caches": caches, "jobs": a.jobs, "max_hours": a.max_hours,
                     "checkpoint_minutes": a.checkpoint_minutes, "size": a.size,
                     "market": "on-demand" if a.on_demand else "spot", "submitted": now(),
@@ -257,6 +300,15 @@ def free_local(name: str) -> str:
     return f"{base}-{n}"
 
 
+def same_run(folder: Path) -> bool:
+    """A local run folder that an earlier job of the same run made (a resumed job's run comes back into
+    it): its run.json names the job that started the run, which is the folder's own name."""
+    try:
+        return json.loads((folder / "run.json").read_text()).get("job") == folder.name
+    except (OSError, ValueError):
+        return False
+
+
 def merge_cache_delta(tar_bytes: bytes, root: Path) -> int:
     """Adds the delta's entries to the local cache without touching any existing file. Each entry folder is
     unpacked beside its destination and renamed into place, so a reader never sees half an entry."""
@@ -289,8 +341,12 @@ def pull(a) -> None:
     st = get_status(s3, bucket, a.job)
     if st.get("state") not in TERMINAL:
         print(f"{a.job} is {st.get('state')}; pulling what has been uploaded so far")
-    for name in st.get("run_folders") or [a.job]:
-        local = free_local(name)
+    try:
+        own = json.loads(s3.get_object(Bucket=bucket, Key=f"jobs/{a.job}/spec.json")["Body"].read())["run"]
+    except s3.exceptions.NoSuchKey:
+        own = a.job
+    for name in st.get("run_folders") or [own]:
+        local = name if name == own and same_run(DATA_ROOT / "runs" / name) else free_local(name)
         if local != name:
             print(f"runs/{name} exists here; pulling into runs/{local}")
         aws_cli("s3", "sync", "--only-show-errors", f"s3://{bucket}/runs/{name}/", str(DATA_ROOT / "runs" / local))
@@ -376,6 +432,13 @@ def seed(a) -> None:
     bucket is deleted."""
     bucket = outputs()["Bucket"]
     dry = ["--dryrun"] if a.dry_run else []
+    if a.run:        # only these run folders, for jobs that read them (--input runs/<folder>)
+        for name in a.run:
+            name = name.removeprefix("runs/").strip("/")
+            aws_cli("s3", "sync", "--only-show-errors", *dry, str(DATA_ROOT / "runs" / name),
+                    f"s3://{bucket}/data/runs/{name}")
+            print(f"data/runs/{name}", flush=True)
+        return
     for sub in SEED_DATA:
         aws_cli("s3", "sync", "--only-show-errors", "--exclude", ".DS_Store", *dry, str(DATA_ROOT / sub),
                 f"s3://{bucket}/data/{sub}")
@@ -555,9 +618,14 @@ def main(argv=None) -> None:
     ap = argparse.ArgumentParser(prog="runs", description=__doc__.split("\n\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
     la = sub.add_parser("launch", help="run a command on its own box")
-    la.add_argument("topic", help="the run folder's topic, as for new_run.py")
+    la.add_argument("topic", nargs="?", help="the run folder's topic, as for new_run.py")
+    la.add_argument("--resume", metavar="JOB", help="continue JOB's run folder on a fresh box (after an "
+                    "interruption): its partial folder is brought in first; command, inputs and caches as before")
+    la.add_argument("--shards", type=int, default=1, help="launch n boxes, each with DOPPLERTRACK_SHARD=k "
+                    "(1..n) and DOPPLERTRACK_SHARDS=n, as jobs <topic>-s<k>of<n>")
     la.add_argument("--case", action="append", default=[], help="a bench case whose inputs the box needs")
-    la.add_argument("--input", action="append", default=[], help="a file or folder under the data root")
+    la.add_argument("--input", action="append", default=[], help="a file or folder under the data root; "
+                    "runs/<folder> paths are uploaded from here first")
     la.add_argument("--cache", action="append", default=[], help=f"a cache kind to bring: {', '.join(CACHE_KINDS)}")
     la.add_argument("--jobs", type=int, help="DOPPLERTRACK_JOBS on the box (default: its physical cores)")
     la.add_argument("--size", default="16xlarge", help="instance size of every family (default: 16xlarge)")
@@ -579,6 +647,7 @@ def main(argv=None) -> None:
     fs.add_argument("--dry-run", action="store_true", help="only print the plan")
     sd = sub.add_parser("seed", help="upload what has no public source, and the caches")
     sd.add_argument("--dry-run", action="store_true")
+    sd.add_argument("--run", action="append", default=[], metavar="FOLDER", help="only this run folder")
     dv = sub.add_parser("dev", help="the persistent dev box")
     dv.add_argument("action", choices=("start", "stop", "status", "shell", "sync", "run"))
     dv.set_defaults(command=[])
@@ -591,12 +660,14 @@ def main(argv=None) -> None:
     if hasattr(a, "command"):
         a.command = command
     if a.cmd == "launch":
-        job = launch(a)
+        jobs = launch_all(a)
         if a.wait:
-            a.job = job
-            st = wait(a)
-            pull(a)
-            sys.exit(0 if st.get("state") == "done" else 1)
+            states = []
+            for job in jobs:
+                a.job = job
+                states.append(wait(a).get("state"))
+                pull(a)
+            sys.exit(0 if all(st == "done" for st in states) else 1)
     else:
         {"status": status, "wait": wait, "pull": pull, "log": log, "cancel": cancel, "interrupt": interrupt,
          "seed-tools": seed_tools, "seed": seed, "fetch-sources": fetch_sources,

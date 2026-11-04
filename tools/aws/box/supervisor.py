@@ -260,17 +260,34 @@ def main(argv=None) -> int:
         s5("cp", "/var/log/dopplertrack-boot.log", f"{job.prefix}/boot.log", check=False)
         return 1
 
-    run.mkdir(parents=True)
+    resumed = None
+    if spec.get("resume_of"):    # the run so far: its finished units are skipped by the command, not by us
+        run.mkdir(parents=True, exist_ok=True)
+        if s3_exists(f"s3://{args.bucket}/runs/{spec['run']}/*"):
+            s5("cp", f"s3://{args.bucket}/runs/{spec['run']}/*", f"{run}/")
+        try:
+            resumed = json.loads((run / "run.json").read_text())
+        except (OSError, ValueError):
+            resumed = None
+    else:
+        run.mkdir(parents=True)
     info = {"topic": spec["topic"], "created": now(), "cwd": str(repo), "git_commit": spec["git_commit"],
             "git_dirty": spec["git_dirty"], "job": args.job, "command": spec["command"],
             "jobs": spec.get("jobs"), "inputs": spec.get("inputs", []), "caches": spec.get("caches", []),
             "cache_deltas_applied": deltas, "host": host, "submitted": spec.get("submitted"),
-            "submitted_from": spec.get("submitted_from"), "box_prepare_s": job.timings}
+            "submitted_from": spec.get("submitted_from"), "box_prepare_s": job.timings,
+            "shard": spec.get("shard")}
+    if resumed:      # keep the run's own record and add this box to it
+        stint = {k: info[k] for k in ("job", "host", "git_commit", "git_dirty", "created", "box_prepare_s")}
+        info = {**resumed, "resumed": resumed.get("resumed", []) + [stint]}
+        info.pop("finished", None)
     (run / "run.json").write_text(json.dumps(info, indent=1) + "\n")
     runs_before, cache_before = run_folders(data) - {spec["run"]}, cache_files(cache)
 
     env = {**os.environ, "DOPPLERTRACK_DATA": str(data), "DOPPLERTRACK_CACHE": str(cache), "RUN": str(run),
            "DOPPLERTRACK_JOB": args.job,
+           **({"DOPPLERTRACK_SHARD": str(spec["shard"][0]), "DOPPLERTRACK_SHARDS": str(spec["shard"][1])}
+              if spec.get("shard") else {}),
            "UV_CACHE_DIR": str(SCRATCH / "uv-cache"), "PYTHONUNBUFFERED": "1"}
     env.pop("DOPPLERTRACK_JOBS", None)
     if spec.get("jobs"):

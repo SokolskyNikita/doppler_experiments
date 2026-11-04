@@ -47,7 +47,7 @@ LOCATE_DIR=$LOCATE_DIR${BOX_SUFFIX:-}
 RUNS=tools/aws/runs
 [ -z "$(git status --porcelain)" ] || { echo "commit first: the box runs a clean commit"; exit 1; }
 # RUNS_EXTRA passes extra runs flags through, e.g. RUNS_EXTRA="--check" or "--rehearse --rehearse-minutes 6" (AGENTS: both before a changed job's real launch).
-$RUNS launch ${RUNS_EXTRA:-} --help | grep -q -- "--private" || { echo "runs has no private mode yet (SDE-E): not launching"; exit 1; }
+$RUNS launch --help | grep -q -- "--private" || { echo "runs has no private mode yet (SDE-E): not launching"; exit 1; }
 APPROVED=()
 while IFS= read -r line; do
   case "$line" in ''|\#*) continue ;; esac
@@ -76,4 +76,4 @@ uv run python -I tools/data/session_spectrogram.py "\$DOPPLERTRACK_DATA/raw/seat
 [ "$MODE" = locate ] || uv run python tools/experiments/2026-11-04/broadband_site.py $CASE "\$DOPPLERTRACK_DATA/raw/seattle-home/20261104-ha-pilot-2" "\$RUN/known_point" "\$RUN/broadband"
 EOF2
 )
-$RUNS launch seattle-home-pilot --private --size 4xlarge --fallback-on-demand "${INPUTS[@]}" -- "$BOX_CMD"
+$RUNS launch ${RUNS_EXTRA:-} seattle-home-pilot --private --size 4xlarge --fallback-on-demand "${INPUTS[@]}" -- "$BOX_CMD"

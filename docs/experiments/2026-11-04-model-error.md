@@ -344,4 +344,24 @@ Never judged on the residual: RSS ratios are reported only. Curve D (the publish
 
 One counted retune of the threshold is allowed.
 
+**A correction to the criterion, found when reading the numbers.** The 230 m it quotes as "all 40 passes'" median on D is the primary 29's (heavier-models table). All 40 passes' median on D is 284 m, so the 30 % line is 199 m, not 161 m. The gate fails at either line.
+
+**Numbers** (`runs/2026-11-04-turn-model-flag/`; the straight fit's |R − R*| on D):
+
+| Threshold | Retained | Retained median | Flagged | Flagged median |
+|---|---|---|---|---|
+| 0.5°/s (the criterion's) | 18 | 441 m | 22 | 149 m |
+| 0.1 and 0.25°/s | 16 | 441 m | 24 | 188 m |
+| 1.0°/s | 29 | 393 m | 11 | 193 m |
+| 1.5°/s | 33 | 271 m | 7 | 310 m |
+| 2.0°/s | 34 | 284 m | 6 | 246 m |
+
+Only the 0.5°/s row decides; the other thresholds are description, not the counted retune.
+
+**Outcome: the gate doesn't enter, and points the wrong way.**
+- **At 0.5°/s every criterion fails.** The retained passes' median is 441 m against 161 (or 199) m, only 18 of 40 are retained against 24, and the flagged passes are the better ones: 149 m against 441 m.
+- **The retune isn't spent.** No threshold from 0.1 to 2°/s brings the retained median under 199 m; the best is 271 m at 1.5°/s.
+- **On the real ridge the fitted rate doesn't measure weaving.** The 16 passes the identifiable form fits at ω = 0 on D are the worst, at a median of 441 m. 9 of the 16 turning passes are flagged and 7 aren't. The rank correlation of ω on D with the error is −0.10.
+- **Why.** On the trajectory curve A, the fitted rate tracked the trajectory's mean turn rate (r = 0.72). On D, the ridge's own errors decide where the rate goes, so it is no use as a gate on real events.
+
 **Scripts (stage 1):** `tools/experiments/2026-11-04/straight_pass_ls.py`, `model_error.py`, `model_error_summary.py`, `crb.py`. **Outputs:** `runs/2026-11-04-model-error-2/` (`fits.csv`, `perturbations.csv`, `halves.csv`, `noise.csv`, `summary.json`) and `runs/2026-11-04-crb-2/` (`crb.csv`, `crb_summary.json`; `runs/2026-11-04-crb/` used the invalid truncated covariance and is superseded). Weather: `raw/aux/metar/KLVK_*`, `RAOB_KOAK_*`.

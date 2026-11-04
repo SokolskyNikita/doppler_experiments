@@ -301,12 +301,8 @@ and written up in [the pilot record](../../../docs/experiments/2026-11-04-seattl
 - **Run 10** (`2026-11-04-seattle-home-pilot-10`, `locate-silence-off-box8km/`) and **run 11** (`-11`,
   `locate-silence-off-box12km/`): the box series at 8 and 12 km, outside the judged rule. Pulled and written: the top
   is 480 and 477 m from the site, with no better candidate anywhere in the box.
-- **Run 12** (`-12`, `locate-silence-off-box4km-sp50m/`, launched at 30bd0e6): the off-node 4 km box at 50 m spacing,
-  which tests whether 200 m sampling is why run 9 missed. Not yet read. To write it:
-  - from `result.json`: the top candidate's and the refined point's distance from the site, the winning event pair
-    (`pair_rules[0]`; is it run 7's events 2+3?), and the residual shift;
-  - from `funnel_triples.npz` (`scored__east/north/score`): the margin to the best node outside 300 m.
-  - If the top is within 300 m, the run 9 failure is sampling.
+- **Run 12** (`-12`, `locate-silence-off-box4km-sp50m/`): the off-node 4 km box at 50 m spacing. Pulled and written:
+  the same pair's top is 294 m from the site and the refined point 241 m, with the residual shift +0.5 s.
 - **20 km:** not launched. It needs adsb.lol's 2026-11-04 archive (expected about 03:30Z on 11-05), a
   `dopplertrack fetch-day 2026-11-04 OUT --keep-jets --bbox ...` cut on a fleet box, and a private case (or a traces
   override) pointing at it. The site must have at least 22 km of coverage on every side.
@@ -330,7 +326,7 @@ and written up in [the pilot record](../../../docs/experiments/2026-11-04-seattl
 - The full-band band test is fully prepared (`session_spectrogram.py --fmax`, both checks' `--fmax/--spectrogram`,
   `tools/data/home_session_case.py`, the `bandtest` mode) and waits for a full-band session and the owner's file list.
 
-**Next step:** read run 12 into the record's Locate section and Outcome, then the 20 km box if run 12 passes.
+**Next step:** the 20 km box at 200 m (and at 50 m if affordable), from the 11-04 archive's wide cut; then build the pair-choice fix (refine each pair's top before choosing) and rerun the series with it.
 
 ## SDE-A
 

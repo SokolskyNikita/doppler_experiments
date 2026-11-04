@@ -2,7 +2,7 @@
 
 <!-- index
 question: What does the owner's indoor phone recorder hear of the propeller traffic around it, and what does locate make of a 2.3 h session?
-outcome: Indoors the stored 40-450 Hz carries passes within about 1 km, as lines; the gap is placement, detection or the stored band; locate finds the site on-node, 482 m off it off-node (4 km fails the series criterion)
+outcome: Indoors the phone carries passes within about 1 km, as lines; locate's top is 480 m off the site at 200 m spacing in boxes to 12 km (fails the 300 m criterion), 294 m at 50 m
 -->
 
 ## Question
@@ -379,6 +379,21 @@ again with the top within 300 m of the site, the failure is sampling. If not, it
 The method's fix would choose among pairs after each pair's top is refined, not on the coarse grid. That is
 recorded here, not built.
 
+**Run 12: the off-node 4 km box at 50 m spacing.** (`private/runs/2026-11-04-seattle-home-pilot-12/
+locate-silence-off-box4km-sp50m/`, 2,003,797 CPA records, 334 triples scored.) The criterion was written for the case's
+200 m grid, so this is the diagnosis, not the judged series.
+
+- **Top candidate:** 294 m from the site, score 6.46, inside the 300 m line by 6 m.
+- **Clock:** the residual shift is +0.5 s, no longer at the sweep's edge.
+- **Refine:** 241 m from the site.
+- **Margin:** the best node beyond 300 m is 387 m from the site at 5.96, 8 % below the top and part of the same mode.
+  The best node within 150 m of the site scores 4.75.
+- **Pair:** the winner is still the 1.8 and 0.8 km pistons (events 4 and 3), not run 7's pair.
+
+So the 200 m grid mismeasured this pair's peak by about 200 m and forced the −6 s slip. At 50 m the pair's own mode is
+about 250–300 m from the site. The sharper on-site peak of run 7's pair doesn't win at 50 m either, so run 7's 0 m
+was mostly the node coinciding with the site. The working error of this session's best pair is a few hundred metres.
+
 **8 and 12 km (runs 10 and 11), reported, not judged.** They ran at 200 m, as the owner asked, outside the
 pre-registered rule, with the same off-node placement:
 
@@ -393,8 +408,8 @@ pre-registered rule, with the same off-node placement:
   candidate anywhere in a box of up to 12 km (about 3,600 nodes) scored higher.
 - **Score drift:** the top score falls with the box, because the comparable z's null is drawn from a CPA table that
   grows with the grid. Scores at different box sizes are not comparable.
-- **What stops a pass:** across nine times the area, the 200 m sampling of run 7's sharper pair (run 12 tests it). No
-  wrong location wins.
+- **What stops a pass:** at 200 m, the grid's sampling of the winning pair's peak (run 12: at 50 m the same pair's top
+  is 294 m from the site). No wrong location wins across nine times the area.
 - **20 km:** the next size, once adsb.lol's 2026-11-04 archive is out. It needs a `fetch-day --keep-jets` cut of a wide
   public Puget Sound box and a private case pointing at it.
 
@@ -458,8 +473,10 @@ So far, from runs 4, 5 and 7:
   its peak. So the judged series stops at 4 km.
 - Runs 10 and 11 (8 and 12 km, reported, not judged): the same node, 480 and 477 m from the site, wins every box.
   No location in a 12 km box scores higher.
-- Run 12 (4 km at 50 m spacing, not yet read) tests whether the 200 m sampling is all that stands between that and a
-  pass. 20 km waits for the archive.
+- Run 12 (4 km at 50 m spacing): the same pair's top is 294 m from the site, inside the 300 m line, with the clock's
+  residual shift back to +0.5 s. The 200 m grid had displaced it by about 200 m.
+  - This session's best pair places the site to a few hundred metres, and nothing in a 12 km box beats it.
+  - 20 km waits for the archive.
 
 ## Files
 

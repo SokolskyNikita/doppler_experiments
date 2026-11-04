@@ -729,6 +729,11 @@ def run_bench(case_ids: list[str], tier: str = "t2", run_dir: Path | None = None
     if parallel <= 1:
         entries = [run_one(cid, run_dir, execute, code, log) for cid in case_ids]
     else:
+        # each case's own pools get an equal share of the cores, so N cases never start N full-size pools
+        from dopplertrack.parallel import JOBS_ENV, default_jobs
+        child_env = {**os.environ, JOBS_ENV: os.environ.get(JOBS_ENV) or str(max(1, default_jobs() // parallel))}
+        info["jobs_per_case"] = int(child_env[JOBS_ENV])
+        info_path.write_text(json.dumps(info, indent=1) + "\n")
         pending, running, entries = list(case_ids), {}, {}
         while pending or running:
             while pending and len(running) < parallel:
@@ -738,7 +743,7 @@ def run_bench(case_ids: list[str], tier: str = "t2", run_dir: Path | None = None
                        "--code-json", json.dumps(code), "--overrides-json", json.dumps(overrides), cid] + \
                     (["--revision", revision] if revision else [])
                 out = open(run_dir / cid / "process.log", "w")
-                running[cid] = (subprocess.Popen(cmd, cwd=REPO, stdout=out, stderr=subprocess.STDOUT), out)
+                running[cid] = (subprocess.Popen(cmd, cwd=REPO, stdout=out, stderr=subprocess.STDOUT, env=child_env), out)
                 log(f"{cid}: started")
             for cid, (proc, out) in list(running.items()):
                 if proc.poll() is not None:

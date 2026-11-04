@@ -37,6 +37,7 @@ def main(argv=None):
                     help="span sets to run (default: development only; calibration is for Phase 4)")
     t1.add_argument("--run-dir", type=Path, help="an empty folder made by tools/data/new_run.py (default: make one)")
     t1.add_argument("--workers", type=int, help="processes for detect (default: the performance cores)")
+    t1.add_argument("--build", action="store_true", help="only make the spans' missing derived files and check hashes")
     c = sub.add_parser("compare", help="print the difference between two benchmark runs")
     c.add_argument("a", type=Path); c.add_argument("b", type=Path)
     a = ap.parse_args(argv)
@@ -67,6 +68,9 @@ def main(argv=None):
         runner.run_one(a.case, a.run_dir, execute, code)
     elif a.cmd == "tier1":
         from . import tier1
+        if a.build:
+            bad = tier1.build_spans(tuple(a.set or ["development"]))
+            sys.exit("\n".join(bad) if bad else 0)
         print(tier1.run_tier1(tuple(a.set or ["development"]), run_dir=a.run_dir, workers=a.workers))
     elif a.cmd == "compare":
         print(runner.compare_runs(a.a, a.b))

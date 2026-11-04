@@ -8,9 +8,11 @@ speed, overtones, standard deviations) with its DPZ waveform in derived/alaska/:
   spectrogram  2.048 s Hann every 0.25 s, 40-240 Hz (Nyquist 250 Hz), from the raw counts
   fit          tracks.fit_event, contrast objective, one harmonic, over the FR24 CPA time +-60 s, at
                c = 340.3 m/s (the package's 15 C) and at the authors' fitted c for that crossing, in a band:
-               --band wide is 40-240 Hz; --band narrow is 0.85-1.15 x the authors' best-determined fitted
-               tone in 40-240 Hz (smallest fitted SD; their table has no amplitudes), which only places the
-               search and never enters the comparison
+               --band wide is 40-240 Hz; --band narrow is --band-factors (default 0.85-1.15) x the authors'
+               best-determined fitted tone in 40-240 Hz (smallest fitted SD; their table has no amplitudes),
+               which only places the search and never enters the comparison. The band must hold a pass's own
+               Doppler span (about 0.75-1.45 x at 100 m/s, c 310 m/s): 0.85-1.15 doesn't, and fit_event's
+               grid_search then raises "attempt to get argmax of an empty sequence"
   reference    FR24 slant range sqrt(horizontal distance^2 + (altitude - node elevation)^2) and speed;
                beside it the authors' fitted speed and slant range
 Speed and slant range don't depend on which harmonic the fit locks to; f0 does, so it isn't compared.
@@ -86,7 +88,7 @@ def one(x):
     if band == "narrow":
         if x["band_tone"] is None:
             return dict(x, band=band, error="no fitted tone in 40-240 Hz")
-        lo, hi = max(40.0, 0.85 * x["band_tone"]), min(240.0, 1.15 * x["band_tone"])
+        lo, hi = max(40.0, x["band_lo"] * x["band_tone"]), min(240.0, x["band_hi"] * x["band_tone"])
     else:
         lo, hi = 40.0, 240.0
     x.update(band=band, f_lo=lo, f_hi=hi)
@@ -103,12 +105,15 @@ def one(x):
 def main():
     ap = argparse.ArgumentParser(); ap.add_argument("run"); ap.add_argument("--workers", type=int, default=3)
     ap.add_argument("--band", choices=("wide", "narrow"), default="wide")
+    ap.add_argument("--band-factors", nargs=2, type=float, default=(0.85, 1.15), metavar=("LO", "HI"),
+                    help="narrow band as multiples of the authors' tone; must hold the Doppler span, about 0.75-1.45 at 100 m/s")
     ap.add_argument("--sample", type=int, help="a seeded random subset of this size; crossings already done count first")
     ap.add_argument("--seed", type=int, default=20261104)
     a = ap.parse_args()
     xs = crossings()
     for x in xs:
         x["band"] = a.band
+        x["band_lo"], x["band_hi"] = a.band_factors
     part = Path(a.run) / "alaska.jsonl"       # one row per finished crossing, so a stopped run resumes
     done = {(r["flight"], r["node"]) for r in map(json.loads, open(part))} if part.exists() else set()
     if a.sample:

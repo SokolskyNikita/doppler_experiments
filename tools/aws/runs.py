@@ -117,7 +117,9 @@ def case_inputs(case_ids: list[str]) -> list[str]:
         if cid not in cases:
             sys.exit(f"no case {cid!r} in bench/cases.json")
         c = cases[cid]
-        paths = [c.get("audio", {}).get("path"), c.get("spectrogram"), c.get("flight_data", {}).get("traces")]
+        traces = c.get("flight_data", {}).get("traces")          # one file, or one per UTC day
+        paths = [c.get("audio", {}).get("path"), c.get("spectrogram"),
+                 *([traces] if isinstance(traces, str) else traces or [])]
         paths += [d["path"] for d in c.get("derived", [])]
         for p in paths:
             if p and p not in out:

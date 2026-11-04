@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # The home recorder pilot (docs/experiments/2026-11-04-seattle-home-pilot.md) on one fleet box, shipping exactly the
 # files the owner approved, one --input per path, nothing else.
-#   tools/experiments/2026-11-04/seattle_pilot_launch.sh APPROVED_LIST [broadband]
-# With `broadband`, the box skips locate: the spectrogram, the known point and the broadband check only.
+#   tools/experiments/2026-11-04/seattle_pilot_launch.sh APPROVED_LIST [all|broadband|locate] [--silence off]
+# all (the default): the spectrogram, the known point, locate, the broadband check. broadband: no locate. locate: the
+# spectrogram and locate only. --silence off runs locate with the silence filter off, into $RUN/locate-silence-off.
 # APPROVED_LIST: one path per line, relative to $DOPPLERTRACK_DATA, as the owner cleared them (blank lines and # comments
 # ignored). The run needs every one of these, so a missing one stops the launch before anything ships:
 REQUIRED=(
@@ -25,7 +26,13 @@ set -euo pipefail
 CASE=seattle-home-20261104-ha-pilot-2
 LIST=${1:?give the approved list from the owner}
 MODE=${2:-all}
-case "$MODE" in all|broadband) ;; *) echo "unknown mode: $MODE"; exit 1 ;; esac
+case "$MODE" in all|broadband|locate) ;; *) echo "unknown mode: $MODE"; exit 1 ;; esac
+LOCATE_ARGS="" LOCATE_DIR=locate
+case "${3:-} ${4:-}" in
+  " ") ;;
+  "--silence off") LOCATE_ARGS="--search-param silence_d_m=null"; LOCATE_DIR=locate-silence-off ;;
+  *) echo "unknown option: ${3:-} ${4:-}"; exit 1 ;;
+esac
 RUNS=tools/aws/runs
 [ -z "$(git status --porcelain)" ] || { echo "commit first: the box runs a clean commit"; exit 1; }
 $RUNS launch --help | grep -q -- "--private" || { echo "runs has no private mode yet (SDE-E): not launching"; exit 1; }
@@ -52,9 +59,9 @@ set -e
 mkdir -p "\$DOPPLERTRACK_CACHE" && cp "\$DOPPLERTRACK_DATA/raw/aux/opensky/doc8643AircraftTypes.csv" "\$DOPPLERTRACK_CACHE/"
 S=private/derived/$CASE/rec.npz
 uv run python -I tools/data/session_spectrogram.py "\$DOPPLERTRACK_DATA/raw/seattle-home/20261104-ha-pilot-2" "\$DOPPLERTRACK_DATA/\$S"
-uv run python tools/experiments/2026-11-04/known_point_site.py $CASE "\$RUN/known_point"
-[ "$MODE" = broadband ] || uv run python -m bench run --profile locate $CASE --run-dir "\$RUN/locate"
-uv run python tools/experiments/2026-11-04/broadband_site.py $CASE "\$DOPPLERTRACK_DATA/raw/seattle-home/20261104-ha-pilot-2" "\$RUN/known_point" "\$RUN/broadband"
+[ "$MODE" = locate ] || uv run python tools/experiments/2026-11-04/known_point_site.py $CASE "\$RUN/known_point"
+[ "$MODE" = broadband ] || uv run python -m bench run --profile locate $CASE $LOCATE_ARGS --run-dir "\$RUN/$LOCATE_DIR"
+[ "$MODE" = locate ] || uv run python tools/experiments/2026-11-04/broadband_site.py $CASE "\$DOPPLERTRACK_DATA/raw/seattle-home/20261104-ha-pilot-2" "\$RUN/known_point" "\$RUN/broadband"
 EOF2
 )
 $RUNS launch seattle-home-pilot --private --size 4xlarge --fallback-on-demand "${INPUTS[@]}" -- "$BOX_CMD"

@@ -27,6 +27,7 @@ Label files live in bench/labels/<recording>-<t0>-<t1>.json:
    "sheets": "runs/<folder>",          where the contact sheets are
    "windows": [{"id", "class", "start", "end", "lines": [[f_start, f_end], ...], "harmonics",
                 "labeller", "blind", "date", "notes"}],
+               optionally "checked": {"by", "date", "verdict"} once a second person has looked at the window],
    "associations": [{"window", "flight": {"icao", "registration", "heard_cpa_s", "slant_m"} or "unmatched",
                      "confidence": "probable" or "possible", "alternatives": [flights that fit as well],
                      "labeller", "blind", "date", "notes"}]}

@@ -96,7 +96,12 @@
    "labeller": "Claude (SDE-D session), from the contact sheets",
    "blind": true,
    "date": "2026-11-04",
-   "notes": "long falling line 130 to 65 Hz, flat after 185 s; the 345-255 Hz line falls over 120-165 s and may be another source"
+   "notes": "long falling line 130 to 65 Hz, flat after 185 s; the 345-255 Hz line falls over 120-165 s and may be another source",
+   "checked": {
+    "by": "the user, by eye, from the zoomed windows in runs/2026-11-04-blind-labels-spotcheck/spotcheck.html",
+    "date": "2026-11-04",
+    "verdict": "stands"
+   }
   },
   {
    "id": "ob-e04",
@@ -150,7 +155,12 @@
    "labeller": "Claude (SDE-D session), from the contact sheets",
    "blind": true,
    "date": "2026-11-04",
-   "notes": "several parallel falling lines"
+   "notes": "several parallel falling lines",
+   "checked": {
+    "by": "the user, by eye, from the zoomed windows in runs/2026-11-04-blind-labels-spotcheck/spotcheck.html",
+    "date": "2026-11-04",
+    "verdict": "stands"
+   }
   },
   {
    "id": "ob-a03",
@@ -245,7 +255,12 @@
    "labeller": "Claude (SDE-D session), from the contact sheets",
    "blind": true,
    "date": "2026-11-04",
-   "notes": "strong wobbling tone falls 235 to 172 Hz over 480-497 s, then flat; broadband burst at 476-480 s"
+   "notes": "strong wobbling tone falls 235 to 172 Hz over 480-497 s, then flat; broadband burst at 476-480 s",
+   "checked": {
+    "by": "the user, by eye, from the zoomed windows in runs/2026-11-04-blind-labels-spotcheck/spotcheck.html",
+    "date": "2026-11-04",
+    "verdict": "stands"
+   }
   },
   {
    "id": "ob-a06",
@@ -302,7 +317,12 @@
    "labeller": "Claude (SDE-D session), from the contact sheets",
    "blind": true,
    "date": "2026-11-04",
-   "notes": "many parallel falling lines, steepest about 655-670 s"
+   "notes": "many parallel falling lines, steepest about 655-670 s",
+   "checked": {
+    "by": "the user, by eye, from the zoomed windows in runs/2026-11-04-blind-labels-spotcheck/spotcheck.html",
+    "date": "2026-11-04",
+    "verdict": "stands"
+   }
   },
   {
    "id": "ob-a08",

@@ -38,7 +38,12 @@
    "labeller": "Claude (SDE-D session), from the contact sheets",
    "blind": true,
    "date": "2026-11-04",
-   "notes": "a clear fall 165 to 105 Hz steepest near 3685 s, and a slower one 205 to 165 Hz over 3660-3770 s"
+   "notes": "a clear fall 165 to 105 Hz steepest near 3685 s, and a slower one 205 to 165 Hz over 3660-3770 s",
+   "checked": {
+    "by": "the user, by eye, from the zoomed windows in runs/2026-11-04-blind-labels-spotcheck/spotcheck.html",
+    "date": "2026-11-04",
+    "verdict": "stands"
+   }
   },
   {
    "id": "sw-a01",
@@ -132,7 +137,12 @@
    "labeller": "Claude (SDE-D session), from the contact sheets",
    "blind": true,
    "date": "2026-11-04",
-   "notes": "repeated broadband bursts; bird calls at 4030-4045 s"
+   "notes": "repeated broadband bursts; bird calls at 4030-4045 s",
+   "checked": {
+    "by": "the user, by eye, from the zoomed windows in runs/2026-11-04-blind-labels-spotcheck/spotcheck.html",
+    "date": "2026-11-04",
+    "verdict": "stands"
+   }
   },
   {
    "id": "sw-a04",
@@ -156,7 +166,12 @@
    "labeller": "Claude (SDE-D session), from the contact sheets",
    "blind": true,
    "date": "2026-11-04",
-   "notes": "broadband bursts and bird calls throughout"
+   "notes": "broadband bursts and bird calls throughout",
+   "checked": {
+    "by": "the user, by eye, from the zoomed windows in runs/2026-11-04-blind-labels-spotcheck/spotcheck.html",
+    "date": "2026-11-04",
+    "verdict": "stands"
+   }
   },
   {
    "id": "sw-a05",
@@ -193,7 +208,12 @@
    "labeller": "Claude (SDE-D session), from the contact sheets",
    "blind": true,
    "date": "2026-11-04",
-   "notes": "falling lines at three heights"
+   "notes": "falling lines at three heights",
+   "checked": {
+    "by": "the user, by eye, from the zoomed windows in runs/2026-11-04-blind-labels-spotcheck/spotcheck.html",
+    "date": "2026-11-04",
+    "verdict": "stands"
+   }
   },
   {
    "id": "sw-a06",

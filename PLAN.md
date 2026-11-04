@@ -626,7 +626,7 @@ The evaluation set is what limits M3, and collecting it takes calendar time rath
 | Source | What it is | Use |
 |---|---|---|
 | Eclipse Soundscapes ESID 375, 740, 710 | AudioMoths with clocks set by a time chime, 2024-04-07; 6, 7 and 19 prop passes within 12 km | calibration or evaluation (decision 2). 740 and 710 are 1,437 one-minute files each, continuous across the seams despite a CONFIG that says 55 s on and 5 s off, with two missing-file holes of about 2.5 min per site and a restart after each, so they need the gap-aware spectrogram (Phase 1 item 8) first |
-| Eclipse ESID 937 | about 25 h from 05:40 UTC on 2024-04-07, with no prop pass within 20 km that day | a negative that must abstain, once 04-08's flight data is fetched |
+| Eclipse ESID 937 | about 25 h from 05:40 UTC on 2024-04-07, with no prop pass within 20 km that day | evaluation's negative, which must abstain, once 04-08's flight data is fetched (decision 2, amended 2026-11-04) |
 | xeno-canto XC979185 | one prop pass, start time known to the minute | a single-flyover case |
 | xeno-canto XC990819, XC990820, XC986433 | Essex, jets only | development: background negatives for `detect`'s threshold; the first two are one group |
 | Seattle (planned) | your recordings, several devices at one spot; and a continuous band-limited recorder at a home in Seattle, about 70 prop passes a day within 6 km, being built in a separate project | one group per session: it tests devices, not new sites. The home recorder is one site, so one group however many days it runs: evaluation (decided 2026-11-04), so its audio is never opened during Phase 2 tuning. Its audio stays out of git |
@@ -729,8 +729,8 @@ Three open-source projects (dopplerprint, echolocate, unheard) started in Novemb
 
 1. **The practical resolution behind "located".** Decided 2026-11-04: a 1 km radius. A smaller radius makes the tool abstain more; a larger one makes "located" less useful. The development results sit inside it (Oyster Bay 123 m and 43 m refined, the eagle cam 917 m and 567 m). To be revisited only with M3 evidence.
 2. **Which clean recordings go to calibration and which to evaluation.** Decided 2026-11-04, before any of them was searched:
-   - evaluation: ESID 375 (quiet, continuous) and ESID 710 (moderate traffic);
-   - calibration: ESID 740, ESID 937 (the must-abstain negative) and XC979185;
+   - evaluation: ESID 375 (quiet, continuous), ESID 710 (moderate traffic) and ESID 937 (the must-abstain negative; moved from calibration on 2026-11-04, still before any of them was searched, because an evaluation set with no clean recording can't measure a false "located");
+   - calibration: ESID 740 and XC979185, with the Essex recordings and AeroSonicDB's no-aircraft stretches as its negatives;
    - development: the three Essex recordings, since Phase 2 tunes `detect`'s threshold on them, and the Livermore corpus, which Phase 2 fits on;
    - Seattle sessions go to evaluation by default.
    The evaluation set has no negative yet; the first Seattle session or another quiet-airspace recording should supply one.

@@ -179,9 +179,10 @@ def fit_event(sp: Spectrogram, t_start: float, t_end: float, f_lo: float, f_hi: 
     win = sp.crop(t_start - 30, t_end + 30, max(f_lo - pad, sp.f[0]), min(f_hi * harmonics + pad, sp.f[-1]))
     # a search with nothing to search returns a weak fit with its reason, not an error
     f0_lo, f0_hi = (f_lo * 1.15, f_hi * 0.85) if init is None else (max(init[0] - 12, 1), init[0] + 12)
-    if not f0_lo < f0_hi:
-        return EventFit.unfit(t_start, t_end, f"the band {f_lo:g}-{f_hi:g} Hz leaves no fundamental to search "
-                                              f"({f0_lo:g}-{f0_hi:g} Hz)")
+    if not f0_lo < f0_hi:   # grid_search takes f0 from 1.15 f_lo to 0.85 f_hi: empty when f_hi/f_lo < 1.15/0.85
+        return EventFit.unfit(t_start, t_end, f"band narrower than the f0 search margins: f_hi/f_lo = "
+                                              f"{f_hi / f_lo:.3f} < {1.15 / 0.85:.3f} for {f_lo:g}-{f_hi:g} Hz, "
+                                              f"so the f0 range {f0_lo:g}-{f0_hi:g} Hz is empty")
     if not t_start < t_end or len(win.t) < 2 or len(win.f) < 2:
         return EventFit.unfit(t_start, t_end, f"the window {t_start:g}-{t_end:g} s and band {f_lo:g}-{f_hi:g} Hz "
                                               "hold no spectrogram to fit")

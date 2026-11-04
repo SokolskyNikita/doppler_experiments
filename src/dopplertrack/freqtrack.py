@@ -65,18 +65,21 @@ class TrackParams:
 
 class SampleSTFT:
     """Complex STFT columns of `x` on the Spectrogram's frame grid: frame k covers samples
-    [k*hop, k*hop + nperseg), centred at (nperseg/2 + k*hop)/sr seconds, Hann window as
-    compute_spectrogram uses. Samples outside x read as zero."""
+    [k*hop, k*hop + nperseg), centred at t0 + (nperseg/2 + k*hop)/sr seconds, Hann window as
+    compute_spectrogram uses, zero-padded to nfft (default nperseg). Samples outside x read as zero."""
 
-    def __init__(self, x: np.ndarray, sr: int, nperseg: int = 8192, hop_s: float = 0.25):
+    def __init__(self, x: np.ndarray, sr: int, nperseg: int = 8192, hop_s: float = 0.25,
+                 nfft: int | None = None, t0: float = 0.0):
         self.x = np.asarray(x, np.float64)
-        self.sr, self.nperseg = sr, nperseg
+        self.sr, self.nperseg, self.t0 = sr, nperseg, t0
+        self.nfft = nfft or nperseg
         self.hop = max(1, int(round(hop_s * sr)))
         self.window = ss.get_window("hann", nperseg)
-        self.df = sr / nperseg
+        self.df = sr / self.nfft                      # the grid's bin
+        self.wbin = self.nfft / nperseg               # one resolution bin, in grid bins
 
     def frame(self, t: float) -> int:
-        return int(round((t * self.sr - self.nperseg / 2) / self.hop))
+        return int(round(((t - self.t0) * self.sr - self.nperseg / 2) / self.hop))
 
     def segment(self, k: int) -> np.ndarray:
         a = k * self.hop
@@ -88,13 +91,13 @@ class SampleSTFT:
 
     def dft(self, k: int, window: bool = True) -> np.ndarray:
         s = self.segment(k)
-        return np.fft.rfft(s * self.window if window else s)
+        return np.fft.rfft(s * self.window if window else s, n=self.nfft)
 
-    def dtft(self, k: int, bins: np.ndarray) -> np.ndarray:
-        """Hann-windowed DTFT of frame k at fractional bin positions."""
-        s = self.segment(k) * self.window
+    def dtft(self, k: int, bins: np.ndarray, window: bool = True) -> np.ndarray:
+        """DTFT of frame k (Hann-windowed or not) at fractional positions in grid bins."""
+        s = self.segment(k) * (self.window if window else 1.0)
         n = np.arange(self.nperseg)
-        return np.exp(-2j * np.pi * np.outer(np.asarray(bins, float), n) / self.nperseg) @ s
+        return np.exp(-2j * np.pi * np.outer(np.asarray(bins, float), n) / self.nfft) @ s
 
 
 # ---- sub-bin estimators ------------------------------------------------------------------
@@ -133,6 +136,8 @@ def refine(stft: SampleSTFT, k: int, b: int, estimator: str = "candan", iteratio
     largest Hann bin within one of b, then the estimator. Candan is iterated on the DTFT
     around its own estimate, as dopplerprint does."""
     X = stft.dft(k)
+    if stft.wbin != 1:
+        return _refine_padded(stft, k, b, X, estimator, iterations)
     lo = max(b - 1, 1)
     j = lo + int(np.argmax(np.abs(X[lo:b + 2])))
     j = min(max(j, 1), len(X) - 2)
@@ -152,6 +157,29 @@ def refine(stft: SampleSTFT, k: int, b: int, estimator: str = "candan", iteratio
     w = abs(np.sinc(d) / (1 - d * d)) if abs(d) < 0.999 else 0.5
     amp = 20 * math.log10(max(abs(X[j]), 1e-300) / (w * stft.window.sum() / 2))
     return (j + d) * stft.df, amp
+
+
+def _refine_padded(stft: SampleSTFT, k: int, b: int, X: np.ndarray, estimator: str, iterations: int) -> tuple[float, float]:
+    """refine() on a zero-padded STFT: the estimators' three samples are one resolution bin apart
+    (sr / nperseg), so they are evaluated on the DTFT rather than read from the padded bins."""
+    w = stft.wbin
+    r = int(math.ceil(w))
+    lo = max(b - r, 1)
+    j = lo + int(np.argmax(np.abs(X[lo:b + r + 1])))
+    pos = j + w * np.array([-1.0, 0.0, 1.0])
+    if estimator == "quadratic":
+        d = quadratic_delta(*stft.dtft(k, pos))
+    elif estimator == "quinn2":
+        d = quinn2_delta(*stft.dtft(k, pos, window=False))
+    elif estimator == "candan":
+        d = candan_hann_delta(*stft.dtft(k, pos))
+        for _ in range(iterations - 1):
+            d += candan_hann_delta(*stft.dtft(k, j + w * (d + np.array([-1.0, 0.0, 1.0]))))
+    else:
+        raise ValueError(f"unknown estimator {estimator!r}")
+    d = float(np.clip(d, -1.0, 1.0))
+    amp = 20 * math.log10(max(abs(stft.dtft(k, [j + w * d])[0]), 1e-300) / (stft.window.sum() / 2))   # at the peak itself
+    return (j + w * d) * stft.df, amp
 
 
 # ---- tracks ------------------------------------------------------------------------------

@@ -60,6 +60,15 @@ pair third (17.98 against 18.0+ for the winner), with the gate keeping the whole
 against Tier 2 at Tier 2's conditions: all ten cases with `--weather`, criterion as above. The 15 °C reading is reported
 beside it, since it says the Tier 2 find depends on the station temperature.
 
+**Both settings, added before the 15 °C runs (PM, 2026-11-04).** Weather stays off by default, so the gate and
+locate's two new defaults are judged at both settings. At the station temperature: `locate-gate-w` (the gate,
+locate's defaults, `--weather`). At 15 °C: `locate-gate-15` (the gate, `--pair-rule both`, the filter on) and
+`locate-15-off` (the same with the filter off); `both` refines comparable's answer and reports top2's beside it. The
+gate is judged at each setting by the criterion above. The defaults are judged at 15 °C by the Tier 2 record's
+criteria 3 and 4 (comparable finds more seed cases than top2 and loses none; the filter on finds more and loses none,
+with the negatives still unlocated), with the gate on in all of them. If either fails at 15 °C, that is reported with
+the numbers for the PM to decide, not applied by rule.
+
 ## Results
 
 Pending.

@@ -10,7 +10,8 @@ from typing import Callable, Iterable, Iterator
 
 import requests
 
-from .adsb import Trace, in_bbox, parse_trace_bytes
+from .adsb import TRACE_ERRORS, Trace, in_bbox, parse_trace_bytes
+from .coverage import ScanReport
 
 TRACE_RE = re.compile(r"trace_full_([0-9a-f~]+)\.json$")
 API = "https://api.github.com/repos/adsblol/globe_history_{year}/releases/tags/{tag}"
@@ -71,9 +72,10 @@ class _ChainedHTTP(io.RawIOBase):
         return n
 
 
-def iter_tar_traces(fileobj, bbox, progress: Callable[[int, int], None] | None = None) -> Iterator[Trace]:
+def iter_tar_traces(fileobj, bbox, progress: Callable[[int, int], None] | None = None,
+                    report: ScanReport | None = None) -> Iterator[Trace]:
     """Yield traces touching bbox from a tar stream (readsb day archive layout traces/xx/trace_full_*.json)."""
-    n_seen = 0
+    report = report if report is not None else ScanReport()
     with tarfile.open(fileobj=fileobj, mode="r|") as tf:
         for m in tf:
             if not m.isfile():
@@ -81,21 +83,28 @@ def iter_tar_traces(fileobj, bbox, progress: Callable[[int, int], None] | None =
             mm = TRACE_RE.search(m.name)
             if not mm:
                 continue
-            n_seen += 1
+            report.seen += 1
+            if progress and report.seen % 2000 == 0:
+                progress(report.seen, getattr(fileobj, "total", 0))
             raw = tf.extractfile(m).read()
             try:
                 tr = parse_trace_bytes(raw, mm.group(1))
-            except Exception:
+            except TRACE_ERRORS:
+                report.malformed += 1
                 continue
-            if tr is not None and in_bbox(tr, bbox):
+            if tr is None:
+                report.empty += 1
+            elif in_bbox(tr, bbox):
+                report.kept += 1
                 yield tr
-            if progress and n_seen % 2000 == 0:
-                progress(n_seen, getattr(fileobj, "total", 0))
+            else:
+                report.outside_bbox += 1
 
 
 def fetch_day(date: str, bbox, pod: str = "planes-readsb-prod-0",
-              progress: Callable[[int, int], None] | None = None) -> list[Trace]:
+              progress: Callable[[int, int], None] | None = None,
+              report: ScanReport | None = None) -> list[Trace]:
     urls = release_asset_urls(date, pod)
     stream = _ChainedHTTP(urls)
     prog = (lambda n, _: progress(n, stream.total)) if progress else None
-    return list(iter_tar_traces(io.BufferedReader(stream, 1 << 22), bbox, prog))
+    return list(iter_tar_traces(io.BufferedReader(stream, 1 << 22), bbox, prog, report=report))

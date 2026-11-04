@@ -80,3 +80,20 @@ def test_cpa_from_trajectory():
     assert slant == pytest.approx(np.hypot(3000, 1000))
     assert theard == pytest.approx(300 + slant / 340.0)
     assert speed == pytest.approx(100.0)
+
+
+def test_trajectory_mask_does_not_bridge_a_gap_over_30_seconds():
+    te = np.r_[np.arange(0, 61), np.arange(100, 161)].astype(float)
+    pos = np.stack([100 * (te - 80), np.full_like(te, 3000), np.zeros_like(te)], -1)
+    to, f, r, valid = doppler.curve_from_trajectory(te, pos, np.zeros(3), c=340, return_valid=True)
+    assert not valid[60] and not valid[61]
+    assert np.isnan(f[60:62]).all() and np.isnan(r[60:62]).all()
+
+
+def test_forward_trajectory_mask_rejects_missing_positions():
+    te = np.arange(10, dtype=float)
+    pos = np.stack([100 * te, np.full_like(te, 3000), np.zeros_like(te)], -1)
+    pos[5] = np.nan
+    _, f, _, valid = doppler.curve_from_trajectory(te, pos, np.zeros(3), return_valid=True)
+    assert not valid[4:7].any() and np.isnan(f[4:7]).all()
+    assert valid[:4].all() and valid[7:].all()

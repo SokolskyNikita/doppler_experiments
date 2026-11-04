@@ -59,11 +59,12 @@ class Terrain:
             img = Image.open(self._path(x, y))
         img = np.asarray(img.convert("RGB"), dtype=np.float64)
         elev = img[..., 0] * 256 + img[..., 1] + img[..., 2] / 256 - 32768
+        elev[elev == -32768] = np.nan
         self._mem[k] = elev
         return elev
 
     def elevation(self, lat, lon) -> np.ndarray:
-        """Elevation in metres (MSL) for arrays of lat/lon. Nearest pixel."""
+        """Elevation in metres (MSL) for arrays of lat/lon. Nearest pixel; no-data is NaN."""
         lat = np.atleast_1d(np.asarray(lat, float)); lon = np.atleast_1d(np.asarray(lon, float))
         n = 2 ** self.z
         xf = (lon + 180.0) / 360.0 * n

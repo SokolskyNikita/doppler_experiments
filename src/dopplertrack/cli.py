@@ -8,11 +8,37 @@ import sys
 import numpy as np
 
 from . import pipeline
-from .adsb import load_traces
-from .audio import Spectrogram
+from .adsb import load_trace_metadata, load_traces
+from .audio import FFmpegNotFoundError, Spectrogram
+from .coverage import DEFAULT_MAX_RANGE_M, report_coverage
 from .search import Grid
 from .terrain import Terrain
 from .tracks import EventFit
+
+
+def load_events(files, picks=None):
+    """Read two individual fits or one ranked detect list with two 1-based ranks."""
+    if picks is None and len(files) != 2:
+        raise ValueError("use --events EV1.json EV2.json, or --events detected.json --pick 1 2")
+    if picks is not None and len(files) != 1:
+        raise ValueError("--pick requires exactly one detect JSON list")
+    data = []
+    for filename in files:
+        with open(filename) as f:
+            data.append(json.load(f))
+    if picks is not None:
+        events = data[0]
+        if not isinstance(events, list):
+            raise ValueError("--pick requires a JSON list written by detect")
+        if len(set(picks)) != 2 or any(i < 1 or i > len(events) for i in picks):
+            raise ValueError(f"--pick needs two distinct ranks between 1 and {len(events)}")
+        data = [events[i - 1] for i in picks]
+    if not all(isinstance(e, dict) for e in data):
+        raise ValueError("event files must contain individual fits; select detect list entries with --pick")
+    try:
+        return [EventFit(**e) for e in data]
+    except TypeError as exc:
+        raise ValueError(f"invalid event fit: {exc}") from exc
 
 
 def main(argv=None):
@@ -34,6 +60,8 @@ def main(argv=None):
     d.add_argument("spec"); d.add_argument("--band", nargs=2, type=float, required=True, metavar=("FLO", "FHI"))
     d.add_argument("--harmonics", type=int, default=1); d.add_argument("--top", type=int, default=20)
     d.add_argument("--window", type=float, default=240.0); d.add_argument("--out", help="write ranked fits as a JSON list")
+    d.add_argument("--min-score", type=float, default=0.0,
+                   help="return only fits above this contrast score; may return no events (default: reject zero evidence, not a calibrated false-alarm threshold)")
 
     e = sub.add_parser("extract-region", help="pull traces touching a bbox out of an adsb.lol day archive")
     e.add_argument("archive_dir"); e.add_argument("out")
@@ -46,7 +74,8 @@ def main(argv=None):
     fd.add_argument("--keep-jets", action="store_true"); fd.add_argument("--pod", default="planes-readsb-prod-0")
 
     r = sub.add_parser("search", help="rank candidate locations for a two-event recording")
-    r.add_argument("spec"); r.add_argument("--events", nargs=2, required=True, metavar=("EV1_JSON", "EV2_JSON"))
+    r.add_argument("spec"); r.add_argument("--events", nargs="+", required=True, metavar="JSON")
+    r.add_argument("--pick", nargs=2, type=int, metavar=("RANK1", "RANK2"), help="two 1-based ranks from one detect JSON list")
     r.add_argument("--traces", required=True); r.add_argument("--out", required=True)
     r.add_argument("--bbox", nargs=4, type=float, metavar=("LATMIN", "LATMAX", "LONMIN", "LONMAX"))
     r.add_argument("--point", nargs=2, type=float, metavar=("LAT", "LON"), help="score a single known point instead of a grid")
@@ -57,7 +86,8 @@ def main(argv=None):
 
     rf = sub.add_parser("refine", help="fine grid around one search result, optionally adding more events")
     rf.add_argument("spec"); rf.add_argument("results", help="CSV written by search")
-    rf.add_argument("--events", nargs=2, required=True, metavar=("EV1_JSON", "EV2_JSON"))
+    rf.add_argument("--events", nargs="+", required=True, metavar="JSON")
+    rf.add_argument("--pick", nargs=2, type=int, metavar=("RANK1", "RANK2"), help="two 1-based ranks from one detect JSON list")
     rf.add_argument("--traces", required=True); rf.add_argument("--out", required=True)
     rf.add_argument("--bbox", nargs=4, type=float, required=True, metavar=("LATMIN", "LATMAX", "LONMIN", "LONMAX"), help="the bbox the search used")
     rf.add_argument("--rank", type=int, default=1, help="which flight pair to refine, by rank in the results (1 = best)")
@@ -75,9 +105,27 @@ def main(argv=None):
     g.add_argument("--spacing", type=float, default=200.0); g.add_argument("--harmonics", type=int, default=1)
     g.add_argument("--no-dem", action="store_true")
 
+    for parser in (e, fd, r, rf, g):
+        parser.add_argument("--max-range", type=float, default=DEFAULT_MAX_RANGE_M, metavar="METRES",
+                            help="search range / extraction margin in metres (default: 12000); use the same value for extraction and search")
+
     a = ap.parse_args(argv)
+    if hasattr(a, "max_range") and (not np.isfinite(a.max_range) or a.max_range <= 0):
+        ap.error("--max-range must be finite and positive")
+    if a.cmd in ("search", "refine"):
+        try:
+            ev1, ev2 = load_events(a.events, a.pick)
+        except (ValueError, OSError) as exc:
+            ap.error(str(exc))
+    if a.cmd == "search" and bool(a.bbox) == bool(a.point):
+        ap.error("search requires exactly one of --bbox or --point")
+    if a.cmd == "detect" and (a.top < 1 or not np.isfinite(a.min_score)):
+        ap.error("--top must be positive and --min-score must be finite")
     if a.cmd == "spectrogram":
-        sp = pipeline.make_spectrogram(a.audio, a.out, hop_s=a.hop, fmin=a.fmin, fmax=a.fmax)
+        try:
+            sp = pipeline.make_spectrogram(a.audio, a.out, hop_s=a.hop, fmin=a.fmin, fmax=a.fmax)
+        except FFmpegNotFoundError as exc:
+            ap.exit(2, f"dopplertrack: {exc}\n")
         print(f"wrote {a.out}: {sp.S.shape[0]} bins x {sp.S.shape[1]} frames")
     elif a.cmd == "fit":
         sp = Spectrogram.load(a.spec)
@@ -90,21 +138,22 @@ def main(argv=None):
     elif a.cmd == "detect":
         from .tracks import detect_events
         sp = Spectrogram.load(a.spec)
-        evs = detect_events(sp, a.band[0], a.band[1], harmonics=a.harmonics, top=a.top, window_s=a.window,
+        evs = detect_events(sp, a.band[0], a.band[1], harmonics=a.harmonics, top=a.top, window_s=a.window, min_score=a.min_score,
                             progress=lambda k, n: print(f"\r  window {k}/{n}", end="", flush=True))
         print()
+        if not evs:
+            print("no flyovers found")
         print(f"{'rank':>4} {'t_cpa s':>9} {'f0 Hz':>7} {'v m/s':>6} {'d m':>7} {'score':>6}")
         for i, e in enumerate(evs):
             print(f"{i + 1:>4} {e.t_cpa:>9.1f} {e.f0:>7.1f} {e.v:>6.0f} {e.d:>7.0f} {e.score:>6.2f}")
         if a.out:
             json.dump([e.to_dict() for e in evs], open(a.out, "w"), indent=1)
     elif a.cmd == "extract-region":
-        pipeline.extract_region(a.archive_dir, tuple(a.bbox), a.out, prop_only=not a.keep_jets)
+        pipeline.extract_region(a.archive_dir, tuple(a.bbox), a.out, prop_only=not a.keep_jets, max_range_m=a.max_range)
     elif a.cmd == "fetch-day":
-        pipeline.fetch_region(a.date, tuple(a.bbox), a.out, prop_only=not a.keep_jets, pod=a.pod)
+        pipeline.fetch_region(a.date, tuple(a.bbox), a.out, prop_only=not a.keep_jets, pod=a.pod, max_range_m=a.max_range)
     elif a.cmd == "search":
         sp = Spectrogram.load(a.spec)
-        ev1, ev2 = (EventFit(**json.load(open(p))) for p in a.events)
         traces = load_traces(a.traces)
         elev = None if a.no_dem else Terrain().elevation
         if a.point:
@@ -113,26 +162,28 @@ def main(argv=None):
         else:
             grid = Grid.make(*a.bbox, a.spacing, elev)
         res, segs = pipeline.run_search(sp, ev1, ev2, traces, grid, harmonics=tuple(a.harmonics),
-                                        silence_d_m=None if a.no_silence else 6000.0, tol_s=a.tol, cpa_cache=a.cpa_cache)
+                                        silence_d_m=None if a.no_silence else 6000.0, tol_s=a.tol, cpa_cache=a.cpa_cache,
+                                        max_range_m=a.max_range, trace_metadata=load_trace_metadata(a.traces),
+                                        search_bbox=tuple(a.bbox) if a.bbox else (a.point[0], a.point[0], a.point[1], a.point[1]))
         res["lat0"] = grid.lat0; res["lon0"] = grid.lon0
         res.to_csv(a.out, index=False)
         print(res.head(20).to_string())
     elif a.cmd == "refine":
         import pandas as pd
         sp = Spectrogram.load(a.spec)
-        ev1, ev2 = (EventFit(**json.load(open(p))) for p in a.events)
         extra = [EventFit(**json.load(open(p))) for p in a.extra]
         xh = list(a.extra_harmonics) + [1] * (len(extra) - len(a.extra_harmonics))
         res = pd.read_csv(a.results)
         best = res.sort_values("score", ascending=False).drop_duplicates(["icao1", "icao2"]).reset_index(drop=True)
         row = best.iloc[a.rank - 1]
         traces = load_traces(a.traces)
+        report_coverage(load_trace_metadata(a.traces), tuple(a.bbox), a.max_range, pipeline.log)
         elev = None if a.no_dem else Terrain().elevation
-        segs = pipeline.segments_for_search(traces, tuple(a.bbox), float(row.lat0), float(row.lon0))
+        segs = pipeline.segments_for_search(traces, tuple(a.bbox), float(row.lat0), float(row.lon0), max_range_m=a.max_range)
         row = pipeline.relocate_row(row, segs, ev2.t_cpa - ev1.t_cpa)
         print(f"refining rank {a.rank}: {row.icao1}/{row.icao2} at {row.lat:.5f}, {row.lon:.5f} (score {row.score:.2f})")
         fine = pipeline.refine(sp, ev1, ev2, segs, row, spacing_m=a.spacing, half_m=a.half, harmonics=tuple(a.harmonics),
-                               elevation=elev, extra=extra, extra_harmonics=xh)
+                               elevation=elev, extra=extra, extra_harmonics=xh, max_range_m=a.max_range)
         fine.to_csv(a.out, index=False)
         b = fine.iloc[0]
         print(f"peak score {b.score:.2f} at {b.lat:.6f}, {b.lon:.6f}" + (f"; extra flights {fine.attrs['extra_icao']}" if extra else ""))
@@ -148,7 +199,9 @@ def main(argv=None):
             t_unix = datetime.fromisoformat(a.utc.replace("Z", "+00:00")).astimezone(timezone.utc).timestamp()
         elev = None if a.no_dem else Terrain().elevation
         grid = Grid.make(*a.bbox, a.spacing, elev)
-        res, segs = pipeline.run_single_search(sp, ev, traces, grid, t_unix, tol_s=a.tol, harmonics=a.harmonics)
+        res, segs = pipeline.run_single_search(sp, ev, traces, grid, t_unix, tol_s=a.tol, harmonics=a.harmonics,
+                                               max_range_m=a.max_range, trace_metadata=load_trace_metadata(a.traces),
+                                               search_bbox=tuple(a.bbox))
         res["lat0"] = grid.lat0; res["lon0"] = grid.lon0
         res.to_csv(a.out, index=False)
         print(res.head(20).to_string())

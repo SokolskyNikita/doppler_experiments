@@ -40,7 +40,11 @@ class EventWindow:
         half the score, instead of being judged only where it happens to fit."""
         tq = np.linspace(self.fit.t_start, self.fit.t_end, n)
         rel = tq[None, :] - np.asarray(shifts)[:, None]                       # (S, n) un-shifted audio time
-        ok = np.isfinite(ratio)
+        # Retain invalid frequency samples so interpolation cannot bridge holes
+        # in a modelled curve. Only nonfinite time coordinates must be removed.
+        ok = np.isfinite(t_audio)
+        if np.count_nonzero(ok) < 2:
+            return np.zeros((len(shifts), len(f0_scales)))
         rat = np.interp(rel, t_audio[ok], ratio[ok], left=np.nan, right=np.nan)  # (S, n)
         valid = np.isfinite(rat).sum(1) >= 10                                  # (S,)
         total = np.zeros((len(shifts), len(f0_scales)))
@@ -56,8 +60,9 @@ class EventWindow:
 
 def modelled_curve(seg: Segment, obs_enu, c):
     """(t_obs unix, ratio f/f0) the observer at obs_enu hears from this segment."""
-    t_obs, ratio, r = curve_from_trajectory(seg.t, seg.enu, obs_enu, f0=1.0, c=c)
-    return t_obs, ratio
+    t_obs, ratio, r, valid = curve_from_trajectory(seg.t, seg.enu, obs_enu, f0=1.0, c=c,
+                                                return_valid=True, sample_valid=seg.valid)
+    return t_obs, np.where(valid, ratio, np.nan)
 
 
 def locked_score(ev1: EventWindow, ev2: EventWindow, seg1: Segment, seg2: Segment, obs_enu,

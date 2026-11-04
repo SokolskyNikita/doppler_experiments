@@ -98,8 +98,8 @@ bin is whitened so that steady tones such as mains hum fade and only changing to
 Nelder–Mead. `fit` does the same in one window you choose.
 
 `fetch-day` streams one UTC day of [adsb.lol](https://github.com/adsblol) history from GitHub, about 4 GB,
-and keeps the non-jet flights that touch the box without writing the archive to disk. `extract-region` does
-the same with an archive you already have.
+and keeps the non-jet flights that touch the box plus the search-range margin (12 km by default), without
+writing the archive to disk. `extract-region` does the same with an archive you already have.
 
 `search` lays a 200 m grid over the box. For every point and flight it computes the closest approach, the
 slant distance (using terrain elevation) and when that pass would be heard, allowing for the speed of
@@ -131,8 +131,69 @@ uv run dopplertrack refine rec.npz results.csv --events ev1.json ev2.json --trac
     --bbox 40.4 41.3 -74.4 -72.6 --harmonics 2 1 --extra ev3.json ev4.json --out fine.csv
 ```
 
-The two `fit` windows were picked by eye. `detect` writes all its candidates to one JSON list, but `search`
-and `refine` want one event per file, so for now you copy entries out by hand.
+`search --point LAT LON` scores a single known location instead of a grid,
+which is the quickest way to validate the data and physics on a recording
+whose location you already know. `detect` prints a ranked table of
+candidate flyovers; `--out` writes them as a JSON list whose entries can be
+selected directly by rank in both `search` and `refine`:
+
+```bash
+uv run dopplertrack search rec.npz --events detected.json --pick 1 2 --traces traces_ny.npz \
+    --bbox 40.4 41.3 -74.4 -72.6 --out detected_search.csv
+uv run dopplertrack refine rec.npz detected_search.csv --events detected.json --pick 1 2 \
+    --traces traces_ny.npz --bbox 40.4 41.3 -74.4 -72.6 --out detected_fine.csv
+```
+
+Ranks are 1-based and follow the JSON list's score order; the first selected
+event anchors the clock. The existing `--events ev1.json ev2.json` syntax
+still works. This hand-off does not fix the detector's fit bias described
+above; raw-audio localisation remains a development limitation.
+
+`detect --min-score VALUE` keeps only finite contrast scores strictly above
+that value and can write `[]`, printing "no flyovers found". The default of
+zero rejects zero evidence, including silence; it is not a calibrated
+false-alarm threshold for noisy recordings.
+
+Use the same `--max-range METRES` for `fetch-day` (or `extract-region`),
+`search`, and `refine` when changing the default 12 km range. Extraction
+saves its geographic envelope and scan counts inside the trace NPZ. Search
+warns if that envelope is too small or unknown (older files remain readable),
+reports malformed traces skipped at extraction, and checks known airborne
+coverage gaps near its top 20 candidate rows during each candidate's inferred
+recording time: time gaps over 30 s, missing positions/heights and new-leg
+boundaries. These use the same validity and boundary rules as segmentation.
+Proximity is checked at the gap's endpoints; missing aircraft or gaps beyond those endpoints cannot be ruled
+out. A complete archive download does not mean every aircraft broadcast ADS-B.
+
+Trace files also retain each point's altitude source, position source and
+readsb flags. Geometric altitude is preferred, including slot-3 heights
+flagged as geometric. readsb's stale flag marks a new reliable fix received
+after a reception gap; that fix remains usable. Ground points and missing
+positions/heights break airborne segments. The data report gives the
+barometric-only share and labels unknown provenance in older NPZs. Geometric heights are WGS-84
+ellipsoidal, barometric heights are pressure altitudes, and terrain heights
+are orthometric; no geoid or pressure correction is applied yet. Field and
+flag definitions follow [readsb's trace format](https://github.com/wiedehopf/readsb/blob/dev/README-json.md#trace-jsons).
+
+Modelled trajectories carry a validity mask and cannot provide evidence
+outside their span or across a source-data gap over 30 s. Resampling retains
+that support mask, and scoring preserves missing curve samples. Geometry
+keeps the existing 90 s segment gap bound: it may interpolate a 30–90 s hole
+to propose a CPA inside it, while the unsupported interval contributes zero
+acoustic evidence. This avoids moving CPA to a hole's edge. The forward
+propagation map solves the retarded-time relation directly.
+
+Terrain no-data pixels are returned as NaN and excluded from search and
+refinement grids with a warning. An entirely missing grid, a missing known
+point, or a missing centre needed to assign extra flyovers stops with an
+error. `--no-dem` explicitly assumes sea level instead.
+
+ffmpeg must be installed separately (`brew install ffmpeg` on macOS,
+`sudo apt-get install ffmpeg` on Debian/Ubuntu). For a local fresh-install
+check, build a wheel, install it in a separate environment, then run
+`tests/install_smoke.py` with that environment's Python from outside the
+checkout. It checks the installed CLI, decoding, spectrogram creation and
+empty detection. GitHub CI expansion is deferred.
 
 `uv run pytest -q` runs the tests in about 45 s with no data or network.
 

@@ -9,11 +9,19 @@ import numpy as np
 import scipy.signal as ss
 
 
+class FFmpegNotFoundError(RuntimeError):
+    """The external audio decoder is not installed or not on PATH."""
+
+
 def load_audio(path: str | Path, sr: int = 4000) -> tuple[np.ndarray, int]:
     """Decode any ffmpeg-readable file to mono float32 at `sr` Hz."""
     cmd = ["ffmpeg", "-v", "error", "-i", str(path), "-ac", "1", "-ar", str(sr),
            "-f", "f32le", "-acodec", "pcm_f32le", "-"]
-    raw = subprocess.run(cmd, check=True, capture_output=True).stdout
+    try:
+        raw = subprocess.run(cmd, check=True, capture_output=True).stdout
+    except FileNotFoundError as exc:
+        raise FFmpegNotFoundError("ffmpeg was not found on PATH. Install it with 'brew install ffmpeg' "
+                                  "(macOS) or 'sudo apt-get install ffmpeg' (Debian/Ubuntu).") from exc
     return np.frombuffer(raw, dtype=np.float32).copy(), sr
 
 

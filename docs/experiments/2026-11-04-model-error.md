@@ -124,10 +124,40 @@ On the flagged 11, every |Δ|/SD median is below 1 except drift ±2 % in v (1.8)
   - **The window.** It enters strongly, the wrong way: on real trajectories a longer window is worse, so windows should stay with the observed tone.
 - **What doesn't enter:** sound speed from the temperature, interpolation (linear, PCHIP or spline), the geoid datum and the recorder height all stay below the spread on the median pass.
 - **The textbook covariance can't be the spread.** On a wrong model it is about right (classical) or 1.5× wide (sandwich) only by accident. The bootstrap, or the bound for the straight-pass part, is what to report.
-- **Not yet run:**
-  - stage 2: `fit_event` on rendered C and A curves and on the real WAVs;
-  - stage 3: Alaska, as an independent check of total error.
+- **Not yet run:** stage 3, Alaska, as an independent check of total error.
 
   The whitening floor and window and synthesised waveforms are left for a later round.
 
-**Scripts:** `tools/experiments/2026-11-04/straight_pass_ls.py`, `model_error.py`, `model_error_summary.py`, `crb.py`. **Outputs:** `runs/2026-11-04-model-error-2/` (`fits.csv`, `perturbations.csv`, `halves.csv`, `noise.csv`, `summary.json`) and `runs/2026-11-04-crb-2/` (`crb.csv`, `crb_summary.json`; `runs/2026-11-04-crb/` used the invalid truncated covariance and is superseded). Weather: `raw/aux/metar/KLVK_*`, `RAOB_KOAK_*`.
+## Stage 2: the pipeline's fit
+
+**Setup.** `tracks.fit_event`, imported unchanged, run with both objectives over each pass's ridge span on four spectrograms:
+- the ideal curve C and the trajectory curve A, each drawn as a noiseless one-bin ridge on the package's grid (0.488 Hz × 0.25 s);
+- the pass's own WAV through `compute_spectrogram`;
+- the same WAV with the package's shipped 40–450 Hz band (wav-450), the fit's band clipped to it.
+
+The rendered and WAV inputs reach max(450 Hz, 1.5 × the ridge's top). Each row records the share of the trajectory curve over the ridge span inside its band: 1.00 on every pass for C, A and wav.
+
+**Numbers**, primary passes, median |error| in slant range (passes over 10 %), with speed, f0 and τ:
+
+| Input | Contrast objective | Brightness objective | LS (stage 1) |
+|---|---|---|---|
+| C, ideal, rendered | 0.2 % (6/29); v 0.1 %, τ 0.02 s | 5.0 % (13/29); v 2.1 %, τ 0.13 s | 0 (C) |
+| A, trajectory, rendered | 30.8 % (23/29); v 17.7 %, f0 1.2 %, τ 2.6 s | 36.3 % (23/29); v 22.2 %, τ 5.9 s | 15.6 % (A) |
+| wav, real audio | 28.7 % (24/29); v 11.9 %, f0 1.4 %, τ 1.5 s | 21.4 % (21/29); v 10.5 %, τ 1.7 s | 15.0 % (D, published ridge) |
+| wav-450, shipped band | 32.2 % (19/23 fitted); v 15.7 % | 25.0 % (18/23); v 10.5 % | – |
+
+On the flagged 11: A-render is 50.7 % (contrast) and 26.7 % (brightness), and wav is 18.7 % and 8.6 %.
+
+- **`fit_event` on noiseless ideal curves.** Contrast is exact at the median but fails on 11 of 40 (6 of 29 primary): R44, R04, R19, R16, R21, R18, R60, R50, R45, R51, R48. Nine of them follow one pattern: speed and slant range 60–90 % low, with τ 15–30 s late. The fit locks onto one flank as a slow, close pass. Brightness fails on 17 of 40, mostly overestimating (R up to +98 %). The least-squares fit recovers all 40 exactly. So the grid-search and Nelder–Mead fit has an optimiser and objective error of its own, before any model error.
+- **On trajectory curves `fit_event` doubles the model error,** about 31–36 % against least-squares' 15.6 %. On the real WAVs it gives 21–29 %, against least-squares' 15.0 % on the author's published ridge. So Phase 2 item 4's least-squares track fit has room to halve today's fit error on these passes, even before any heavier model.
+- **An earlier attempt misled.** In the aborted stage-2 runs the crop topped out at 450 Hz, and R20's ideal curve "missed" by −94 %. With the full band it doesn't. Those runs are kept as `runs/2026-11-04-model-error-stage2-aborted*/` and superseded.
+
+**The shipped band (PLAN item 6).**
+- **What the shipped band loses.** With the package's 40–450 Hz band, 8 of the 40 Livermore passes are invisible: the whole curve lies above 450 Hz (R44, R35, R45, R21, R41, R60, R22, R24). 9 more are partly above it, with 44–98 % of the curve inside. Ten passes have a rest frequency above 450 Hz, up to 868 Hz.
+- **What it does to the fits.** Where the whole curve is in band, wav-450 gives the same fits as wav. On the partly-in-band passes the contrast fit misses slant range by −69 % to +91 %.
+- **A crash.** On three passes whose clipped band misses the curve (R35, R08, R51, band 342–450 or 414–450 Hz), `fit_event` raises `ValueError: attempt to get argmax of an empty sequence` inside `grid_search`, instead of returning a weak fit.
+- **So, as shipped, the pipeline can't use 20 % of these passes, and fits another 22 % on a truncated curve.** The band should follow the tone, or the harmonics should be searched (item 6).
+
+**Scripts:** `tools/experiments/2026-11-04/model_error_stage2.py`. **Outputs:** `runs/2026-11-04-model-error-stage2/stage2.csv` (one row per pass, input and objective, with `frac_curve_in_band` and any error).
+
+**Scripts (stage 1):** `tools/experiments/2026-11-04/straight_pass_ls.py`, `model_error.py`, `model_error_summary.py`, `crb.py`. **Outputs:** `runs/2026-11-04-model-error-2/` (`fits.csv`, `perturbations.csv`, `halves.csv`, `noise.csv`, `summary.json`) and `runs/2026-11-04-crb-2/` (`crb.csv`, `crb_summary.json`; `runs/2026-11-04-crb/` used the invalid truncated covariance and is superseded). Weather: `raw/aux/metar/KLVK_*`, `RAOB_KOAK_*`.

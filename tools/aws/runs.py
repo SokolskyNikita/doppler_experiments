@@ -795,6 +795,7 @@ def dev_run(iid: str, command: str, cwd: str | None = DEV_CHECKOUT, quiet: bool 
     through Systems Manager, and prints its output."""
     ssm = session().client("ssm")
     inner = f"cd {cwd} && {command}" if cwd else command
+    inner = f"export UV_PYTHON=3.12.15 UV_PYTHON_PREFERENCE=only-managed; {inner}"   # as the job boxes do
     wrapped = f"sudo -iu ubuntu bash -lc {shlex_quote(inner)}"
     cmd = ssm.send_command(InstanceIds=[iid], DocumentName="AWS-RunShellScript",
                            Parameters={"commands": [wrapped], "executionTimeout": ["7200"]},

@@ -2,7 +2,7 @@
 
 <!-- index
 question: Does ridge()'s per-frame frequency error on synthesised passes correlate across frames as Harris's c or c² predicts, so that the provisional 63–74 m slant-range bound stands?
-outcome: Not met in either run. With σ at each Livermore pass's own SNR (median 0.137 % of f0, not 0.45 %) the bound is 50 m, which replaces 63–74 m by the pre-registered rule; it moves to about 19 m under c², because ridge()'s error is mostly a slow bias whose correlation no detrend settles
+outcome: Not met in either run; the bound is now 20–50 m, not 63–74 m. σ measured at each Livermore pass's own SNR is a median 0.137 % of f0, not 0.45 %; the correlation lies between c² and the raw tapered estimate, since ridge()'s error is mostly a slow bias no detrend settles. Provisional comes off
 -->
 
 ## Question
@@ -119,16 +119,17 @@ Neither half of the criterion is met:
   definite as measured, so it is Bartlett-tapered.
 - **The bound:** 50 m is outside 15 % of 63 m.
 
-By the rule written before the run, **50 m** replaces 63–74 m and "provisional" comes off with it. One caution
-goes with that number:
-- **What is robust is σ.** At the passes' own SNR, `ridge()`'s frame noise is about a third of the 0.45 % the
-  bound assumed.
-- **The correlation is not robust.** The same σ with Harris's c² would give about 19 m (63 × 0.137 / 0.45, since
-  the bound is linear in σ). The measured, tapered raw ρ gives 50 m.
+The pre-registered rule named 50 m as the replacement. What is measured supports a range, not that one number:
+- **What is robust is σ.** At the passes' own SNR, `ridge()`'s frame noise is a median 0.137 % of f0, about a
+  third of the 0.45 % the bound assumed.
+- **The correlation is not robust.** The same σ with Harris's c² gives about 19 m (63 × 0.137 / 0.45, since the
+  bound is linear in σ). The measured, tapered raw ρ gives 50 m.
 
-So the bound is 20–50 m depending on how the slow bias is treated, against model errors of 229 m (the trajectory
-curve's median miss) or more. The conclusion PLAN item 2 draws, that information is not what limits 1 km, holds
-more strongly than before.
+**What PLAN quotes** (decided with the PM): a single-pass slant-range bound of **20–50 m** on the 29 primary passes.
+σ is measured at each pass's own SNR, and the correlation is bounded between Harris's c² and the raw tapered
+estimate, because no detrend settles the slow bias. "Provisional" comes off with that wording. The number that
+mattered is now measured rather than assumed: information is 5–10× less the limit than model error (229 m, the
+trajectory curve's median miss), so the conclusion of PLAN item 2 holds more strongly than before.
 
 **Cost:** the follow-up ran on one 4xlarge spot box, cov-bound2, in under 2 minutes.
 

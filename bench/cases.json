@@ -4006,7 +4006,7 @@
     },
     {
      "path": "derived/eclipse/ESID_375/rec_full.npz",
-     "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+     "sha256": "c075659125dbe6689bf8978d612699a2ef9561cf06d9bc269bb78264f83c63da",
      "recipe": [
       [
        "python",
@@ -4469,7 +4469,7 @@
     },
     {
      "path": "derived/eclipse/ESID_710/rec_full.npz",
-     "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+     "sha256": "3a4580d77a0b471bc569896a0c768b4d17604bb1cff81f87b4e8fbc313e03137",
      "recipe": [
       [
        "python",
@@ -5212,7 +5212,7 @@
     },
     {
      "path": "derived/eclipse/ESID_937/rec_full.npz",
-     "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+     "sha256": "93e9dbeea9b00539adef29fb9fccc380c6f6e059768facf8bdd6deb2856e60d5",
      "recipe": [
       [
        "python",

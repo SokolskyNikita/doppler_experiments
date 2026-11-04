@@ -469,3 +469,22 @@ def test_prepare_builds_a_cases_cpa_table_without_its_labels_and_reuses_it(tmp_p
     capsys.readouterr()
     again = prepare.prepare_case("x", log=seen.append)
     assert again["cpa_records"] == out["cpa_records"] and "loaded CPA table" in capsys.readouterr().out
+
+
+def test_a_private_case_runs_with_its_caches_under_private(tmp_path, monkeypatch):
+    from dopplertrack.cache import cache_root
+    monkeypatch.setenv("DOPPLERTRACK_DATA", str(tmp_path / "data"))
+    monkeypatch.setenv("DOPPLERTRACK_CACHE", str(tmp_path / "shared"))
+    seen = {}
+
+    def execute(case, case_dir, log=print, code=None):
+        seen[case["id"]] = cache_root()
+        raise RuntimeError("stop after recording the cache root")
+    for cid, extra in (("public", {}), ("home", {"site": "a-site", "private": True})):
+        monkeypatch.setattr(runner, "blind_case", lambda c, extra=extra, cid=cid: {"id": cid, **extra})
+        with pytest.raises(RuntimeError):
+            runner.bench_case(cid, tmp_path / cid, execute=execute)
+    assert seen["public"] == tmp_path / "shared"
+    assert seen["home"] == tmp_path / "data" / "private" / "cache"
+    assert cache_root() == tmp_path / "shared"                  # restored afterwards
+    assert cases.is_private({"site": "x"}) and not cases.is_private({"id": "y"})

@@ -625,13 +625,33 @@ def _package_version() -> str:
 HASH_FILE = "result.json.sha256"
 
 
+@contextlib.contextmanager
+def private_cache(case: dict):
+    """For a private case, every cache (detections, window fits, CPA tables) under the data root's private/cache/
+    while it runs, and the shared root back afterwards; worker pools started inside inherit it."""
+    from .cases import is_private, private_cache_root
+    if not is_private(case):
+        yield
+        return
+    before = os.environ.get("DOPPLERTRACK_CACHE")
+    os.environ["DOPPLERTRACK_CACHE"] = str(private_cache_root())
+    try:
+        yield
+    finally:
+        if before is None:
+            os.environ.pop("DOPPLERTRACK_CACHE", None)
+        else:
+            os.environ["DOPPLERTRACK_CACHE"] = before
+
+
 def bench_case(case_id: str, case_dir: Path, execute=execute_case, labels=case_labels, cases_path=None,
                log=print, code: dict | None = None) -> dict:
     """Run one case blind, write result.json and its hash, and only then read the labels and score it."""
     kw = {} if cases_path is None else {"path": cases_path}
     case = blind_case(case_id, **kw)
     case_dir.mkdir(parents=True, exist_ok=True)
-    record = execute(case, case_dir, log=log, code=code or code_revision())
+    with private_cache(case):
+        record = execute(case, case_dir, log=log, code=code or code_revision())
     sha = write_record(case_dir / "result.json", record)
     (case_dir / HASH_FILE).write_text(f"{sha}  result.json\n")
     meta = {k: case[k] for k in ("id", "version", "group", "set", "expected_outcome")}

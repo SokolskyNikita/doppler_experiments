@@ -370,6 +370,8 @@ def status(a) -> None:
     for page in pages:
         for p in page.get("CommonPrefixes", []):
             job = p["Prefix"].split("/")[1]
+            if job.startswith("dev-"):       # dev-box syncs from before they moved to dev/: not jobs
+                continue
             st = get_status(s3, bucket, job)
             print(f"{job:45s} {st.get('state', '?'):12s} {st.get('updated', ''):26s} {job_cost(s3, bucket, job, st)}")
 
@@ -654,7 +656,7 @@ def fetch_sources(a) -> None:
     s3.put_object(Bucket=bucket, Key=key, Body=json.dumps({"files": plan}, indent=1).encode())
     a.topic, a.case, a.input, a.cache, a.jobs = "aws-fetch-sources", [], [], [], None
     a.on_demand, a.fallback_on_demand, a.max_hours, a.checkpoint_minutes, a.wait = False, False, 6, 5, False
-    a.resume, a.repo, a.shards, a.shard, a.region, a.wait_for_capacity = None, None, 1, None, None, 120
+    a.resume, a.repo, a.shards, a.shard, a.region, a.wait_for_capacity = None, None, 1, None, None, 90
     a.command = ["python3", "tools/aws/box/fetch_sources.py", f"s3://{bucket}/{key}", bucket]
     launch(a)
 
@@ -777,8 +779,10 @@ def main(argv=None) -> None:
     la.add_argument("--on-demand", action="store_true", help="on-demand instead of spot, for deciding runs")
     la.add_argument("--region", action="append", choices=JOB_REGIONS, help="only this region (repeatable; "
                     f"default: {', '.join(JOB_REGIONS)}, in that order)")
-    la.add_argument("--wait-for-capacity", type=float, default=120, metavar="MIN", help="when every region is "
-                    "full (capacity or quota), retry each minute for this long before failing (default: 120; 0: fail)")
+    la.add_argument("--queue-minutes", "--wait-for-capacity", dest="wait_for_capacity", type=float, default=90,
+                    metavar="MIN", help="when every region is full (MaxSpotInstanceCountExceeded, VcpuLimitExceeded, "
+                    "no capacity), keep the job submitted and retry every 60 s, cycling the regions, for this long "
+                    "(default: 90; 0: fail at once)")
     la.add_argument("--fallback-on-demand", action="store_true", help="if no region has spot capacity, start "
                     "an on-demand box rather than fail (off by default: it uses the on-demand quota)")
     la.add_argument("--max-hours", type=float, default=12, help="stop the command after this long (default: 12)")

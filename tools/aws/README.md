@@ -8,7 +8,7 @@ instance per job, started in about 30 s, terminated when the job ends. A persist
 **How to launch.** `tools/aws/runs launch TOPIC --shards N [--size 8xlarge] [--on-demand] [--repo CHECKOUT]
 --inputs-from '<the job's --inputs or bench inputs command>' -- <command>`: one box per shard, each with
 `DOPPLERTRACK_SHARD_SPEC=k/N`; spot in us-west-2, then us-west-1, then us-east-2, waiting up to
-`--wait-for-capacity` minutes (120) while all are full; on-demand only with `--on-demand` (a deciding run) or
+`--queue-minutes` (90) while all are full; on-demand only with `--on-demand` (a deciding run) or
 `--fallback-on-demand`. A shard that still found nothing is listed at the end: relaunch it with
 `--shards N --only-shard K`. `runs fleet` shows every box running now, its price, and failed launches.
 

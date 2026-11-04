@@ -2,7 +2,7 @@
 
 <!-- index
 question: Does a calibrated detect statistic (S₁, then the reversed-window null S₂) or a wider band hold 1 false alarm per hour while keeping recall?
-outcome: In progress: S₁ stops at the synthetic gate (its 1/h threshold is 9–11, not ~2); S₀ with 60–900 Hz passes it (4/6 high passes, recall unchanged); S₂, the counted retune, is still running; Tier 1 not run
+outcome: In progress: S₁ stops at the synthetic gate (its 1/h threshold is 9–11, not ~2); S₀ with 60–900 Hz passes it (4/6 high passes, recall unchanged); S₂, the counted retune, was spot-interrupted before its noise units finished; Tier 1 not run
 -->
 
 ## Question
@@ -44,9 +44,10 @@ labelled flyover. They score 4.28 and 2.46 against a threshold near 6. So item 6
 every S₀ setting as the detector stands. That isn't fatal to the collective find, which takes the top k windows with
 no threshold, but it is fatal to any thresholded release.
 
-**S₂ (the counted retune):** running on the fleet at the time of writing (see the handoff in
-`tools/experiments/2026-11-04/cloud_jobs.md`). It costs about 4× the other settings, because each event gets a
-second `fit_event` on its reversed window: 190 min and $0.87 per box so far.
+**S₂ (the counted retune):** not yet measured. Its three boxes were spot-interrupted after 208–224 min (about $3
+in all), before two of them finished their noise unit. The noise unit gives each of about 200 candidates a second,
+serial `fit_event` on its reversed window. The handoff in `tools/experiments/2026-11-04/cloud_jobs.md` says what to
+change before relaunching.
 
 ## What a change would invalidate
 

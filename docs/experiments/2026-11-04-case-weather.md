@@ -2,7 +2,7 @@
 
 <!-- index
 question: Which station temperature belongs in each bench case's `weather` block?
-outcome: The nearest ASOS within 1 h of the recording's midpoint, 4.9–24.3 km away, as version 2 of every case; one reading serves the short recordings to 1 °C, but the day-long Eclipse recordings swing 9–15 °C (±1.3 % in c)
+outcome: The nearest ASOS within 1 h of the recording's midpoint, 4.9–24.3 km away, as each case's next version; but applied as one c per case, as the runner does today, it costs both positive seed cases their true pair (Oyster Bay rank 1 to 3, the eagle cam 1 to 6), because the aircraft fly 1–6 km up; it needs the runner to pass the temperature to A's per-flight path
 -->
 
 **Question.** Which air temperature belongs in each bench case's `weather` block ([sound-speed](2026-11-04-sound-speed.md)), and how well does one reading stand for its recording?
@@ -63,7 +63,13 @@ Scored triples change by under 0.1 %: Oyster Bay 40,889 to 40,861, the eagle cam
 - **Read this as the cost of the wrong c, not of the temperature.** The true pairs fly high: Oyster Bay's at 5.5 and 1.1 km, the eagle cam's at 2.5 and 5.7 km.
 - **Path c is below the ground value.** With the documented mid-height lapse (−3.25 °C per km), their path temperatures put c at about 336–344 m/s. That is below the ground's 346.5 and 346.8, and straddles the 15 °C default's 340.3.
 - **So one ground-temperature c is too fast for every high flight,** and the 15 °C default sits closer to their average by accident. The scored true pairs drop from 27.10 to 22.08 (Oyster Bay) and from 10.30 to below the runner-up's 9.71 (the eagle cam).
-- **That is the case for the per-flight correction.** One c per recording can't serve flights at 1 and 5 km. The comparison at the landing code, with A's per-flight sound speed, follows.
+- **That is the case for the per-flight correction.** One c per recording can't serve flights at 1 and 5 km.
+
+*Second pass, at the landing code* (dev 1166c88 against this branch, fa29d4a): runs/2026-11-04-bench-1166c88-saved-fit-t2 against runs/2026-11-04-bench-fa29d4a-saved-fit-t2. Every number is identical to the first pass, to the last digit.
+- **Why.** A's per-flight sound speed is `pipeline.run_search(temperature_c=...)`. It keeps the fits' c and propagates each emission point at its mid-height temperature.
+- **The runner never uses it.** `bench.runner.sound_speed` still turns the case's temperature into one `c=speed_of_sound(T)` and passes that to search and refine. With saved fits made at 15 °C it also changes c on only one side of the comparison.
+- **So the case temperatures can't land as the runner's default until the runner passes `temperature_c` instead of `c`.** Until then, every positive seed case loses its true pair.
+- **A direct check of the per-flight path was stopped before it scored.** It used `--search-param temperature_c=T` on the no-weather versions, but those share their CPA cache files with everyone's default runs, and `temperature_c` changes the table's fingerprint (`runs/2026-11-04-bench-1166c88-saved-fit-t2-perflight-*`, marked STOPPED). It needs its own cache names, which the versions here already carry, once the runner passes `temperature_c`.
 
 
 **Script:** `tools/experiments/2026-11-04/case_weather.py` (`--apply` writes the version 2 cases). **Run:** `runs/2026-11-04-case-weather/`, with the station lists, `weather.json` (every case's numbers and the fetch URLs) and the logs. **Fetched:** `raw/aux/metar/KAOH_2024-04-06.csv`, `KPIA_2024-04-06.csv`, `KMWA_2024-04-06.csv`, `KPOF_2024-04-06.csv`, `EGMC_2025-03-09.csv`, `EGMC_2025-04-06.csv` and `EGMC_2025-04-19.csv`, in the data root's MANIFEST.md. KFRG and KFMY were already there.

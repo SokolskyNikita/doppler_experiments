@@ -142,6 +142,49 @@ decision: which slant-range bound PLAN items 2 and 4 quote, and whether "provisi
 | measure | one geometry × amplitude per box (`--shards 9`), three seeds each | `cov_measure.py "$RUN" measure [CELL ...]` |
 | bound | — | `cov_measure.py "$RUN" bound`, over the collected units, with job 3's Livermore inputs |
 
+## SDE-C handoff (2026-11-04, end of day)
+
+The branch is `claude/sde-c-warp`; everything below is committed in its tip. The records are in `docs/experiments/`.
+Boxes are launched with `tools/aws/runs launch` and pulled with `tools/aws/runs pull JOB`. Collecting means copying
+the units with `python3 tools/experiments/2026-11-04/copy_new.py SRC_RUN DST_RUN <dir>`, never `cp -n`.
+
+**Item 6, the detector** ([record so far](../../../docs/experiments/2026-11-04-detector-threshold.md), proposal
+`docs/proposals/2026-11-04-detector-threshold.md`):
+
+1. **Running:** the S₂ retune on 2026-11-04-detector-roc-s2-s7of9, -s8of9 and -s9of9 (settings S2B0, S2B1, S2B2,
+   one per box), about 4× slower than the others. When they're done:
+   - pull all three;
+   - copy their `detector_roc/` into a new run folder beside the six finished settings (S₀: detector-roc-s{1,2,3}of6;
+     S₁: detector-roc-s1-s{4,5,6}of6), or into 2026-11-04-detector-roc-collect;
+   - run `detector_roc.py RUN gate` on a box, with `--input-run runs/<that folder>`.
+
+   The gate prints each setting's thresholds, the unit-spread prediction and detection by amplitude; it passes S₂
+   only if every threshold is within ×1.5 of the prediction and detection is no lower than S₀ in the same band.
+2. **Then Tier 1,** with `--shards 11` on 4xlarge boxes, for every setting past the gate plus S₀/B0, S₀/B1 and the
+   300–900 Hz half. **Not written yet:** it needs a driver that
+   - builds the 40–1000 Hz spectrograms for B1 and B2 on the box from the recipes (as `whiten_frequency.py build`
+     does);
+   - patches `bench.tier1`'s detect band and, for S₂, rescoring;
+   - sets `DOPPLERTRACK_CACHE` to a scratch folder (linking `terrarium/`), so no detection reaches the shared cache
+     before the decision.
+3. **Judge on item 6's criterion:**
+   - ≤ 1 false alarm per countable hour on the pooled background;
+   - Tier 1's 2 matched windows kept;
+   - every development event's window in its span's top 10;
+   - the record states that S₀ can't meet it (the flyovers score 4.28 and 2.46 against a 1/h threshold near 6).
+
+**Seattle gallery** (the owner's, private): `$DOPPLERTRACK_DATA/private/runs/2026-11-04-seattle-gallery/`, holding
+`index.html`, `seattle_gallery.py` and `run.json`. Nothing of it is in git. Rebuild on the Mac only, from the repo
+root, with the command in its `run.json`:
+`DOPPLERTRACK_JOBS=2 uv run --frozen python <that folder>/seattle_gallery.py <that folder> <raw session>
+<private rec.npz> <private traces> <site.json>`.
+After a rebuild, rerun the privacy check: no ICAO, registration or site coordinate in the page text.
+
+**Half-built:** item 6's Tier 1 driver (above). The frame-covariance and window records are done.
+
+**Next step:** finish item 6 (gate S₂, Tier 1, the record's outcome), then propose the next drawing-board step on
+the detector's statistic if S₂ also fails.
+
 ## SDE-B
 
 # SDE-B's benchmark jobs for the fleet (2026-11-04)

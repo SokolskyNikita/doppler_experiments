@@ -131,3 +131,6 @@ def test_a_run_ignores_the_case_weather_unless_it_sets_use_case_weather():
     assert d.c_kw["c"] == pytest.approx(346.48, abs=0.01) == d.params["speed_of_sound"]["c_m_s"]
     assert d.geo_kw["temperature_c"] == 25.6 and runner.WEATHER_KEY not in d.extra_kwargs
     assert d.params["search_overrides"] == {runner.WEATHER_KEY: True}
+    # the two settings build different CPA tables, so they never share a file
+    off = runner.Draft(blind, {}, "saved-fit", lambda m: None).cpa_cache
+    assert d.cpa_cache != off and d.cpa_cache.name == off.stem + "_weather.npz"

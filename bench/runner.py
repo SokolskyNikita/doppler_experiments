@@ -161,6 +161,13 @@ def sound_speed(case: dict, use_weather: bool = False) -> tuple[dict, dict]:
                       "station_distance_km": w.get("station_distance_km"), "observed_utc": w.get("observed_utc")}
 
 
+def cpa_cache_path(case: dict, use_weather: bool = False) -> Path:
+    """The case's CPA table. A run that applies the case's temperature builds a different table (the sound speed is in
+    its fingerprint), so it gets its own file, <name>_weather.npz, and switching the setting never rebuilds either."""
+    p = resolve(case["search"]["cpa_cache"])
+    return p.with_name(f"{p.stem}_weather{p.suffix}") if sound_speed(case, use_weather)[0] else p
+
+
 def geometry_kw(case: dict, use_weather: bool = False) -> dict:
     """run_search, refine and pick_flight's speed-of-sound keywords: the fits' c, and with a station temperature
     the run uses, temperature_c, so each flight's propagation uses its own height."""
@@ -254,6 +261,7 @@ class Draft:
                        "speed_of_sound_m_s": sound_speed(case, weather)[1]["c_m_s"],
                        "speed_of_sound": sound_speed(case, weather)[1]}
         self.c_kw, self.geo_kw = sound_speed(case, weather)[0], geometry_kw(case, weather)
+        self.cpa_cache = cpa_cache_path(case, weather)
         self.inputs, self.caches, self.events, self.candidates = [], [], [], []
         self.refined = unavailable("the search did not run")
         self.funnel = {k: unavailable("the search did not run") for k in (
@@ -435,7 +443,7 @@ def execute_case(case: dict, case_dir: Path, log=print, code: dict | None = None
             traces, meta = draft.load_flight_data()
         with stage("grid"):
             grid = Grid.make(*s["bbox"], s["spacing_m"], terrain.elevation if terrain else None)
-        cache_path = resolve(s["cpa_cache"])
+        cache_path = draft.cpa_cache
         cache_path.parent.mkdir(parents=True, exist_ok=True)
         triples: dict = {}
         with stage("search"):
@@ -741,7 +749,7 @@ def execute_case_locate(case: dict, case_dir: Path, log=print, code: dict | None
     weather = bool(overrides.get(WEATHER_KEY, False))
     unknown = set(overrides) - {"pair_rule", "silence_d_m", WEATHER_KEY}
     s = case["search"]
-    paths, envelope, cpa_cache = locate_flight_data(case, str(resolve(s["cpa_cache"])))
+    paths, envelope, cpa_cache = locate_flight_data(case, str(cpa_cache_path(case, weather)))
     cfg = loc.LocateConfig(spacing_m=s["spacing_m"], max_range_m=s["max_range_m"], tol_s=s["tol_s"], v_tol=s["v_tol"],
                            d_tol=tuple(s["d_tol"]), silence_d_m=overrides.get("silence_d_m"),
                            pair_rule=overrides.get("pair_rule", "top2"), dem=s["dem"], c=sound_speed(case, weather)[0].get("c"),

@@ -320,3 +320,10 @@ Stage B's A1/A3 must run the first run's hypotheses (`45d0bd8`), not the retune'
 - B1/B2's `event_hypotheses` call, kept as it was at `45d0bd8`.
 
 The other jobs launch from `dev`.
+
+## SDE-E
+
+- **Box sizing per job, from `runs fleet --util`.** Each job's box is sized from its measured CPU use: a job under
+  60 % over its run (after its first 5 minutes) moves to the next smaller size, or its driver is changed to use the
+  cores (more units at once, or a wider `--shards`). `--history` gives today's jobs over their whole runs; `--watch 10`
+  keeps an hour of snapshots in a run folder, which tells a bursty job from an over-provisioned one.

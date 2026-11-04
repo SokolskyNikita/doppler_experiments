@@ -13,6 +13,7 @@ from .adsb import AircraftTypes, Trace, load_region, save_traces
 from .audio import Spectrogram, compute_spectrogram, load_audio
 from .coverage import (DEFAULT_MAX_RANGE_M, ScanReport, extraction_metadata, padded_bbox,
                        report_altitude_sources, report_candidate_gaps, report_coverage)
+from .atmosphere import point_sound_speed
 from .doppler import ideal_curve, speed_of_sound
 from .parallel import ordered_map, resolve_jobs
 from .score import SF_FLAT_RATIO, EventWindow, locked_score, modelled_curve, single_score, steepest_fall
@@ -58,12 +59,12 @@ def _stage(stages: dict, name: str):
 
 
 def cached_cpa_table(grid: Grid, segs: list[Segment], max_range_m: float, c: float, path=None,
-                     workers: int | None = None) -> pd.DataFrame:
+                     workers: int | None = None, temperature_c: float | None = None) -> pd.DataFrame:
     """cpa_table(), reusing the table saved at `path` if it was built from identical inputs (cpa_fingerprint).
     A lock file next to it makes a second process wait for the first instead of computing the same table."""
     if not path:
-        return cpa_table(grid, segs, max_range_m=max_range_m, c=c, workers=workers)
-    fp = cpa_fingerprint(grid, segs, max_range_m, c)
+        return cpa_table(grid, segs, max_range_m=max_range_m, c=c, workers=workers, temperature_c=temperature_c)
+    fp = cpa_fingerprint(grid, segs, max_range_m, c, temperature_c)
     with _file_lock(f"{path}.lock"):
         if os.path.exists(path):
             cpa = load_cpa_table(path, fp)
@@ -71,7 +72,7 @@ def cached_cpa_table(grid: Grid, segs: list[Segment], max_range_m: float, c: flo
                 log(f"loaded CPA table from {path}")
                 return cpa
             log(f"{path} was built from other inputs; recomputing")
-        cpa = cpa_table(grid, segs, max_range_m=max_range_m, c=c, workers=workers)
+        cpa = cpa_table(grid, segs, max_range_m=max_range_m, c=c, workers=workers, temperature_c=temperature_c)
         save_cpa_table(path, cpa, fp)
         return cpa
 
@@ -171,11 +172,13 @@ def _null_scores(task) -> list[float]:
     obs, seg, t_heard = task
     w, segs, c, sweep = _SCORE_STATE["w"], _SCORE_STATE["segs"], _SCORE_STATE["c"], _SCORE_STATE.get("f0_scales")
     kw = {} if sweep is None else {"f0_scales": sweep}
+    if _SCORE_STATE.get("temperature_c") is not None:
+        kw["temperature_c"] = _SCORE_STATE["temperature_c"]
     return [single_score(w, segs[int(k)], o, float(t), c=c, **kw) for o, k, t in zip(obs, seg, t_heard)]
 
 
 def event_null(w: EventWindow, cpa: pd.DataFrame, segs: list[Segment], enu: np.ndarray, c: float,
-               n: int = NULL_N, workers: int | None = None, f0_scales=None) -> dict:
+               n: int = NULL_N, workers: int | None = None, f0_scales=None, temperature_c: float | None = None) -> dict:
     """The comparable score's null for one event: its single_score against n (grid point, flight) rows drawn
     uniformly, with replacement, from the CPA table, each anchored on the event. Nearly all are wrong
     flights, so the median and 1.4826*MAD are the event's own floor and spread (Axelrad 2011 normalises
@@ -191,7 +194,7 @@ def event_null(w: EventWindow, cpa: pd.DataFrame, segs: list[Segment], enu: np.n
     used = np.unique(cols[1])
     tasks = [(enu[cols[0][a:a + SCORE_CHUNK]], cols[1][a:a + SCORE_CHUNK], cols[2][a:a + SCORE_CHUNK])
              for a in range(0, n, SCORE_CHUNK)]
-    state = {"w": w, "segs": {int(k): segs[k] for k in used}, "c": c, "f0_scales": f0_scales}
+    state = {"w": w, "segs": {int(k): segs[k] for k in used}, "c": c, "f0_scales": f0_scales, "temperature_c": temperature_c}
     try:
         s = np.array([x for part in ordered_map(_null_scores, tasks, min(resolve_jobs(workers), max(len(tasks), 1)),
                                                 _set_score_state, (state,)) for x in part])
@@ -216,8 +219,9 @@ def _score_triples(task) -> list[tuple[tuple[float, float, float, float] | None,
     kw = {} if sweeps is None else {"f0_scales": sweeps[0], "f0_scales2": sweeps[1]}
     out: list[tuple[tuple[float, float, float, float] | None, bool]] = []
     for n, (o, a, b, th, te1, te2) in enumerate(zip(obs, seg1, seg2, t_heard1, t_emit1, t_emit2)):
-        to1, r1 = modelled_curve(segs[int(a)], o, c)
-        to2, r2 = modelled_curve(segs[int(b)], o, c)
+        air = () if _SCORE_STATE.get("temperature_c") is None else (_SCORE_STATE["temperature_c"],)
+        to1, r1 = modelled_curve(segs[int(a)], o, c, *air)
+        to2, r2 = modelled_curve(segs[int(b)], o, c, *air)
         t0_map = None if anchor is None else float(anchor[n]) - float(th)
         unplaceable = False
         if sf is not None:
@@ -297,7 +301,8 @@ def run_search(sp: Spectrogram, ev1: EventFit, ev2: EventFit, traces: list[Trace
                workers: int | None = None, time_convention: str = "heard", sf_tol_s: float | None = None,
                sf_smooth_s: float = 3.0, sf_window_s: float = 60.0, sf_flat_ratio: float = SF_FLAT_RATIO,
                clock_anchor: str = "heard", triples: dict | None = None,
-               comparable: bool = False, hypotheses: bool = False) -> tuple[pd.DataFrame, list[Segment]]:
+               comparable: bool = False, hypotheses: bool = False,
+               temperature_c: float | None = None) -> tuple[pd.DataFrame, list[Segment]]:
     """Rank grid points for a two-event recording.
 
     Timing (PLAN Phase 2, item 1); the defaults are the original behaviour:
@@ -308,6 +313,12 @@ def run_search(sp: Spectrogram, ev1: EventFit, ev2: EventFit, traces: list[Trace
       and sf_flat_ratio). A triple where either can't be placed skips the check and is counted unplaceable.
     - clock_anchor: "heard" maps unix to audio time so event 1's modelled heard CPA lands on its fit's;
       "steepest" so its modelled steepest fall lands on its fit's (heard where unplaceable).
+
+    Sound speed: c, unless temperature_c (the ground temperature, C) is given. Then every propagation through
+    the air, the CPA table's heard times and every modelled curve, uses each emission point's own speed at
+    its mid-height temperature (atmosphere.point_sound_speed: ground - 3.25 C per km of height above the
+    grid point), which follows the straight path's harmonic-mean speed to about 0.2 % under a standard
+    lapse. c is still what the event fits use. With temperature_c None everything is as before.
 
     Comparable score (PLAN Phase 2, item 7, stage A); off by default:
     - comparable=True scores each event against its own null (event_null): z_k = (s_k - median_k) / sigma_k,
@@ -366,7 +377,7 @@ def run_search(sp: Spectrogram, ev1: EventFit, ev2: EventFit, traces: list[Trace
         segs = build_segments(traces, grid.lat0, grid.lon0, clip_enu=(e0, e1, n0, n1))
         log(f"{len(segs)} airborne segments; grid of {len(grid)} points")
     with _stage(stages, "cpa_table"):
-        cpa = cached_cpa_table(grid, segs, max_range_m, c, cpa_cache, workers=workers)
+        cpa = cached_cpa_table(grid, segs, max_range_m, c, cpa_cache, workers=workers, temperature_c=temperature_c)
         log(f"{len(cpa)} (point, flight) CPA records")
     w1 = EventWindow.from_fit(sp, ev1, harmonics[0]); w2 = EventWindow.from_fit(sp, ev2, harmonics[1])
     nulls = None
@@ -376,7 +387,7 @@ def run_search(sp: Spectrogram, ev1: EventFit, ev2: EventFit, traces: list[Trace
         if hypotheses:
             if sf_tol_s is not None or clock_anchor == "steepest":
                 raise ValueError("hypotheses=True doesn't combine with the steepest-fall check or anchor yet")
-            nulls = [event_null(w, cpa, segs, grid.enu, c, workers=workers) for w in (w1, w2)]
+            nulls = [event_null(w, cpa, segs, grid.enu, c, workers=workers, temperature_c=temperature_c) for w in (w1, w2)]
             hyps = [event_hypotheses(sp, w, ev, c, nl["sigma"], h, v_tol=v_tol, d_tol=d_tol)
                     for w, ev, nl, h in zip((w1, w2), (ev1, ev2), nulls, harmonics)]
             pairs = _pair_hypotheses(cpa, hyps, tol_s, emission, silence_d_m, funnel, triples)
@@ -394,7 +405,7 @@ def run_search(sp: Spectrogram, ev1: EventFit, ev2: EventFit, traces: list[Trace
                   "fit": tuple(fitted_steepest_fall(e, c, sf_window_s, sf_smooth_s, sf_flat_ratio) for e in (ev1, ev2))}
     with _stage(stages, "scoring"):
         used = np.union1d(pairs.seg1.to_numpy(), pairs.seg2.to_numpy())
-        state = {"w1": w1, "w2": w2, "segs": {int(k): segs[k] for k in used}, "c": c, "sf": sf}
+        state = {"w1": w1, "w2": w2, "segs": {int(k): segs[k] for k in used}, "c": c, "sf": sf, "temperature_c": temperature_c}
         cols_in = [pairs[k].to_numpy() for k in ("gidx", "seg1", "seg2", "t_heard1", "t_emit1", "t_emit2")]
         if hypotheses:
             cols_in.append(np.array([hyps[0][int(i)].t_cpa for i in pairs.h1.to_numpy()]) if len(pairs) else np.zeros(0))
@@ -422,10 +433,10 @@ def run_search(sp: Spectrogram, ev1: EventFit, ev2: EventFit, traces: list[Trace
         res = pd.DataFrame(out, columns=cols)
         if comparable:      # PLAN Phase 2 item 7, stage A: each event's score against its own null
             if hypotheses:  # the wrong flights get the same widened f0 sweep the candidates got
-                nulls = [event_null(w, cpa, segs, grid.enu, c, workers=workers, f0_scales=sw)
+                nulls = [event_null(w, cpa, segs, grid.enu, c, workers=workers, f0_scales=sw, temperature_c=temperature_c)
                          for w, sw in zip((w1, w2), state["f0_scales"])]
             elif nulls is None:
-                nulls = [event_null(w, cpa, segs, grid.enu, c, workers=workers) for w in (w1, w2)]
+                nulls = [event_null(w, cpa, segs, grid.enu, c, workers=workers, temperature_c=temperature_c) for w in (w1, w2)]
             res["raw_score"] = res["score"]
             for k, nl in ((1, nulls[0]), (2, nulls[1])):
                 res[f"z{k}"] = (res[f"s{k}"] - nl["median"]) / nl["sigma"] if nl["sigma"] > 0 else np.nan
@@ -448,7 +459,8 @@ def run_search(sp: Spectrogram, ev1: EventFit, ev2: EventFit, traces: list[Trace
 
 
 def pick_flight(sp: Spectrogram, ev: EventFit, segs: list[Segment], obs_enu, t0_map: float, shift: float,
-                harmonics: int = 1, c=None, max_range_m=DEFAULT_MAX_RANGE_M, alive_pad_s=300.0) -> tuple[int, float]:
+                harmonics: int = 1, c=None, max_range_m=DEFAULT_MAX_RANGE_M, alive_pad_s=300.0,
+                temperature_c: float | None = None) -> tuple[int, float]:
     """Which flight does an observer at obs_enu hear as `ev`, given the recording's time map
     (audio = unix + t0_map) and the time shift already chosen for event 1? Returns
     (segment index, locked score); (-1, 0) if no flight is near at that time."""
@@ -462,7 +474,7 @@ def pick_flight(sp: Spectrogram, ev: EventFit, segs: list[Segment], obs_enu, t0_
             continue
         if np.linalg.norm(seg.enu - obs_enu, axis=1).min() > max_range_m:
             continue
-        to, r = modelled_curve(seg, obs_enu, c)
+        to, r = modelled_curve(seg, obs_enu, c, temperature_c)
         sc = float(w.sweep_scores(to + t0_map, r, [shift], np.arange(0.95, 1.0501, 0.005)).max())
         if sc > best_s:
             best, best_s = k, sc
@@ -474,16 +486,18 @@ def _score_fine_points(task) -> list[tuple]:
     from .geo import lla_to_enu
     from .score import modelled_curve
     st = _SCORE_STATE
-    c, seg1 = st["c"], st["seg1"]
+    c, seg1, temp = st["c"], st["seg1"], st.get("temperature_c")
     rows = []
     for lat, lon, elev in zip(*task):
         obs = lla_to_enu(lat, lon, elev, *st["origin"])
-        d = np.linalg.norm(seg1.enu - obs, axis=1); j = int(np.argmin(d)); t_heard1 = seg1.t[j] + d[j] / c
-        tot, s1, s2, sh = locked_score(st["w1"], st["w2"], seg1, st["seg2"], obs, float(t_heard1), c=c)
+        d = np.linalg.norm(seg1.enu - obs, axis=1); j = int(np.argmin(d))
+        cj = c if temp is None else float(point_sound_speed(temp, seg1.enu[j, 2] - obs[2]))
+        t_heard1 = seg1.t[j] + d[j] / cj
+        tot, s1, s2, sh = locked_score(st["w1"], st["w2"], seg1, st["seg2"], obs, float(t_heard1), c=c, temperature_c=temp)
         t0_map = st["t_cpa1"] - float(t_heard1)
         xs = []
         for seg, w in zip(st["xsegs"], st["xwins"]):
-            to, r = modelled_curve(seg, obs, c)
+            to, r = modelled_curve(seg, obs, c, temp)
             xs.append(float(w.sweep_scores(to + t0_map, r, [sh], np.arange(0.95, 1.0501, 0.005)).max()))
         rows.append((lat, lon, tot + sum(xs), s1, s2, *xs, sh))
     return rows
@@ -491,8 +505,8 @@ def _score_fine_points(task) -> list[tuple]:
 
 def refine(sp, ev1, ev2, segs, res_row, spacing_m=50.0, half_m=400.0, harmonics=(1, 1), elevation=None, c=None,
            extra: list[EventFit] | None = None, extra_harmonics: list[int] | None = None,
-           max_range_m=DEFAULT_MAX_RANGE_M, workers: int | None = None):
-    """Fine grid around one result row for one flight pair.
+           max_range_m=DEFAULT_MAX_RANGE_M, workers: int | None = None, temperature_c: float | None = None):
+    """Fine grid around one result row for one flight pair. temperature_c: see run_search.
 
     extra: further measured events (beyond the two the search used). For each, the flight is
     chosen once at the candidate point (pick_flight), then its modelled curve is scored at
@@ -520,12 +534,14 @@ def refine(sp, ev1, ev2, segs, res_row, spacing_m=50.0, half_m=400.0, harmonics=
     t0_map0 = ev1.t_cpa - float(res_row.t_heard1)
     xsegs, xwins = [], []
     for ev, h in zip(extra, extra_harmonics):
-        k, sc = pick_flight(sp, ev, segs, obs0, t0_map0, float(res_row["shift"]), h, c, max_range_m=max_range_m)
+        k, sc = pick_flight(sp, ev, segs, obs0, t0_map0, float(res_row["shift"]), h, c, max_range_m=max_range_m,
+                            temperature_c=temperature_c)
         if k < 0:
             raise ValueError(f"no flight near the candidate at the time of the extra event at {ev.t_cpa:.0f} s")
         log(f"extra event at {ev.t_cpa:.0f} s: {segs[k].icao} (score {sc:.2f} at the candidate)")
         xsegs.append(segs[k]); xwins.append(EventWindow.from_fit(sp, ev, h))
     state = {"w1": w1, "w2": w2, "seg1": seg1, "seg2": seg2, "xsegs": xsegs, "xwins": xwins, "c": c,
+             "temperature_c": temperature_c,
              "t_cpa1": ev1.t_cpa, "origin": (res_row.lat0, res_row.lon0)}
     tasks = [(g.lat[a:a + SCORE_CHUNK], g.lon[a:a + SCORE_CHUNK], g.elev[a:a + SCORE_CHUNK]) for a in range(0, len(g), SCORE_CHUNK)]
     rows = []
@@ -543,10 +559,11 @@ def refine(sp, ev1, ev2, segs, res_row, spacing_m=50.0, half_m=400.0, harmonics=
 def run_single_search(sp: Spectrogram, ev: EventFit, traces: list[Trace], grid: Grid, t_cpa_unix: float,
                       tol_s: float = 30.0, harmonics: int = 1, v_tol=0.35, d_tol=(0.4, 2.5),
                       max_range_m=DEFAULT_MAX_RANGE_M, c=None, trace_metadata=None,
-                      search_bbox=None, workers: int | None = None) -> tuple[pd.DataFrame, list[Segment]]:
+                      search_bbox=None, workers: int | None = None,
+                      temperature_c: float | None = None) -> tuple[pd.DataFrame, list[Segment]]:
     """One event whose absolute time is known (±tol_s): rank grid points by how well the
     curve they would hear from each nearby flight matches the spectrogram. workers: processes
-    for the CPA table (see cpa_table)."""
+    for the CPA table (see cpa_table). temperature_c: see run_search."""
     from .score import single_score
     c = speed_of_sound() if c is None else c
     bbox = search_bbox if search_bbox is not None else (grid.lat.min(), grid.lat.max(), grid.lon.min(), grid.lon.max())
@@ -558,14 +575,14 @@ def run_single_search(sp: Spectrogram, ev: EventFit, traces: list[Trace], grid: 
     # only segments alive around the event time
     keep = [s for s in segs if s.t[0] - 300 <= t_cpa_unix <= s.t[-1] + 300]
     log(f"{len(keep)} of {len(segs)} segments overlap the event time")
-    cpa = cpa_table(grid, keep, max_range_m=max_range_m, c=c, workers=workers)
+    cpa = cpa_table(grid, keep, max_range_m=max_range_m, c=c, workers=workers, temperature_c=temperature_c)
     m = cpa[(cpa.t_heard - t_cpa_unix).abs() <= tol_s]
     m = m[m.v.between(ev.v * (1 - v_tol), ev.v * (1 + v_tol)) & m.d.between(ev.d * d_tol[0], ev.d * d_tol[1])]
     log(f"{len(m)} candidate (point, flight) pairs")
     w = EventWindow.from_fit(sp, ev, harmonics)
     out = []
     for p in m.itertuples():
-        s = single_score(w, keep[p.seg], grid.enu[p.gidx], float(p.t_heard), c=c)
+        s = single_score(w, keep[p.seg], grid.enu[p.gidx], float(p.t_heard), c=c, temperature_c=temperature_c)
         out.append((p.gidx, grid.lat[p.gidx], grid.lon[p.gidx], p.seg, keep[p.seg].icao, p.t_heard, p.d, p.v, s))
     res = pd.DataFrame(out, columns=["gidx", "lat", "lon", "seg", "icao", "t_heard", "d", "v", "score"]).sort_values("score", ascending=False).reset_index(drop=True)
     return res, keep

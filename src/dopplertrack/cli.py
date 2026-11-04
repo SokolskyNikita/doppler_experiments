@@ -10,6 +10,7 @@ import numpy as np
 from . import pipeline
 from .adsb import load_traces
 from .audio import Spectrogram
+from .score import F0_TOL
 from .search import Grid
 from .terrain import Terrain
 from .tracks import EventFit
@@ -52,7 +53,8 @@ def main(argv=None):
     r.add_argument("--point", nargs=2, type=float, metavar=("LAT", "LON"), help="score a single known point instead of a grid")
     r.add_argument("--spacing", type=float, default=200.0); r.add_argument("--harmonics", nargs=2, type=int, default=(1, 1))
     r.add_argument("--no-dem", action="store_true"); r.add_argument("--no-silence", action="store_true")
-    r.add_argument("--tol", type=float, default=6.0)
+    r.add_argument("--tol", type=float, default=6.0, help="allowed error of the measured event-2 minus event-1 time, s")
+    r.add_argument("--f0-tol", type=float, default=F0_TOL, help="half-width of the f0 sweep around each fitted fundamental, as a fraction")
     r.add_argument("--cpa-cache", metavar="NPZ", help="cache the (point, flight) CPA table here; reused on reruns with the same grid and traces")
 
     rf = sub.add_parser("refine", help="fine grid around one search result, optionally adding more events")
@@ -65,12 +67,14 @@ def main(argv=None):
     rf.add_argument("--harmonics", nargs=2, type=int, default=(1, 1))
     rf.add_argument("--extra", nargs="*", default=[], metavar="EV_JSON", help="further events (from detect or fit) to score locked to the same clock")
     rf.add_argument("--extra-harmonics", nargs="*", type=int, default=[])
+    rf.add_argument("--f0-tol", type=float, default=F0_TOL, help="half-width of the f0 sweep around each fitted fundamental, as a fraction")
     rf.add_argument("--no-dem", action="store_true")
 
     g = sub.add_parser("search-single", help="rank locations for ONE event whose absolute time is known")
     g.add_argument("spec"); g.add_argument("--event", required=True); g.add_argument("--traces", required=True)
     g.add_argument("--utc", required=True, help="heard CPA time of the event, unix seconds or ISO-8601 UTC")
     g.add_argument("--tol", type=float, default=30.0); g.add_argument("--out", required=True)
+    g.add_argument("--f0-tol", type=float, default=F0_TOL, help="half-width of the f0 sweep around the fitted fundamental, as a fraction")
     g.add_argument("--bbox", nargs=4, type=float, required=True, metavar=("LATMIN", "LATMAX", "LONMIN", "LONMAX"))
     g.add_argument("--spacing", type=float, default=200.0); g.add_argument("--harmonics", type=int, default=1)
     g.add_argument("--no-dem", action="store_true")
@@ -113,7 +117,8 @@ def main(argv=None):
         else:
             grid = Grid.make(*a.bbox, a.spacing, elev)
         res, segs = pipeline.run_search(sp, ev1, ev2, traces, grid, harmonics=tuple(a.harmonics),
-                                        silence_d_m=None if a.no_silence else 6000.0, tol_s=a.tol, cpa_cache=a.cpa_cache)
+                                        silence_d_m=None if a.no_silence else 6000.0, tol_s=a.tol, cpa_cache=a.cpa_cache,
+                                        f0_tol=a.f0_tol)
         res["lat0"] = grid.lat0; res["lon0"] = grid.lon0
         res.to_csv(a.out, index=False)
         print(res.head(20).to_string())
@@ -132,7 +137,7 @@ def main(argv=None):
         row = pipeline.relocate_row(row, segs, ev2.t_cpa - ev1.t_cpa)
         print(f"refining rank {a.rank}: {row.icao1}/{row.icao2} at {row.lat:.5f}, {row.lon:.5f} (score {row.score:.2f})")
         fine = pipeline.refine(sp, ev1, ev2, segs, row, spacing_m=a.spacing, half_m=a.half, harmonics=tuple(a.harmonics),
-                               elevation=elev, extra=extra, extra_harmonics=xh)
+                               elevation=elev, extra=extra, extra_harmonics=xh, f0_tol=a.f0_tol)
         fine.to_csv(a.out, index=False)
         b = fine.iloc[0]
         print(f"peak score {b.score:.2f} at {b.lat:.6f}, {b.lon:.6f}" + (f"; extra flights {fine.attrs['extra_icao']}" if extra else ""))
@@ -148,7 +153,8 @@ def main(argv=None):
             t_unix = datetime.fromisoformat(a.utc.replace("Z", "+00:00")).astimezone(timezone.utc).timestamp()
         elev = None if a.no_dem else Terrain().elevation
         grid = Grid.make(*a.bbox, a.spacing, elev)
-        res, segs = pipeline.run_single_search(sp, ev, traces, grid, t_unix, tol_s=a.tol, harmonics=a.harmonics)
+        res, segs = pipeline.run_single_search(sp, ev, traces, grid, t_unix, tol_s=a.tol, harmonics=a.harmonics,
+                                               f0_tol=a.f0_tol)
         res["lat0"] = grid.lat0; res["lon0"] = grid.lon0
         res.to_csv(a.out, index=False)
         print(res.head(20).to_string())

@@ -10,6 +10,18 @@ from .doppler import curve_from_trajectory, speed_of_sound
 from .search import Segment
 from .tracks import EventFit, local_whiten
 
+# Scoring sweeps each event's fundamental over +-F0_TOL of the fitted value: the ideal-curve
+# fit only seeds it, and on a real pass its f0 can be several percent off what the flight's
+# trajectory needs.
+F0_TOL = 0.05
+F0_STEP = 0.005
+
+
+def f0_sweep(tol: float | None = None) -> np.ndarray:
+    """f0 scale factors from 1 - tol to 1 + tol in F0_STEP steps (tol defaults to F0_TOL)."""
+    tol = F0_TOL if tol is None else tol
+    return np.linspace(1 - tol, 1 + tol, int(round(2 * tol / F0_STEP)) + 1)
+
 
 @dataclass
 class EventWindow:
@@ -62,7 +74,7 @@ def modelled_curve(seg: Segment, obs_enu, c):
 
 def locked_score(ev1: EventWindow, ev2: EventWindow, seg1: Segment, seg2: Segment, obs_enu,
                  t_heard1: float, c: float | None = None,
-                 shifts=np.arange(-8, 8.01, 0.5), f0_scales=np.arange(0.95, 1.0501, 0.005)):
+                 shifts=np.arange(-8, 8.01, 0.5), f0_scales=None):
     """Two-event locked scoring.
 
     Event 1's placement is swept over small time shifts and f0 scales (both are
@@ -71,6 +83,7 @@ def locked_score(ev1: EventWindow, ev2: EventWindow, seg1: Segment, seg2: Segmen
     Returns (total, s1, s2, best_shift).
     """
     c = speed_of_sound() if c is None else c
+    f0_scales = f0_sweep() if f0_scales is None else f0_scales
     # map unix time -> audio time so that the modelled heard-CPA of event 1 lands on the measured one
     t0_map = ev1.fit.t_cpa - t_heard1
     to1, r1 = modelled_curve(seg1, obs_enu, c)
@@ -83,8 +96,9 @@ def locked_score(ev1: EventWindow, ev2: EventWindow, seg1: Segment, seg2: Segmen
 
 
 def single_score(ev: EventWindow, seg: Segment, obs_enu, t_heard: float, c=None,
-                 shifts=np.arange(-8, 8.01, 0.5), f0_scales=np.arange(0.95, 1.0501, 0.005)):
+                 shifts=np.arange(-8, 8.01, 0.5), f0_scales=None):
     c = speed_of_sound() if c is None else c
+    f0_scales = f0_sweep() if f0_scales is None else f0_scales
     to, r = modelled_curve(seg, obs_enu, c)
     t0_map = ev.fit.t_cpa - t_heard
     return float(ev.sweep_scores(to + t0_map, r, shifts, f0_scales).max())

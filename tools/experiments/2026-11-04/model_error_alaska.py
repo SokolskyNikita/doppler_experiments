@@ -20,17 +20,26 @@ speed, overtones, standard deviations) with its DPZ waveform in derived/alaska/:
                beside it the authors' fitted speed and slant range
 Speed and slant range don't depend on which harmonic the fit locks to; f0 does, so it isn't compared.
 
-Run from the repo root:  uv run python tools/experiments/2026-11-04/model_error_alaska.py "$RUN" [--workers 3]
+Each crossing is a unit under RUN/units/<date>-<flight>-<node>/ (tools/data/shards.py): --shard K/N, --resume DIR ...,
+--merge, --inputs; workers from $DOPPLERTRACK_JOBS. A crossing with nothing to search in its band gets a weak fit
+(weak_<setting> says why), not an error.
+
+Run from the repo root:  uv run python tools/experiments/2026-11-04/model_error_alaska.py [RUN] [--band narrow --band-factors 0.70 1.50]
+Runs before 2026-11-04 08:30 used --workers and an alaska.jsonl of their own; their command.sh names the commit.
 """
 import argparse
 import csv
 import json
 import os
+import sys
 from concurrent.futures import ProcessPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "data"))
+import shards  # noqa: E402
 
 from dopplertrack.audio import compute_spectrogram
 from dopplertrack.geo import haversine_m
@@ -133,44 +142,67 @@ def one(x):
             fe = fit_event(sp, tc - HALF, tc + HALF, lo, hi, c=c, objective="contrast")
             x.update({f"v_{tag}": fe.v, f"R_{tag}": fe.d, f"tau_{tag}": fe.t_cpa_emit + t0 + a / sr, f"f0_{tag}": fe.f0,
                       f"score_{tag}": fe.score})
+            if getattr(fe, "weak", None):        # nothing to search in the band: a weak fit, its fields NaN
+                x[f"weak_{tag}"] = fe.weak
         except Exception as e:      # a failed fit is a result, recorded, not a crash
             x[f"error_{tag}"] = repr(e)
     return x
 
 
+def unit_id(x):
+    return f"{x['date']}-{x['flight']}-{x['node']}".replace("/", "_")
+
+
 def main():
-    ap = argparse.ArgumentParser(); ap.add_argument("run"); ap.add_argument("--workers", type=int, default=3)
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    shards.add_args(ap)
     ap.add_argument("--band", choices=("wide", "narrow"), default="wide")
     ap.add_argument("--band-factors", nargs=2, type=float, default=(0.85, 1.15), metavar=("LO", "HI"),
                     help="narrow band as multiples of the authors' tone; must hold the Doppler span, about 0.75-1.45 at 100 m/s")
-    ap.add_argument("--sample", type=int, help="a seeded random subset of this size; crossings already done count first")
+    ap.add_argument("--sample", type=int, help="a seeded random subset of this size")
     ap.add_argument("--seed", type=int, default=20261104)
-    ap.add_argument("--same-as", type=Path, help="an earlier run's alaska.jsonl: fit exactly its crossings")
+    ap.add_argument("--same-as", type=Path, help="an earlier run's alaska.jsonl or alaska.csv: fit exactly its crossings")
     a = ap.parse_args()
+    if a.inputs:
+        shards.print_inputs([], [str(Z.relative_to(DATA)), str(NPZ.relative_to(DATA)), "raw/aux/metar/PAEC_2019-02-12.csv",
+                                 "raw/aux/metar/PAIN_2019-02-12.csv", "raw/aux/metar/PANN_2019-02-12.csv",
+                                 "raw/aux/metar/PATK_2019-02-12.csv"], [], ())
+        return
     xs = crossings()
+    if a.same_as:
+        rows = csv.DictReader(open(a.same_as)) if a.same_as.suffix == ".csv" else map(json.loads, open(a.same_as))
+        keep = {(r["flight"], r["node"]) for r in rows}
+        xs = [x for x in xs if (x["flight"], x["node"]) in keep]
+    if a.sample:
+        pick = np.random.default_rng(a.seed).choice(len(xs), size=min(a.sample, len(xs)), replace=False)
+        xs = [xs[i] for i in sorted(pick)]
     for x in xs:
         x["band"] = a.band
         x["band_lo"], x["band_hi"] = a.band_factors
-    part = Path(a.run) / "alaska.jsonl"       # one row per finished crossing, so a stopped run resumes
-    done = {(r["flight"], r["node"]) for r in map(json.loads, open(part))} if part.exists() else set()
-    if a.same_as:
-        keep = {(r["flight"], r["node"]) for r in map(json.loads, open(a.same_as))}
-        xs = [x for x in xs if (x["flight"], x["node"]) in keep]
-    if a.sample:
-        rest = [x for x in xs if (x["flight"], x["node"]) not in done]
-        pick = np.random.default_rng(a.seed).choice(len(rest), size=max(0, a.sample - len(done)), replace=False)
-        xs = [x for x in xs if (x["flight"], x["node"]) in done] + [rest[i] for i in sorted(pick)]
-    todo = [x for x in xs if (x["flight"], x["node"]) not in done]
-    print(f"{len(xs)} crossings with FR24 rows, {len(done)} done, {len(todo)} to go", flush=True)
-    with ProcessPoolExecutor(a.workers) as ex, open(part, "a") as fh:
-        for k, r in enumerate(ex.map(one, todo, chunksize=2)):
-            fh.write(json.dumps(r, default=float) + "\n"); fh.flush()
-            if k % 50 == 0:
-                print(f"  {len(done) + k + 1} / {len(xs)}", flush=True)
-    rows = [json.loads(line) for line in open(part)]
+    params = dict(band=a.band, band_factors=list(a.band_factors), sample=a.sample, seed=a.seed if a.sample else None,
+                  same_as=a.same_as.name if a.same_as else None, half_window_s=HALF, settings=["c15", "cauth", "ctemp"],
+                  spectrogram=dict(nperseg_s=2.048, hop_s=0.25, fmin=40.0, fmax=240.0), objective="contrast")
+    run = shards.open_run(a.run, "model-error-alaska", {"script": "tools/experiments/2026-11-04/model_error_alaska.py", "params": params})
+    by_id = {unit_id(x): x for x in xs}
+    units = shards.Units(run, list(by_id), params, a.shard, a.resume)
+    if not a.merge:
+        todo = units.todo()
+        print(f"{len(by_id)} crossings, {len(todo)} to run in this shard", flush=True)
+        from dopplertrack.parallel import default_jobs
+        with ProcessPoolExecutor(default_jobs()) as ex:
+            for k, (uid, r) in enumerate(zip(todo, ex.map(one, [by_id[u] for u in todo], chunksize=2))):
+                d = units.dir(uid); d.mkdir(parents=True, exist_ok=True)
+                (d / "result.json").write_text(json.dumps(r, default=float) + "\n")
+                units.finish(uid, {k2: r.get(k2) for k2 in ("R_c15", "R_ctemp", "error_c15", "weak_c15")})
+                if k % 50 == 0:
+                    print(f"  {k + 1} / {len(todo)}", flush=True)
+        if a.shard != (1, 1) or units.todo():
+            return
+    rows = [json.loads((d / "result.json").read_text()) for d in units.all().values()]
     keys = list(dict.fromkeys(k for r in rows for k in r))
-    with open(Path(a.run) / "alaska.csv", "w", newline="") as fh:
+    with open(run / "alaska.csv", "w", newline="") as fh:
         w = csv.DictWriter(fh, fieldnames=keys); w.writeheader(); w.writerows(rows)
+    print(f"{len(rows)} crossings merged into {run / 'alaska.csv'}")
 
 
 if __name__ == "__main__":

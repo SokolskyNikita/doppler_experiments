@@ -68,6 +68,14 @@ def test_open_run_keeps_run_json_and_records_each_invocation(tmp_path, monkeypat
     assert box == tmp_path / "box" and "git_commit" in json.loads((box / "run.json").read_text())
 
 
+def test_shard_defaults_to_the_boxs_spec(monkeypatch):
+    import argparse
+    monkeypatch.setenv("DOPPLERTRACK_SHARD_SPEC", "2/3")       # what `runs launch --shards 3` sets on box 2
+    ap = argparse.ArgumentParser()
+    shards.add_args(ap)
+    assert ap.parse_args([]).shard == (2, 3) and ap.parse_args(["--shard", "1/1"]).shard == (1, 1)
+
+
 def test_shard_argument():
     assert shards.parse_shard("2/5") == (2, 5)
     for bad in ("0/3", "4/3", "x"):

@@ -12,7 +12,7 @@ reference (the runner's triples sidecar), and its rank once retained.
 
 usage, from the repo root:
   event_pairs_z.py [RUN] --detected DETECTED_RUN --case CASE [CASE ...] [--hypotheses] [--score comparable|raw]
-                   [--workers-per-search 4] [--shard K/N] [--resume DIR ...] [--merge] [--inputs]
+                   [--workers-per-search 4] [--null-n N] [--shard K/N] [--resume DIR ...] [--merge] [--inputs]
   event_pairs_z.py one RUN_DIR VARIANT CODE PARAMS      (internal) one variant
 
 Each of the pairs' searches is a unit (tools/data/shards.py): --shard splits them across machines, a stopped run
@@ -35,6 +35,7 @@ sys.path.insert(0, str(REPO))
 sys.path.insert(0, str(REPO / "tools" / "data"))
 import shards                                                     # noqa: E402
 from bench import cases, runner                                   # noqa: E402
+from dopplertrack import pipeline                                 # noqa: E402
 from dopplertrack.parallel import JOBS_ENV, default_jobs          # noqa: E402
 from dopplertrack.result import read_record, sha256_bytes, write_record   # noqa: E402
 
@@ -79,12 +80,23 @@ def one(run: Path, vid: str, params: dict):
     out = run / "units" / vid
     out.mkdir(parents=True, exist_ok=True)
     overrides = {"workers": params["workers_per_search"], **({"comparable": True} if params["score"] == "comparable" else {}),
-                 **({"hypotheses": True} if params["hypotheses"] else {})}
+                 **({"hypotheses": True} if params["hypotheses"] else {}),
+                 **({"null_n": params["null_n"]} if "null_n" in params else {})}
+    nulls: dict = {}
+    search = pipeline.run_search
+
+    def keep_nulls(*a, **k):        # the record has no nulls; keep run_search's for a1_noise.py
+        res, segs = search(*a, **k)
+        nulls.update(res.attrs.get("null", {}))
+        return res, segs
+
+    pipeline.run_search = keep_nulls
     with open(out / "run.log", "w") as fh:
         record = runner.execute_case(case, out, log=lambda m: print(m, file=fh, flush=True), code=CODE,
                                      overrides=overrides)
     sha = write_record(out / "result.json", record)
     (out / runner.HASH_FILE).write_text(f"{sha}  result.json\n")
+    (out / "null.json").write_text(json.dumps(nulls, indent=1) + "\n")
 
 
 def rank(folders: dict, plan: dict) -> dict:
@@ -123,6 +135,7 @@ def main():
     ap.add_argument("--score", choices=("comparable", "raw"), default="comparable")
     ap.add_argument("--hypotheses", action="store_true")
     ap.add_argument("--workers-per-search", type=int, default=4)
+    ap.add_argument("--null-n", type=int, help="the null's draws per event (run_search's null_n; default its 1,000)")
     a = ap.parse_args()
     if a.inputs:
         rel = [str(detected_file(a.detected, c).resolve().relative_to(DATA.resolve())) for c in a.case]
@@ -130,7 +143,7 @@ def main():
         shards.print_inputs(a.case, rel, caches)
         return
     params = {"cases": a.case, "score": a.score, "hypotheses": a.hypotheses, "top": TOP,
-              "workers_per_search": a.workers_per_search,
+              "workers_per_search": a.workers_per_search, **({"null_n": a.null_n} if a.null_n else {}),
               "detected": {c: hashlib.sha256(detected_file(a.detected, c).read_bytes()).hexdigest() for c in a.case}}
     topic = "hypotheses-pairs" if a.hypotheses else ("comparable-score" if a.score == "comparable" else "event-pairs")
     run = shards.open_run(a.run, topic, {"script": "tools/experiments/2026-11-04/event_pairs_z.py",

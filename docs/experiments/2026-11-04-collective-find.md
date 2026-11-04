@@ -173,3 +173,12 @@ Twelve units on 12 spot 8xlarge boxes, the unit shards relaunched after spot int
 - **The unit test** passes on the new code: 1.0 s as committed, 4.8 s at ±25 % with 200 null draws. Both flights are matched at the observer.
 - **The real per-cell time** is the coarse stage's top-cell fine stage; it's reported before the fine stage launches.
 - **The look-elsewhere cost.** ±25 % of f0 freedom per candidate flight lets wrong flights fit as easily as true ones. Each window's null and the other-day null are drawn under the same ±25 % rule, so the cost is priced in both before any margin is read.
+
+**The second design's first read: Oyster Bay's coarse map at ±25 %** (`runs/2026-11-04-collective-coarse-v2-s1of8`, unit `oyster-bay--cell0`, 91fb1c1, 8xlarge).
+- **Runtime.**
+  - Coarse CPA 15 s, coarse stage 167 s (288 s at ±12 % under the bilinear sampler).
+  - One fine cell (100 points) 284 s, against the 5.5 min estimate. At the cap that's 20 × 284 s ≈ 95 box-minutes per case, about 8 min of wall with one box per cell.
+- **The margin rule binds.** 114 of 3,852 cells lie within 2σ_c (σ_c = 1.70) of the coarse maximum (14.80). The cap keeps 20, which reach 1.69 below the maximum, about 1σ.
+- **The true cell isn't pruned; it doesn't score.** Its coarse Z is 7.36, rank 1,698 of 3,852, about the map's median and far below the margin (11.41). Even with ±25 % of tone freedom, the coarse stage doesn't see the true pair at the true cell.
+- **One kept cell, rank 13, is 2.0 km from the truth,** next to the true cell. The fine stage over the 20 kept cells will show whether the fine grid there reaches the truth.
+- **Its top cell's winner** is 14.1 km from the truth, at Z 14.80 with 3 windows matched.

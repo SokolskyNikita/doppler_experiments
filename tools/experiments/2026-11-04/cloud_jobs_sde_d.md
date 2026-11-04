@@ -120,4 +120,14 @@ The branch is `claude/sde-c-pm-coordination-cbbe43`. Every change is committed. 
 - **The second design's null.** `--null` now runs the new statistic with every kept cell in one unit. With up to 20 cells per draw that's long, so before launching it, split the null units per cell as the fine stage does, or bound the cells.
 - **Whether the old SWFL/Essex draws still apply.** Those running draws price the first design only. If the second design is adopted, they're redrawn under it.
 
-**Next step:** read `oyster-bay--cell0` (its coarse truth rank, margin block and per-cell time), report them to the PM, then launch coarse units 2–8.
+**Smoke read, about 23:55Z** (`oyster-bay--cell0`).
+- **Times:** coarse 167 s; one fine cell 284 s.
+- **Margin:** 114 cells within the margin; the cap keeps 20.
+- **The true cell** ranks 1,698 of 3,852 (Z 7.36, the map's median), so it isn't pruned, it doesn't score. A kept cell 2.0 km from the truth is rank 13.
+- **Recorded** in the collective-find record.
+- **Coarse units 2–8** are launched (`2026-11-04-collective-coarse-v2-s2of8` … `s8of8`, 91fb1c1).
+
+**Next step:**
+1. Pull the eight coarse units and merge them (`--merge --resume <8 folders>`), which writes `KEPT.json` and each case's `coarse_truth`.
+2. Give the PM the eight coarse ranks.
+3. On their go-ahead, launch the fine stage (`--fine-from KEPT.json`, 19 units per capped case, about 8 min each). Merge it with `--extra-units`.

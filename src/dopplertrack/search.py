@@ -295,6 +295,16 @@ def pair_candidates(cpa: pd.DataFrame, dt_offset: float, tol_s: float = 6.0,
     a = cpa[(cpa.v.between(*v1)) & (cpa.d.between(*d1))]
     b = cpa[(cpa.v.between(*v2)) & (cpa.d.between(*d2))]
     funnel.update(cpa_rows=len(cpa), event1_gates=len(a), event2_gates=len(b))
+    return join_pairs(a, b, cpa, dt_offset, tol_s, time_col=time_col, silence_d_m=silence_d_m,
+                      silence_margin_s=silence_margin_s, funnel=funnel, triples=triples)
+
+
+def join_pairs(a: pd.DataFrame, b: pd.DataFrame, cpa: pd.DataFrame, dt_offset: float, tol_s: float,
+               time_col: str = "t_heard", silence_d_m: float | None = 6000.0, silence_margin_s: float = 40.0,
+               funnel: dict | None = None, triples: dict | None = None) -> pd.DataFrame:
+    """pair_candidates' time join and silence filter, on rows already admitted for event 1 (a) and
+    event 2 (b); cpa is the whole table, which the silence filter needs."""
+    funnel = {} if funnel is None else funnel
     w = 2.0 * tol_s
     a = a.assign(key=np.floor(a[time_col].to_numpy() / w).astype(np.int64))
     kb = np.floor((b[time_col].to_numpy() - dt_offset) / w).astype(np.int64)

@@ -105,7 +105,7 @@ def steepest_fall(t, ratio, center: float, window_s: float = 60.0, smooth_s: flo
 def locked_score(ev1: EventWindow, ev2: EventWindow, seg1: Segment, seg2: Segment, obs_enu,
                  t_heard1: float, c: float | None = None,
                  shifts=np.arange(-8, 8.01, 0.5), f0_scales=np.arange(0.95, 1.0501, 0.005),
-                 curves=None, t0_map: float | None = None):
+                 curves=None, t0_map: float | None = None, f0_scales2=None):
     """Two-event locked scoring.
 
     Event 1's placement is swept over small time shifts and f0 scales (both are
@@ -113,6 +113,7 @@ def locked_score(ev1: EventWindow, ev2: EventWindow, seg1: Segment, seg2: Segmen
     relative to event 1 is fixed purely by flight geometry.
     curves: (to1, r1, to2, r2) from modelled_curve, if the caller already has them.
     t0_map: audio = unix + t0_map; by default the modelled heard CPA of event 1 lands on the measured one.
+    f0_scales2: event 2's f0 sweep, if it differs from event 1's.
     Returns (total, s1, s2, best_shift).
     """
     c = speed_of_sound() if c is None else c
@@ -126,7 +127,7 @@ def locked_score(ev1: EventWindow, ev2: EventWindow, seg1: Segment, seg2: Segmen
     sc1 = ev1.sweep_scores(to1 + t0_map, r1, shifts, f0_scales)
     i, j = np.unravel_index(np.argmax(sc1), sc1.shape)
     s1, sh = float(sc1[i, j]), float(shifts[i])
-    s2 = float(ev2.sweep_scores(to2 + t0_map, r2, [sh], f0_scales).max())
+    s2 = float(ev2.sweep_scores(to2 + t0_map, r2, [sh], f0_scales if f0_scales2 is None else f0_scales2).max())
     return s1 + s2, s1, s2, sh
 
 

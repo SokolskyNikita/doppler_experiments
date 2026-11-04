@@ -129,15 +129,33 @@ def _t1_numbers(results: dict) -> dict:
     return dict(matched=m0, threshold=threshold, background_extra_per_hour=(rows[-1] if rows else bg[0])["extra_per_hour"])
 
 
+def span_results(root: Path) -> dict | None:
+    """Tier 1's comparison of the development spans alone (compare_span and pooled_curve, as run_tier1 does), from
+    their blind records. Both arms are judged this way: the frequency arm's known-point step raised before its
+    comparison ("detect found nothing inside the saved window"), so it has no results.json, and the spans are the
+    whole of the Tier 1 criterion."""
+    spans = [s for s in BT.load_tier1()["spans"] if s["set"] == "development" and s["spectrogram"].get("sha256")]
+    if not all((root / "spans" / s["id"] / BT.SPAN_FILE).exists() for s in spans):
+        return None
+    entries = []
+    for s in spans:
+        labels = json.loads(BC.resolve(s["labels"]).read_text())
+        ref = (lambda s=s, labels=labels: BT.reference_context(s, labels)) if s.get("reference_case") else None
+        entries.append({**BT.compare_span(root / "spans" / s["id"], lambda labels=labels: labels, ref), "family": s["family"]})
+    units = {e["span"]: e.pop("_pool") for e in entries if "_pool" in e}
+    bg = [e["span"] for e in entries if e["family"] in BT.BACKGROUND_FAMILIES and e["span"] in units]
+    return dict(spans=entries, pooled={"background": {"spans": bg, "curve": BT.pooled_curve([units[m] for m in bg])}})
+
+
 def merge(run):
     out, lines = {}, []
     for arm in ("time", "frequency"):
         entries = {cid: json.loads((run / f"{arm}-t2" / cid / "entry.json").read_text())
                    for cid in SEED if (run / f"{arm}-t2" / cid / "entry.json").exists()}
-        r1 = run / f"{arm}-t1" / "results.json"
+        r1 = span_results(run / f"{arm}-t1")
         out[arm] = dict(t2={cid: {k: e.get(k) for k in ("true_pair_rank", "margin_pct", "top_error_m", "refined_error_m", "status")}
                             for cid, e in entries.items()},
-                        t1=_t1_numbers(json.loads(r1.read_text())) if r1.exists() else None)
+                        t1=_t1_numbers(r1) if r1 else None)
     for cid in SEED:
         lines.append(f"{cid:28s} time {out['time']['t2'].get(cid)}  |  frequency {out['frequency']['t2'].get(cid)}")
     verdict = []

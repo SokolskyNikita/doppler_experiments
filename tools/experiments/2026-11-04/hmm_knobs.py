@@ -8,12 +8,15 @@ tracked: the (theta_cont, theta_birth) pairs, then the pick.
 2. Pick: on round 1's synthetic weak pass (two straight passes, 3 seeds each, amplitude 0.03 in 0.4 noise,
    the lowest at which ridge() covers 95 % of every span; freqtrack_retune.py), the pair with the fewest
    fragments, then the most coverage, then the highest theta_cont, scored as in freqtrack_livermore.py.
+   Retune 1 (counted, written after the time-whitening box picked theta_cont 9, which covers none of the weak
+   pass and so has no fragments to count): only pairs whose median coverage of the weak pass is at least
+   MIN_COVERAGE (0.5) are eligible; the rule is otherwise the same. Its result goes to chosen_cov<m>.json.
 
 Units: one per theta_cont (pairs), each written to RUN/hmm_knobs/<whiten>/pair_<theta_cont>.json when its
 bisection ends and skipped if present; `pick` reads every pair file. Workers (noise windows): DOPPLERTRACK_JOBS.
 
 usage: hmm_knobs.py RUN pairs time|frequency [THETA_CONT ...]
-       hmm_knobs.py RUN pick time|frequency"""
+       hmm_knobs.py RUN pick time|frequency [MIN_COVERAGE]"""
 import os
 import sys
 from concurrent.futures import ProcessPoolExecutor
@@ -77,7 +80,7 @@ def pairs(run, whiten, chosen):
             print(f"theta_cont {tc}: theta_birth {hi:.2f}", flush=True)
 
 
-def pick(chosen, whiten):
+def pick(chosen, whiten, min_coverage=0.0):
     scores = {}
     for tc, tb in chosen.items():
         p = hm.with_params(hm.HMMParams(), theta_cont=tc, theta_birth=tb)
@@ -94,7 +97,10 @@ def pick(chosen, whiten):
         scores[tc] = dict(theta_birth=tb, fragments=tot["fragments"], bridges=tot["bridges"],
                           coverage=float(np.median(tot["coverage"])), error=float(np.median(tot["error"])))
         print(f"theta_cont {tc}, theta_birth {tb}: {scores[tc]}", flush=True)
-    best = min(scores, key=lambda tc: (scores[tc]["fragments"], -scores[tc]["coverage"], -tc))
+    eligible = [tc for tc in scores if scores[tc]["coverage"] >= min_coverage]
+    if not eligible:
+        sys.exit(f"no pair covers {min_coverage} of the weak pass")
+    best = min(eligible, key=lambda tc: (scores[tc]["fragments"], -scores[tc]["coverage"], -tc))
     return scores, (best, scores[best]["theta_birth"])
 
 
@@ -105,9 +111,11 @@ if __name__ == "__main__":
     elif step == "pick":
         found = U.read_all(run / "hmm_knobs" / whiten, "pair_*.json")
         chosen = {d["theta_cont"]: d["theta_birth"] for d in found if d["theta_birth"] is not None}
-        scores, best = pick(chosen, whiten)
+        min_cov = float(sys.argv[4]) if len(sys.argv) > 4 else 0.0
+        scores, best = pick(chosen, whiten, min_cov)
         print("chosen theta_cont, theta_birth:", best)
-        U.write(run / "hmm_knobs" / whiten / "chosen.json", dict(pairs=chosen, rates={d["theta_cont"]: d["rates"] for d in found},
+        name = f"chosen_cov{min_cov:g}.json" if min_cov else "chosen.json"
+        U.write(run / "hmm_knobs" / whiten / name, dict(pairs=chosen, min_coverage=min_cov, rates={d["theta_cont"]: d["rates"] for d in found},
                                                                   weak_pass=scores, chosen=best))
     else:
         sys.exit(__doc__)

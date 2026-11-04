@@ -34,6 +34,8 @@ folder, runs every merge step and writes `side_by_side.txt`.
 
 ## 1. Whitening across frequency (`whiten_frequency.py`)
 
+decision: whether the across-frequency background (the warp record's lead, PLAN item 8) replaces the per-bin running median as the package's whitening (PLAN 4, step 1 `spectrogram`).
+
 The criterion is in the script's docstring and was fixed before anything ran.
 
 | Step | Units | Command |
@@ -58,6 +60,8 @@ as `<arm>-t1_stopped`.
 
 ## 2. The tracker's noise-image θ (`hmm_knobs.py`)
 
+decision: the `HMMParams` defaults θ_cont and θ_birth for Phase 2 item 3, and whether hysteresis in states gets below the noise floor (about 8 dB) that round 1 hit.
+
 | Step | Units | Command |
 |---|---|---|
 | pairs | one per θ_cont in 3..9 dB (7) | `hmm_knobs.py "$RUN" pairs WHITEN [THETA_CONT ...]` |
@@ -77,6 +81,8 @@ Its result, `chosen.json`, sets the `HMMParams` defaults, which makes `test_nois
 pass.
 
 ## 3. The tracker on Livermore and the development events (`hmm_livermore.py`)
+
+decision: Phase 2 item 3, whether `hmmtrack` replaces `ridge()` as the fitting path's tracker, which unblocks item 4's `fit_track` re-run. If it is not met, item 3's next step is the tracker's objective, not another configuration.
 
 | Step | Units | Command |
 |---|---|---|

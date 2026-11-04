@@ -11,7 +11,7 @@ The files themselves live outside the repo, in `$DOPPLERTRACK_DATA/reference/` (
 
 The material is copyrighted and the upstream repo is public, so it stays on this machine and never goes into git.
 
-Open-source projects on the same problem, the commits inspected and what PLAN.md takes from them: [related-projects.md](related-projects.md).
+Open-source projects on the same problem, the commits inspected and what PLAN.md takes from them: [related-projects.md](related-projects.md). Every search for data, what it found and why each source was taken, deferred or rejected: [datasets.md](datasets.md).
 
 ## How to use this folder
 

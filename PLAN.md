@@ -362,7 +362,7 @@ These thresholds are provisional, and they are fixed before the experiments run.
 **Step A: a thin `locate` with explicit failures.** One command over today's pieces:
 1. audio → spectrogram → `detect` → usability check (S6);
 2. flight data (with margin, cached) → CPA table (cached);
-3. search with one automatically chosen pair of adjacent detected flyovers. Tier 2 checks it with and without the silence filter, which is off by default in `locate` (S4);
+3. search with one automatically chosen pair of adjacent detected flyovers. Tier 2 checks it with and without the silence filter; since 2026-11-04 `locate` runs it on by default, with the comparable pair rule (S4, amended below);
 4. refine the winner with the other flyovers;
 5. verdict and `result.json`.
 
@@ -375,7 +375,8 @@ Each failure is an outcome with a stated reason:
 - no candidate surviving.
 
 **Step B: search over several pairs.** Choosing pairs automatically breaks assumptions the single-pair search relies on:
-- **Silence filter** (S4). Off by default in `locate`. Close passes that no detected flyover explains become a weak penalty at re-ranking, validated separately. `search` keeps upstream's default.
+- **Silence filter** (S4). On by default in `locate` since 2026-11-04, by the criterion written before the step A runs (it found two seed cases against one and lost none); that rests on one recording and is re-judged on the next positive. `search` and the saved-fit path keep upstream's default. Close passes that no detected flyover explains remain a candidate for a weak penalty at re-ranking, validated separately.
+   **Status (2026-11-04): step A built and judged on the development set; one recording of two found from automatic events** ([locate](docs/experiments/2026-11-04-locate.md)). Every outcome lands where it should (traces ending early, the negatives with nothing within 2 km, the nearest wrong candidate 43 km off) except the midnight clip, whose wrong pair puts the clock on the day before so the midnight check never fires. The top-two pair rule finds no seed case; the comparable rule finds Oyster Bay with the silence filter on, true pair first, refined to 278 m, margins 1.8–2.9 %, at 6–10× the time, and becomes the default. The eagle cam is found by neither rule, filter on or off: it fails at event choice (item 7), not at the rule. Two things the runs show that the plan did not use: a recording's stated start time (the eagle cam's metadata is good to 60 s) would reject every wrong clock seen, so a clock gate from case metadata is step A's next item, the tolerance kept as data; and winning margins of 1.8–2.9 % mean Phase 4's verdict has to judge a find against the null of the maximum (docs/proposals/2026-11-04-verdict-null.md), never a margin.
 - **Assignment** (S1, S2). Each candidate assigns events to flights one to one:
   - a detection explains at most one pass, and a pass at most one detection;
   - the harmonics of one pass are one event;

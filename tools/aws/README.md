@@ -5,7 +5,7 @@ instance per job, started in about 30 s, terminated when the job ends. A persist
 `tools/check.sh` and interactive work. Why this design and what it was measured against:
 [docs/experiments/2026-11-04-aws-fleet.md](../../docs/experiments/2026-11-04-aws-fleet.md).
 
-## Handoff (2026-11-04, 23:30 UTC)
+## Handoff (2026-11-04, 23:15 UTC)
 
 For a fresh operator, Codex or a new session, taking the fleet over:
 

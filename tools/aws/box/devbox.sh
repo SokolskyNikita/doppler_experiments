@@ -29,4 +29,6 @@ export DOPPLERTRACK_BUCKET=$BUCKET
 export AWS_REGION=$AWS_REGION
 EOS
 sudo -iu ubuntu bash -c 'git clone -q https://github.com/SokolskyNikita/dopplertrack.git ~/dopplertrack && cd ~/dopplertrack && git checkout -q dev && uv sync --frozen -q'
+# the idle stop: off after 30 min with no dev run, command, session or load (devbox-idle.sh)
+s5cmd --log error cp "s3://$BUCKET/tools/devbox-idle*.sh" /tmp/ && bash /tmp/devbox-idle-install.sh /tmp/devbox-idle.sh
 echo "dopplertrack dev box ready"

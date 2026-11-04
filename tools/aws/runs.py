@@ -57,14 +57,27 @@ SEED_DATA = ("derived", "raw/audio/youtube", "raw/audio/xenocanto", "raw/aux", "
              "raw/seismic")
 TOOLS = "tools.json"
 # Never on the fleet or in the bucket: the owner's home recordings and anything derived from them (household
-# audio, exact home coordinates). Paths are relative to the data root; any path with a "private" folder in it
-# counts too. `launch` refuses them as inputs, `seed` and `fetch-sources` exclude them (PM decision, 2026-11-04).
-PRIVATE_PREFIXES = ("private/", "raw/seattle-home/", "derived/traces/20261104-ha-pilot-2/")
+# audio, exact home coordinates, the ADS-B the recorder fetches for a circle around the home). Paths are relative
+# to the data root (PM and SDE-B, 2026-11-04):
+# - these prefixes, any path with a "private" folder in it, and each prefix listed in private/fleet-exclude.txt;
+# - under derived/traces/, everything but the date-named day traces (YYYY-MM-DD/, YYYY-MM-DD.log): the recorder
+#   writes its sessions there (20261104-ha-pilot, -coexist, ...), so only the public day archives' cuts go up.
+PRIVATE_PREFIXES = ("private/", "incoming/", "raw/seattle-home/")
+DAY_TRACE = re.compile(r"derived/traces/\d{4}-\d{2}-\d{2}(\.log|/.*)?")
+
+
+def private_prefixes() -> tuple[str, ...]:
+    listed = DATA_ROOT / "private" / "fleet-exclude.txt"
+    extra = tuple(l.strip().strip("/") + "/" for l in listed.read_text().splitlines()
+                  if l.strip() and not l.startswith("#")) if listed.exists() else ()
+    return PRIVATE_PREFIXES + extra
 
 
 def is_private(rel: str) -> bool:
-    rel = rel.strip("/") + "/"
-    return rel.startswith(PRIVATE_PREFIXES) or "/private/" in "/" + rel
+    rel = rel.strip("/")
+    if (rel + "/").startswith(private_prefixes()) or "/private/" in f"/{rel}/":
+        return True
+    return rel.startswith("derived/traces/") and not DAY_TRACE.fullmatch(rel)
 
 
 def refuse_private(paths, what: str) -> None:
@@ -75,11 +88,17 @@ def refuse_private(paths, what: str) -> None:
 
 
 def seed_excludes(sub: str) -> list[str]:
-    """aws s3 sync --exclude patterns that keep every private prefix out of a sync of data-root folder sub."""
-    out = ["--exclude", "*/private/*", "--exclude", "private/*"]
-    for pre in PRIVATE_PREFIXES:
-        if pre.startswith(sub.strip("/") + "/"):
-            out += ["--exclude", pre[len(sub.strip("/")) + 1:] + "*"]
+    """aws s3 sync filters that keep every private path out of a sync of data-root folder sub. The CLI applies
+    them in order, the last match winning, so the day-trace includes come before the private excludes."""
+    sub = sub.strip("/")
+    out = []
+    if sub == "derived":
+        out += ["--exclude", "traces/*", "--include", "traces/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/*",
+                "--include", "traces/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9].log"]
+    out += ["--exclude", "*/private/*", "--exclude", "private/*"]
+    for pre in private_prefixes():
+        if pre.startswith(sub + "/"):
+            out += ["--exclude", pre[len(sub) + 1:] + "*"]
     return out
 
 
@@ -157,7 +176,7 @@ def case_inputs(case_ids: list[str]) -> list[str]:
         if cid not in cases:
             sys.exit(f"no case {cid!r} in bench/cases.json")
         c = cases[cid]
-        if c.get("private"):
+        if c.get("private") or c.get("site"):
             sys.exit(f"--case {cid}: a private case (its site's coordinates and audio stay on the Mac) never goes to "
                      "the fleet")
         traces = c.get("flight_data", {}).get("traces")          # one file, or one per UTC day
@@ -689,6 +708,8 @@ def seed_tools(a) -> None:
                         data = t.extractfile(m).read()
                         s3.put_object(Bucket=bucket, Key=f"tools/{arch}/{member}", Body=data)
                         print(f"tools/{arch}/{member} from {item['name']} ({len(data) / 1e6:.0f} MB)")
+    for name in ("devbox-idle.sh", "devbox-idle-install.sh"):       # the dev box's idle stop
+        s3.upload_file(str(HERE / "box" / name), bucket, f"tools/{name}")
     s3.upload_file(str(HERE / TOOLS), bucket, f"tools/{TOOLS}")
 
 

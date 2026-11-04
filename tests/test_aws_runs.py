@@ -263,22 +263,34 @@ def test_memory_in_use_is_total_less_available(tmp_path, monkeypatch):
 
 
 def test_private_data_never_reaches_the_fleet_or_the_bucket(tmp_path, monkeypatch):
-    for p in ("private/seattle/site.json", "raw/seattle-home/2026-11-04.flac", "derived/traces/20261104-ha-pilot-2/area.jsonl",
+    monkeypatch.setattr(runs, "DATA_ROOT", tmp_path)
+    for p in ("private/seattle/site.json", "raw/seattle-home/2026-11-04.flac", "incoming/seattle-home/a.wav",
+              "derived/traces/20261104-ha-pilot/area.jsonl", "derived/traces/20261104-ha-pilot-2/area.jsonl",
+              "derived/traces/20261105-pilot/x", "derived/traces/20261104-coexist", "derived/traces/day1.launch.log",
               "derived/foo/private/x.npz", "runs/2026-11-05-home/private/a.json"):
         assert runs.is_private(p), p
         with pytest.raises(SystemExit, match="private data"):
             runs.refuse_private([p], "--input")
-    for p in ("derived/traces/2026-11-01/seattle.npz", "raw/audio/youtube/oyster_bay.webm", "derived/privateer/x"):
+    for p in ("derived/traces/2026-11-01/seattle.npz", "derived/traces/2024-12-27.log", "derived/traces/2026-09-08",
+              "raw/audio/youtube/oyster_bay.webm", "derived/privateer/x", "derived/oyster_bay/rec.npz"):
         assert not runs.is_private(p), p
-    # the seed's syncs of derived/ and raw/ exclude the private prefixes under them
-    assert ["--exclude", "traces/20261104-ha-pilot-2/*"] == runs.seed_excludes("derived")[-2:]
+    # prefixes the private folder lists are private too
+    (tmp_path / "private").mkdir()
+    (tmp_path / "private" / "fleet-exclude.txt").write_text("# home sessions\nderived/home-spectrograms/\n")
+    assert runs.is_private("derived/home-spectrograms/a.npz")
+    # the seed's sync of derived/ keeps only day traces under traces/, and excludes the listed prefixes
+    ex = runs.seed_excludes("derived")
+    assert ex[:6] == ["--exclude", "traces/*", "--include", "traces/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/*",
+                      "--include", "traces/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9].log"]
+    assert ex[-2:] == ["--exclude", "home-spectrograms/*"]
     assert ["--exclude", "seattle-home/*"] == runs.seed_excludes("raw")[-2:]
-    assert runs.seed_excludes("raw/audio/youtube")[:4] == ["--exclude", "*/private/*", "--exclude", "private/*"]
-    # a case marked private is refused
+    # a case marked private, or naming a site, is refused
     import json
     (tmp_path / "bench").mkdir()
     (tmp_path / "bench" / "cases.json").write_text(json.dumps({"cases": [
-        {"id": "home-1", "private": True, "audio": {"path": "private/seattle/a.flac"}}]}))
+        {"id": "home-1", "private": True, "audio": {"path": "private/seattle/a.flac"}},
+        {"id": "home-2", "site": "seattle-home", "audio": {"path": "raw/audio/x.flac"}}]}))
     monkeypatch.setattr(runs, "REPO", tmp_path)
-    with pytest.raises(SystemExit, match="private case"):
-        runs.case_inputs(["home-1"])
+    for cid in ("home-1", "home-2"):
+        with pytest.raises(SystemExit, match="private case"):
+            runs.case_inputs([cid])

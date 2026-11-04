@@ -74,12 +74,14 @@ Several invocations on one box: a driver that runs them at once with `DOPPLERTRA
 
 ## Private data
 
-The owner's home recordings (household audio, exact home coordinates) and everything derived from them stay on
-the Mac. `runs` keeps an explicit list, `PRIVATE_PREFIXES` in runs.py: `private/`, `raw/seattle-home/` and
-`derived/traces/20261104-ha-pilot-2/`, plus any path with a `private` folder in it. `runs launch` refuses those
-paths from `--input`, `--input-run`, `--inputs-from` and a case's files, and any case marked `private: true`;
-`runs seed` passes them to every sync as `--exclude`, and `fetch-sources` skips them. Add a prefix there before
-any new private data lands outside `private/`.
+The owner's home recordings (household audio, exact home coordinates, the ADS-B the recorder fetches for a circle
+around the home) and everything derived from them stay on the Mac. In runs.py: `PRIVATE_PREFIXES` (`private/`,
+`incoming/`, `raw/seattle-home/`), any path with a `private` folder in it, every prefix listed one per line in
+`$DOPPLERTRACK_DATA/private/fleet-exclude.txt`, and under `derived/traces/` everything but the date-named day traces
+(`YYYY-MM-DD/`, `YYYY-MM-DD.log`), since the recorder writes its sessions there. `runs launch` refuses those paths
+from `--input`, `--input-run`, `--inputs-from` and a case's files, and any case marked `private: true` or naming a
+`site`; `runs seed` turns them into `--exclude` filters on every sync (day traces kept by `--include`), and
+`fetch-sources` skips them. A new private location goes into fleet-exclude.txt before data lands there.
 
 ## Sizing
 

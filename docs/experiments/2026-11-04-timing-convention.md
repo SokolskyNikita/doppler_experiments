@@ -191,3 +191,15 @@ search's default to (16, 4) would break today's saved-fit result on Oyster Bay.
 - The default can move when the saved fits are refitted with the contrast or least-squares objective, or
   when a run shows no saved-fit regression.
 - PLAN's phase exit ("no wrong pair beats the true one where it didn't before") rules out switching now.
+
+## Reproduced at today's code, on the fleet
+
+The decision line in cloud_jobs.md: does the (16 s, 4 s) setting still hold at today's code (`18ff8b4`), after the
+changes since `51f59ce`?
+- **The run:** the same 45 cells, made into one command by
+  [`timing_sweep.py`](../../tools/experiments/2026-11-04/timing_sweep.py).
+- **Boxes:** 8 × 8xlarge (4 spot, 4 on demand), 506–1,018 s wall each.
+- **Shards:** `runs/2026-11-04-timing-sweep-s1of8/` to `-s8of8`. **Merged:** `runs/2026-11-04-merge-sweep/`.
+- **Result:** identical. All 60 of the cells' per-case rows match the original table (count reaching scoring,
+  survival within 250 m, least distance, rank), and so do both baselines. (16, 4) is adopted again.
+- **Outcome:** it stays the development setting a default change would cite.

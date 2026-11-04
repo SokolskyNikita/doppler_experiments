@@ -2,7 +2,7 @@
 
 <!-- index
 question: Does scoring each event pair in units of its own wrong guesses put event pairs on one scale (item 7, stage A)?
-outcome: Not met; stage A doesn't ship: the loudest event no longer carries its pairs, but the criterion isn't reached
+outcome: Not met: A1 is inside the null's noise and not separable; the comparable score moves the eagle cam's true pair from 5th to 2nd and no further
 -->
 
 ## Question and criterion
@@ -162,3 +162,44 @@ heard-CPA gate.
 One recording, three extras, one pair of candidates: a lead. Script:
 [`frozen_clock_extra.py`](../../tools/experiments/2026-11-04/frozen_clock_extra.py). Output:
 `runs/2026-11-04-frozen-clock-extra/frozen_clock_extra.json`.
+
+## Stage A at today's code, on the fleet
+
+Rerun on 2026-11-04 at `18ff8b4` to answer cloud_jobs.md's decision line: is event choice the Phase 3 blocker?
+- **Setup:** the same 30 searches and detections. N = 1,000 per event, as before.
+- **Boxes:** 4 × 8xlarge (3 on demand, 1 spot), 300–366 s wall each, $0.59.
+- **Shards:** `runs/2026-11-04-comparable-score-s1of4/` to `-s4of4`. **Merged:** `runs/2026-11-04-merge-pairs-a/`.
+- The ranking was hashed before the labels were read.
+
+| | Criterion | Result |
+|---|---|---|
+| A1 | the eagle cam's true pair first of ten | **not met, and inside the null's noise**: 2nd at Z 8.176, 0.049 behind 4 + 2 (8.225) |
+| A3 | Oyster Bay's 1 + 2 first | met: Z 16.93, against 14.84 for the next |
+| A2 | reported only | WSW's top margin 2.75 |
+
+**The noise test**, by [`a1_noise.py`](../../tools/experiments/2026-11-04/a1_noise.py), on this run's kept nulls:
+- the gap is −0.049, and its standard deviation from the nulls' sampling error is 0.128;
+- the true pair comes first in 42 % of 20,000 redraws;
+- deciding the gap would take N ≈ 27,300 per event.
+
+**The null's noise, directly.**
+- Inside the true pair's own search, the true flights and the 14.6 km wrong pair (a0e90b/a25807) have the same raw
+  event scores as in stage A's `abe6998` run: [6.242, 4.029] and [6.802, 3.223].
+- Only the nulls changed. The CPA table built on the Linux box has one row more than the Mac's (35,861,817 against
+  35,861,816), so the null's index draws land on different rows.
+- That alone moved Z by about 0.15, and swapped the two candidates: true 8.342 and wrong 8.323 before, against
+  8.157 and 8.176 now.
+- So the call between them is the null's sampling, not the recording.
+
+**Outcome (PM, 2026-11-04).**
+- A1 is inside the null's noise at N = 1,000, and is not separable. A true pair that a 14.6 km wrong pair beats by
+  0.05 in Z ≈ 8 is not something this score separates, whatever the null's size.
+- The comparable score moves the eagle cam's true pair from 5th to 2nd, and no further. A3 is met.
+- No rerun at a larger N: stage A's one retune stays unspent. A bigger null would only measure the −0.049 ± 0.128
+  gap more precisely.
+- The decision line's answer:
+  - The comparable score improves event choice but doesn't fix it.
+  - B1 is not met on any case, in [stage B](2026-11-04-hypotheses.md)'s reproduction at today's code. So the fit's
+    bias is the blocker for Phase 3.
+- That the CPA table differs by one row between Linux and macOS is its own item: see
+  [parallel-cpa](2026-11-04-parallel-cpa.md).

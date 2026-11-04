@@ -27,6 +27,7 @@ pulled folder.
   - Each case's own-day maximum Z is judged against γ, the 1 % point of the maximum Z over other days' traffic. γ is fitted by A's `collective_null.py`, Gumbel or the empirical tail by KS.
   - If the negatives stay below γ and the positives clear it, `locate`'s step B becomes the collective find. If a negative clears it, the floor's design (§6's last line) is what changes.
 - **Pinned.** Commit 661c10f, from a detached checkout. Its `collective.py` is 40454ae's, so the draws use the own-day units' statistic: the top-5 coarse cells, ±10 % f0 for every case, k = 10 windows, and the same detection.
+- **oyster-bay-sources-removed has no units of its own.** It shares oyster-bay's spectrogram, box, range and DEM setting; only its own day's traces differ, with the true pair removed. On any other day its draw is oyster-bay's computation exactly, so `collective_null.py` reads oyster-bay's 50 draws for it.
 - **Launch.** 35 × 8xlarge (Oyster Bay's units need more than 32 GB); shard 1 first as the smoke shard.
 - **Inputs** (`--null --inputs`): the five cases' locate inputs, plus each null day's cut of the case's box, `derived/traces/<day>/<box>.npz`. That's 253 paths in all. CPA tables are built per day on the box, under `cpa/collective/null/<day>/`.
 

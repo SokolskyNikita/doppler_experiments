@@ -16,7 +16,7 @@ A fuller day-box count alone doesn't decide.
 - `.env` and the captured curl files were never opened.
 - No adsbx data was fetched, with one exception: the fixed smoke script used the `.env` session for one request (part 1).
 - Every request went at the CLI's own pace: serial, 2 s apart.
-- Outputs went to run folders. Since the fetcher's cache changed under the run (bug 13), every source gets its own `--cache-dir`.
+- Outputs went to run folders. While bug 13 was open, every source got its own `--cache-dir`; with 0.3.0 that's no longer needed.
 
 ## 1. Does it work
 
@@ -38,12 +38,16 @@ A fuller day-box count alone doesn't decide.
 | 8 | `trace` with no `--start` silently fetches the first day on record | `trace --icao a1dfeb` | yes, now refuses |
 | 9 | docs pointed at a missing script and a missing procedure; ruff absent from the venv | – | yes |
 | 10 | smoke fetched one network only | `scripts/smoke.py` | yes; but see below |
-| 11 | `--for` takes one unit only | `replay … --for 23h59m`, `--for 1h30m` | **open** |
+| 11 | `--for` takes one unit only | `replay … --for 23h59m`, `--for 1h30m` | yes, in 0.3.0: `--for 1h30m` gives 181 slices, 20:53–22:23Z |
 | 12 | non-ICAO (`~`, TIS-B) addresses fetched the wrong file (tilde stripped) | 54 `~` hexes all "nothing found" | yes, fixed during the run |
-| 13 | **cache keyed on the URL path alone**: every mirror got whichever mirror's copy was cached first | `trace --source airplaneslive --icao a2baea --start 2024-12-28 --end 2024-12-28` gave 283 points (adsbfi's) against 326 with an isolated cache; 328 of 381 windowed pairs byte-identical | **open when last checked** (cache.py of 03:45) |
+| 13 | **cache keyed on the URL path alone**: every mirror got whichever mirror's copy was cached first | `trace --source airplaneslive --icao a2baea --start 2024-12-28 --end 2024-12-28` gave 283 points (adsbfi's) against 326 with an isolated cache; 328 of 381 windowed pairs byte-identical | yes, in 0.3.0: the key is host + path; adsbfi and airplanes.live into one cache folder give 283 and 326 rows, two entries |
 
-**New issues on the fixed checkout:**
-- **smoke.py uses the session.** It loads `.env` and makes one adsbx request with the user's session whenever a cookie is present, while its docstring says it needs no cookie. My first re-verification run did that once.
+**Final checkout,** checked after both rounds: 0.3.0+9e61db56, sha256 of its .py files 508300c486c1. 249 unit tests pass. Smoke passes 9 checks, and adsbx is skipped: it now sends no session unless `--session` is passed. Every reported bug is fixed.
+- **The per-source cache folders are no longer needed.** One cache folder keeps the mirrors apart.
+- **The cache migration left nothing else missing for us.** The converter and the comparison read the CLI's own jsonl rows, not its cache. The only casualty was the 0.2.0-era bodies behind the first part-2 run, already re-fetched into `traces2/`.
+
+**New issues found on the intermediate fixed checkout** (0a86aa97b871), all resolved in 0.3.0:
+- **smoke.py used the session.** It loaded `.env` and made one adsbx request with the user's session whenever a cookie was present, while its docstring said it needed no cookie. My first re-verification run did that once. Fixed in 0.3.0: the session is opt-in.
 - **It changed while being tested.** 34 of my requests hit half-edited code:
   - 22 × `TypeError: _client() takes from 3 to 5 positional arguments but 7 were given`;
   - 8 × `'Client' object has no attribute '_note'`;
@@ -128,7 +132,7 @@ A fuller day-box count alone doesn't decide.
 - **Where the tool helps now.**
   - Denser trajectories at CPA for model-error and timing work (Phase 2 items 1 and 2), as a sensitivity alongside our cut. The Livermore gaps close to about 10 s.
   - Flights our cut lacks: 21 in NY and 2 near the eagle cam.
-- **What a union would need first.** A merge that keeps one network per stretch and fills only that network's gaps, not an interleave, so it doesn't add jitter. And bug 13 fixed.
+- **What a union would need first.** A merge that keeps one network per stretch and fills only that network's gaps, not an interleave, so it doesn't add jitter. Bug 13 is fixed in 0.3.0.
 - **Limits.**
   - Free mirrors start at 2023-01-27, and adsb.lol's mirror has holes.
   - A box-day of per-aircraft traces takes hours at 2 s per request.

@@ -76,3 +76,48 @@ pulled folder.
   - Each case's whole coarse map at ±25 % gives the true cell's rank and the margin rule's kept count.
   - The highest kept cell's fine stage gives the per-cell time the PM asked for before the fine stage launches.
 - **Units:** "<case>--cell0", one per case, 8 in all. Shard 1 (oyster-bay) runs first as the smoke shard. 8xlarge.
+
+## Handoff (2026-11-04, about 23:45Z)
+
+The branch is `claude/sde-c-pm-coordination-cbbe43`. Every change is committed. The tip passes `tools/aws/runs dev run -- tools/check.sh` (pytest 74 s).
+
+**Running on the fleet.**
+- **SWFL and Essex null, first design** (`2026-11-04-collective-null-s1of24` … `s24of24`, commit a225ac8, 24 × 8xlarge).
+  - 95 units: `eagle-cam-clip-18000s--null--<day>` × 50 and `xenocanto-xc990819--null--<day>` × 45.
+  - Each writes `units/<unit>/null_draws.npz` (day, max_S, second_S, lat, lon, n_matched, clock_audio_minus_utc_s).
+  - The run's `collective.py` is 40454ae's, the own-day units' statistic: the top 5 coarse cells, ±10 % f0.
+  - **To collect:**
+    1. `tools/aws/runs pull` each job, or `runs wait` first; a waiter was running in this session.
+    2. Optionally merge with `collective_run.py <new run> --null --null-cases eagle-cam-clip-18000s,xenocanto-xc990819 --merge --resume <the 24 folders>`, from a checkout at a225ac8 (`null_draws.json`).
+    3. Give A's `tools/experiments/2026-11-04/collective_null.py OUT_RUN OWN.json DIR...` the 24 folders. It reads every `units/*--null--*/null_draws.npz`. `OWN.json` is `runs/2026-11-04-collective-find-merge/OWN.json`.
+  - A fits γ (Gumbel or the empirical tail by KS) and writes the verdicts before reading labels.
+  - Spot-interrupted shards relaunch with `--only-shard K` from a checkout at a225ac8; finished units are kept through `--resume`.
+- **Second design, coarse stage smoke** (`2026-11-04-collective-coarse-v2-s1of8`, commit 91fb1c1, 8xlarge): unit `oyster-bay--cell0`.
+
+**Held: the NY null draws** (oyster-bay, wsw150 and north150 × 50; sources-removed reads oyster-bay's, see above).
+- Criterion 1 fails on Oyster Bay under the first design, so its statistic is being replaced. NY draws made on it would be redrawn.
+- The one NY smoke unit (oyster-bay--null--2026-07-10, Z 22.84, 31 min) is in the cancelled `collective-null-s1of35` job's folder in the bucket. It isn't needed.
+
+**The own-day result, first design:** `runs/2026-11-04-collective-find-merge/` (`collective.json`, `OWN.json`), recorded in docs/experiments/2026-11-04-collective-find.md.
+- The eagle cam clip is found at 0.5 km with both true flights.
+- Oyster Bay and hp150 are lost: their true cell isn't among the top 5 coarse cells, and ace391's detected tone is 11.5 % off.
+- Criteria 1 and 4 fail; criterion 3 waits for γ.
+
+**Built: the second design** (03c6a39 `collective.py`, 91fb1c1 driver; the design step and the gather's timing are in the record).
+- Each candidate's tone over ±25 % through `LogView`, 3.8× cheaper per f0 point.
+- Coarse cells kept by margin (Z ≥ Z_max − 2σ_c, at most 20), with the whole coarse map in `result.json["coarse_map"]`.
+- Fine nulls drawn over the whole box; `only_cells` runs one kept cell per unit.
+
+**What the ±25 % coarse map should show.**
+- **On each case:** the margin rule's `margin` block (cells within it, kept, capped) and `coarse_truth`, the true cell's rank and whether it is within the margin.
+- **On the positives:** whether Oyster Bay's true cell now ranks inside the margin, since ace391 is reachable at −10.4 %, and whether the eagle cam's stays in.
+- **The PM's runtime check:** the `oyster-bay--cell0` unit's `walls.fine` is one cell's time. It must be read before the fine stage launches; the estimate is about 5.5 min.
+
+**Not yet run or built.**
+- **The coarse stage's other seven units.** After the smoke reads clean: `runs launch collective-coarse-v2 --shards 8 --only-shard K` for K = 2–8, with `--repo` a checkout at 91fb1c1.
+- **The merge:** `collective_run.py <run> --merge --resume <8 folders>`. It writes `collective.json` and `KEPT.json`.
+- **The fine stage:** `collective_run.py --fine-from KEPT.json`, one unit per (case, kept cell k ≥ 1), launched as its own job. Then merge it with `--extra-units <the coarse run>`, so each case takes its best cell over both stages.
+- **The second design's null.** `--null` now runs the new statistic with every kept cell in one unit. With up to 20 cells per draw that's long, so before launching it, split the null units per cell as the fine stage does, or bound the cells.
+- **Whether the old SWFL/Essex draws still apply.** Those running draws price the first design only. If the second design is adopted, they're redrawn under it.
+
+**Next step:** read `oyster-bay--cell0` (its coarse truth rank, margin block and per-cell time), report them to the PM, then launch coarse units 2–8.

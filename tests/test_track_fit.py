@@ -107,3 +107,36 @@ def test_unix_scale_times_are_recovered():
     f0, v, d = PASSES[3]
     fit = tracks.fit_track(_track(f0, v, d, tc=1.8e9), c=C)
     assert fit.t_cpa_emit == pytest.approx(1.8e9, abs=1e-3) and fit.d == pytest.approx(d, rel=1e-4)
+
+
+def test_a_rising_track_never_gives_a_negative_speed():
+    """The physical bound beta <= 0: a curve that rises (here a pass reversed in time) fits as flat."""
+    f0, v, d = PASSES[0]
+    tr = _track(f0, v, d)
+    fit = tracks.fit_track(tracks.Track(tr.t, tr.f[::-1]), c=C)
+    assert fit.beta <= 0 and not fit.identified and not fit.v < 0
+
+
+def _straight_pass_ls():
+    """SDE-D's independent implementation (tools/experiments/2026-11-04/straight_pass_ls.py)."""
+    import importlib.util
+    from pathlib import Path
+    path = Path(__file__).resolve().parents[1] / "tools/experiments/2026-11-04/straight_pass_ls.py"
+    spec = importlib.util.spec_from_file_location("straight_pass_ls", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+@pytest.mark.parametrize("f0,v,d", PASSES)
+def test_agrees_with_the_independent_implementation(f0, v, d):
+    other = _straight_pass_ls()
+    clean = _track(f0, v, d)
+    a, b = tracks.fit_track(clean, c=C), other.fit(clean.t, clean.f, c=C)
+    for mine, theirs in ((a.f0, b["f0"]), (a.v, b["v"]), (a.d, b["R"]), (a.t_cpa_emit, b["tau"])):
+        assert mine == pytest.approx(theirs, rel=1e-7, abs=1e-6)
+    noisy = _track(f0, v, d, noise=0.4, seed=5)
+    a, b = tracks.fit_track(noisy, c=C), other.fit(noisy.t, noisy.f, c=C)
+    sd = np.sqrt(np.diag(a.cov))                                   # the fit's own spread, a floor
+    for k, (mine, theirs) in enumerate(((a.f0, b["f0"]), (a.v, b["v"]), (a.t_cpa_emit, b["tau"]), (a.d, b["R"]))):
+        assert abs(mine - theirs) <= 1e-3 * sd[k]

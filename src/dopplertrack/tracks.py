@@ -6,7 +6,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass, asdict
 
 import numpy as np
-from scipy.optimize import minimize
+from scipy.optimize import least_squares, minimize
 
 from .audio import Spectrogram
 from .doppler import ideal_curve, speed_of_sound
@@ -285,7 +285,9 @@ def _z(t, tc, s):
 
 def _profile_rss(t, g, w, tc, s):
     """Weighted residual sum of squares with alpha and beta solved in closed form (eq. 18/19, weighted as
-    Quinn 1995 eq. 2). tc and s broadcast against each other; t, g, w are the points (last axis)."""
+    Quinn 1995 eq. 2), under the physical bound beta <= 0: a pass's curve falls, so its speed is positive.
+    beta = Sgz/Szz, so where Sgz >= 0 the bounded optimum is beta = 0, a flat line, whose residual is Sgg.
+    tc and s broadcast against each other; t, g, w are the points (last axis)."""
     z, _ = _z(t, np.asarray(tc)[..., None], np.asarray(s)[..., None])
     sw = w.sum()
     gm = (w * g).sum() / sw
@@ -293,7 +295,7 @@ def _profile_rss(t, g, w, tc, s):
     szz = (w * (z - zm) ** 2).sum(-1)
     sgz = (w * (g - gm) * (z - zm)).sum(-1)
     sgg = (w * (g - gm) ** 2).sum()
-    return sgg - np.where(szz > 0, sgz ** 2 / np.where(szz > 0, szz, 1.0), 0.0)
+    return sgg - np.where((szz > 0) & (sgz < 0), sgz ** 2 / np.where(szz > 0, szz, 1.0), 0.0)
 
 
 def fit_track(track: Track, c: float | None = None, weighted: bool = False,
@@ -305,8 +307,9 @@ def fit_track(track: Track, c: float | None = None, weighted: bool = False,
     Starts: a grid of n_tc emission-CPA times over the track's span extended by half of it on each side
     (a partial track's CPA can lie outside it), times n_s values of s spanning the speed and distance
     bounds; the n_refine best grid cells are each refined by Nelder-Mead on (t_c, log s), since variable
-    projection doesn't remove local optima. weighted=True weights each point by its amplitude squared
-    (Quinn 1995). Raises ValueError with fewer than 8 usable points."""
+    projection doesn't remove local optima. The best optimum is then polished by least_squares to
+    numerical precision. weighted=True weights each point by its amplitude squared (Quinn 1995). Raises
+    ValueError with fewer than 8 usable points."""
     c = speed_of_sound() if c is None else c
     t_abs, g, a = track.usable()
     if len(t_abs) < 8:
@@ -348,10 +351,25 @@ def fit_track(track: Track, c: float | None = None, weighted: bool = False,
         if all(abs(sol[1] - o[1]) > 1.0 or abs(np.log(sol[2] / o[2])) > 0.05 for o in distinct):
             distinct.append(sol)
     rss, tc, s, converged = distinct[0]
+    # polish the best optimum to numerical precision: Nelder-Mead stops at its step tolerance
+    sqw = np.sqrt(w)
+
+    def bounded_resid(x):
+        zz, _ = _z(t, x[0], np.exp(x[1]))
+        zm, gm = (w * zz).sum() / w.sum(), (w * g).sum() / w.sum()
+        szz, sgz = (w * (zz - zm) ** 2).sum(), (w * (g - gm) * (zz - zm)).sum()
+        b = sgz / szz if szz > 0 and sgz < 0 else 0.0
+        return sqw * (g - gm - b * (zz - zm))
+    pol = least_squares(bounded_resid, [tc, np.log(s)], bounds=([tc_lo, np.log(s_lo)], [tc_hi, np.log(s_hi)]),
+                        x_scale=[1.0, 0.1], xtol=1e-12, ftol=1e-12, gtol=1e-12)
+    if pol.success and 2 * pol.cost <= rss:
+        tc, s, rss, converged = float(pol.x[0]), float(np.exp(pol.x[1])), 2 * float(pol.cost), True
     z, u = _z(t, tc, s)
     sw = np.sqrt(w)
     X = np.stack([np.ones_like(z), z], 1)
     (alpha, beta), *_ = np.linalg.lstsq(X * sw[:, None], g * sw, rcond=None)
+    if beta > 0:                    # the bound (see _profile_rss): no falling curve fits, so a flat one
+        alpha, beta = float((w * g).sum() / w.sum()), 0.0
     cond = float(np.linalg.cond(X * sw[:, None]))
     v = float(-beta * c / alpha)
     ok_v = 0 < v < c

@@ -126,6 +126,13 @@ def test_a_case_brings_its_audio_spectrogram_and_traces():
     assert len(got) == len(set(got)) and not any(p.startswith("raw/adsb") for p in got)
 
 
+def test_a_case_with_one_trace_file_per_day_brings_each_day():
+    from bench import cases
+    days = cases.latest_case("eagle-cam-midnight")["flight_data"]["traces"]
+    got = runs.case_inputs(["eagle-cam-midnight"])
+    assert isinstance(days, list) and set(days) <= set(got) and all(isinstance(p, str) for p in got)
+
+
 def test_the_fleet_request_spans_every_family_and_subnet():
     out = {"Subnets": "s-a,s-b,s-c,s-d", "TemplateArm64": "lt-arm", "TemplateAmd64": "lt-x86"}
     req = runs.fleet_request(out, "2026-11-04-x", "16xlarge", on_demand=False)

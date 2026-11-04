@@ -150,8 +150,8 @@ background is only a handful of null sigmas.
   retune didn't pass B1 and B2, so A1/A3 are not run again on it.
   - Two Mac attempts were stopped unread, so neither has a ranking: `runs/2026-11-04-hypotheses-pairs-2/` for a
     reboot at 26 of 30 searches, and `-3` for the move to the AWS fleet at 2 of 30.
-  - It runs on the fleet from `claude/sde-stageb-pairs-45d0bd8`: `45d0bd8`'s code, plus shard support and
-    `null_n`, whose default is 1,000.
+  - It runs on the fleet from `claude/sde-stageb-pairs-45d0bd8` at `6f0ce38`: `45d0bd8`'s code, plus shard support,
+    the kept nulls and `null_n`, whose default is 1,000.
 
 ## Prepared before the A1/A3 result
 
@@ -167,12 +167,18 @@ Written 2026-11-04, before the fleet run, which is the first A1/A3 run whose ran
 - **Inside the null's noise:** anything else.
 
 **What each outcome leads to:**
-- **Met or not met:** that is A1's result, recorded here with A3. No further run.
-- **Inside the noise:** stage A's one retune is spent on N. The follow-up is the same search with `--null-n`,
-  where N is the n that would put the observed gap at 2 standard deviations, rounded up to a multiple of 10,000.
-  - It is judged by the same script and rule.
-  - If it is still inside the noise, this record says the test can't decide.
-  - Both commands are in [`launch_sde_a.sh`](../../tools/experiments/2026-11-04/launch_sde_a.sh) (`a1`).
+- **Met or not met:** that is A1's result, recorded here with A3. No further run is read.
+- **Inside the noise:** stage A's one retune is spent on N, as the PM approved, with N capped at 250,000.
+  - N is the value that would put the observed gap at 2 standard deviations.
+  - **Over 250,000:** this record says the test can't decide at any affordable N. A lower-variance scale estimate is
+    written down as the method change it would be, for a later item, and is not run now.
+  - **At or under 250,000:** the deciding result is the same search at N = 250,000. That run is launched beside the
+    N = 1,000 run rather than after it, because calendar time is the scarce resource.
+  - The N = 250,000 run is read only in this case. It is judged by the same script and rule; if A1 is still
+    inside the noise, this record says the test can't decide.
+- **The commands:** all are in [`launch_sde_a.sh`](../../tools/experiments/2026-11-04/launch_sde_a.sh) (`launch`,
+  `merge`, `a1`). Both runs launch from `claude/sde-stageb-pairs-45d0bd8` at `6f0ce38`: `45d0bd8`'s code, plus shard
+  support, the kept nulls and `null_n`, whose 1,000 default leaves `45d0bd8`'s numbers unchanged.
 - **The scale to expect.** On a synthetic version of stage A's eagle-cam gap (0.03 in Z, z ≈ 4 per event), the
-  gap's standard deviation at n = 1,000 is about 0.22. The follow-up's N would then be about 220,000. The MAD's error,
+  gap's standard deviation at n = 1,000 is about 0.22. The N needed would then be about 220,000. The MAD's error,
   multiplied by z, is most of that spread.

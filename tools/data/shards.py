@@ -12,6 +12,10 @@ Common options (`add_args`):
   --merge            run nothing: check every unit is finished in RUN or the --resume folders, then merge
   --inputs           print the case ids, data-root paths, cache kinds and CPA tables the job reads, as JSON, and exit
 
+The --inputs schema, which `runs launch --inputs-from` reads and every job's listing follows (`bench inputs` too):
+  {"cases": [case id, ...], "inputs": [path under $DOPPLERTRACK_DATA, ...], "cache_kinds": [kind, ...],
+   "cpa_tables": [path under $DOPPLERTRACK_CACHE, ...]}
+
 Merging refuses units whose parameters or commit differ from this invocation's, so a merged result is the one a
 single run on one machine would have given. Worker counts come from $DOPPLERTRACK_JOBS (parallel.default_jobs)
 and never change a result."""

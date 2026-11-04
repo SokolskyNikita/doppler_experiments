@@ -45,7 +45,40 @@ the records stay in `private/runs/`.
 
 ## Results
 
-Pending.
+**Runs.** On the fleet's private bucket and one c7g.4xlarge per run, under the owner's per-file approval: run 3
+(`private/runs/2026-11-04-seattle-home-pilot-3/`) built the spectrogram on the box (33,416 frames, none invalid, from
+the three FLACs) and ran the known-point check, then stopped as `locate` began, on a run folder nothing had created;
+`locate` follows in run 4. Runs 1 and 2 failed before any result, on a cache the box couldn't fill (the aircraft type
+table) and on a private path my code resolved under the repo. All three are fixed.
+
+### Known point
+
+23 propeller or unknown-type passes came within 6 km of ground range during the recording: 14 piston, 6 turboprop and 3
+of unknown type. Each was scored at the site on the recorder's clock against 200 placements of its own curve at wrong
+times.
+
+| Ground range | Passes | Heard |
+|---|---|---|
+| 0–1 km | 4 | 2 |
+| 1–2 km | 2 | 0 |
+| 2–4 km | 10 | 0 |
+| 4–6 km | 7 | 0 |
+| all | 23 | 2 |
+
+- **Heard: 2 of 23, both within 1 km,** one piston and one turboprop, at z 7.4 and 8.1. Two other passes within 1 km
+  were not heard.
+- **Beyond 1 km, none of 19.** The criterion is strict (above every one of the 200 null draws), and below it the
+  evidence is weak but not absent: the median pass scores 2.1 robust σ above its null, and 10 of the 21 unheard passes
+  are above 2 σ. So the farther passes leave a weak trace, above the typical wrong-time placement, but none clears the
+  best of the recording's own wrong-time placements.
+- The 83 jets in the same 2.3 h were not scored: the check takes propeller and unknown types only.
+
+The per-flight table (flight, time, range, height, z) stays in the private run folder: with public ADS-B it would place
+the site.
+
+### Locate
+
+Pending: run 4.
 
 ## Outcome
 

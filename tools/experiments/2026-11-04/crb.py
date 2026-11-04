@@ -4,9 +4,13 @@ straight_pass_ls.model at the pass's own parameters.
 
 Two noise structures:
   package  the package's grid (2.048 s Hann, 0.25 s hop) over the same span, sigma = 0.45 % of f0 (the
-           measured error of tracks.ridge), frames correlated 1, 0.91, 0.67, 0.40, 0.18 at lags 0-4
-           (Harris 1978 eq. 17 for this window and overlap) as a full Toeplitz covariance; the
-           independent form divided by 3.9 is reported beside it as a check
+           measured error of tracks.ridge). PROVISIONAL: the frame correlation is modelled, not measured.
+           c(r) is the Hann window's own autocorrelation at multiples of the hop (Harris 1978 eq. 17,
+           every lag: 1, 0.906, 0.672, 0.400, 0.183, 0.058, 0.010, 0.0005, 0), the correlation of the
+           complex transform coefficients; a frequency estimate from their magnitudes correlates to first
+           order as c(r)^2. Both Toeplitz matrices are positive semi-definite (a truncation to lags 0-4
+           isn't: smallest eigenvalue -0.095). package_c2 is the model, package_c the conservative bound,
+           and package_indep the independent form over the c^2 sum (3.94) as a check
   ridge    Livermore only: the published ridge's own sample times, with sigma and the autocorrelation
            (lags up to 2 s, Bartlett-tapered) of that pass's residuals about the trajectory curve, less
            their 5 s running median: the same noise model_error.py bootstraps, so this bound is the one
@@ -34,7 +38,9 @@ spec = importlib.util.spec_from_file_location("model_error", HERE / "model_error
 me = importlib.util.module_from_spec(spec); spec.loader.exec_module(me)
 ls = me.ls
 C = me.C15
-HARRIS = np.array([1.0, 0.91, 0.67, 0.40, 0.18])
+_W = ss.get_window("hann", 8192)
+HANN_C = np.array([np.dot(_W[:len(_W) - r * 1000], _W[r * 1000:]) / np.dot(_W, _W) for r in range(9)])
+N_EFF = float((HANN_C ** 2)[0] + 2 * (HANN_C ** 2)[1:].sum())     # 3.94 frames per independent sample
 RIDGE_SIGMA_PCT = 0.45
 PARAMS = ("f0", "v", "R", "tau")
 # the four development events: true slant range and speed at the true point (timing-conventions record),
@@ -56,7 +62,7 @@ def bound(t, p, sigma, rho):
     J = jacobian(t, p)
     col = np.zeros(len(t)); col[:len(rho)] = rho[:len(t)]
     S = sigma ** 2 * sl.toeplitz(col)
-    I = J.T @ np.linalg.solve(S, J)
+    I = J.T @ sl.solve(S, J, assume_a="sym")
     return np.sqrt(np.diag(np.linalg.inv(I)))
 
 
@@ -102,8 +108,8 @@ def main(run: Path, me_run: Path | None):
         ac *= 1 - np.arange(L + 1) / (L + 1)           # Bartlett taper keeps the Toeplitz matrix positive definite
         tg = np.arange(t[0], t[-1], 0.25)
         sig_pkg = RIDGE_SIGMA_PCT / 100 * par[0]
-        sd = dict(package=bound(tg, par, sig_pkg, HARRIS), package_indep39=bound_indep(tg, par, sig_pkg, 3.9),
-                  ridge=bound(t[ok], par, float(np.std(fast)), ac))
+        sd = dict(package_c2=bound(tg, par, sig_pkg, HANN_C ** 2), package_c=bound(tg, par, sig_pkg, HANN_C),
+                  package_indep=bound_indep(tg, par, sig_pkg, N_EFF), ridge=bound(t[ok], par, float(np.std(fast)), ac))
         out.append(describe(p["id"], "flagged" if p["id"] in flagged else "primary", par, sd, H,
                             dict(ridge_sigma=float(np.std(fast)), ridge_rho1=float(ac[1] / (1 - 1 / (L + 1))), span_s=float(t[-1] - t[0]),
                                  tau_in_span=float((ref["tau"] - t[0]) / (t[-1] - t[0])))))
@@ -111,8 +117,9 @@ def main(run: Path, me_run: Path | None):
         tg = np.arange(a, b, 0.25)
         par = np.array([f0, v, R, 0.0])
         sig = RIDGE_SIGMA_PCT / 100 * f0
-        out.append(describe(name, "development", par, dict(package=bound(tg, par, sig, HARRIS),
-                                                           package_indep39=bound_indep(tg, par, sig, 3.9)),
+        out.append(describe(name, "development", par, dict(package_c2=bound(tg, par, sig, HANN_C ** 2),
+                                                           package_c=bound(tg, par, sig, HANN_C),
+                                                           package_indep=bound_indep(tg, par, sig, N_EFF)),
                             None, dict(span_s=b - a, tau_in_span=-a / (b - a))))
     if me_run is not None:          # the bootstrap SDs of curves C+noise and B from model_error.py
         fits = {(r["id"], r["kind"]): r for r in csv.DictReader(open(me_run / "fits.csv"))}
@@ -132,10 +139,11 @@ def main(run: Path, me_run: Path | None):
         summ[grp] = {k: dict(median=float(np.nanmedian([r[k] for r in g])), q25=float(np.nanpercentile([r[k] for r in g], 25)),
                              q75=float(np.nanpercentile([r[k] for r in g], 75)), max=float(np.nanmax([r[k] for r in g])))
                      for k in keys if k not in ("id", "group") and all(k in r for r in g)}
-    json.dump(dict(harris=HARRIS.tolist(), ridge_sigma_pct=RIDGE_SIGMA_PCT, summary=summ), open(run / "crb_summary.json", "w"), indent=1)
+    json.dump(dict(hann_c=HANN_C.tolist(), n_eff=N_EFF, ridge_sigma_pct=RIDGE_SIGMA_PCT, provisional="package_*", summary=summ),
+              open(run / "crb_summary.json", "w"), indent=1)
     for r in out:
-        print(f"{r['id']:24s} {r['group']:11s} R {r['R']:6.0f} m  pkg: R {r['package_R_pct']:5.1f} %  ground {r['package_ground_m']:6.0f} m  "
-              f"v {r['package_v_pct']:4.1f} %  f0 {r['package_f0_pct']:.2f} %  tau {r['package_tau']:.2f} s"
+        print(f"{r['id']:24s} {r['group']:11s} R {r['R']:6.0f} m  pkg c2..c: R {r['package_c2_R_pct']:5.1f}..{r['package_c_R_pct']:5.1f} %  "
+              f"ground {r['package_c2_ground_m']:6.0f} m  v {r['package_c2_v_pct']:4.1f} %  f0 {r['package_c2_f0_pct']:.2f} %  tau {r['package_c2_tau']:.2f} s"
               + (f"  | ridge: R {r['ridge_R_pct']:5.1f} %  boot C+n/ridge R {r.get('boot_C+noise_over_ridge_R', float('nan')):.2f}" if "ridge_R_pct" in r else ""))
 
 

@@ -35,6 +35,9 @@ Doppler curves of propeller aircraft. `README.md` explains the method; `PLAN.md`
 - The benchmark: `uv run python -m bench run [case ...]` makes a run folder, writes each case's `result.json`
   and its hash before reading any label, and collects `results.json`; `bench compare <a> <b>` diffs two runs.
   With a cold CPA table it is a long job: say so first and run it in the background.
+  `--profile saved-fit|raw-audio` picks the events; `--revision a16b700` runs another commit through its own
+  CLI in an exported, hash-verified environment under `$DOPPLERTRACK_CACHE/revisions/` (`bench/revisions.py`).
+  Run Python from that export only with `-B`: bytecode in its tree fails the check.
 
 ## Data rules
 

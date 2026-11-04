@@ -119,8 +119,10 @@ def test_job_ids_follow_new_run_and_pulls_never_reuse_a_folder(tmp_path, monkeyp
 
 
 def test_a_case_brings_its_audio_spectrogram_and_traces():
+    from bench import cases
     got = runs.case_inputs(["oyster-bay"])
-    assert {"raw/audio/youtube/oyster_bay.webm", "derived/oyster_bay/rec.npz", "derived/oyster_bay/traces_ny.npz"} <= set(got)
+    traces = cases.latest_case("oyster-bay")["flight_data"]["traces"]       # the latest version's flight data
+    assert {"raw/audio/youtube/oyster_bay.webm", "derived/oyster_bay/rec.npz", traces} <= set(got)
     assert len(got) == len(set(got)) and not any(p.startswith("raw/adsb") for p in got)
 
 

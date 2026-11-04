@@ -103,12 +103,14 @@ Median |relative error|, contrast / brightness:
 | Oyster Bay ev2 | 104, 3,638 | 21, 55 / 36, 62 | 21, 54 / 27, 43 |
 | eagle ev1 | 99, 2,536 | 0, 10 / 0, 8 | 12, 14 / 10, 7 |
 | eagle ev2 | 103, 5,986 | 21, 45 / 5, 3 | 32, 62 / 4, 6 |
-| ob-e03 (clear) | 95, 7,252 | 89, 95 / 70, 90 | 18, 74 / 35, 141 |
+| ob-e03 (clear), corrected | 95, 7,252 | 46, 95 / 27, 95 | 46, 95 / 27, 93 |
 | sw-e01 (overlapping) | 60, 1,890 | 34, 114 / 96, 352 | 17, 4 / 210, 1487 |
 
-Medians over the six:
-- 2.048 s: v 21.0 % and d 49.9 % (contrast); v 20.5 % and d 35.2 % (brightness);
-- 0.512 s: v 17.5 % and d 33.9 % (contrast); v 18.5 % and d 25.0 % (brightness).
+Medians over the six, with ob-e03 corrected (see Correction below):
+- 2.048 s: v 21.0 % and d 49.9 % (contrast); v 15.6 % and d 35.2 % (brightness);
+- 0.512 s: v 18.9 % and d 33.9 % (contrast); v 18.5 % and d 25.0 % (brightness).
+
+So 0.512 s's brightness speed median is above 1.05 × 2.048 s's.
 
 Six events on two recordings can't decide much. Two of the six are weak or overlapping, with fit
 failures at both windows (sw-e01's brightness fit at 0.512 s is off by 15×). The medians hide that.
@@ -118,8 +120,10 @@ failures at both windows (sw-e01's brightness fit at 0.512 s is off by 15×). Th
 | variant | Livermore contrast | Livermore brightness | development contrast | development brightness | verdict |
 |---|---|---|---|---|---|
 | 1.024 s | OK | worse (f0 1.27 % > 1.05 × 1.13 %) | OK | OK | not kept |
-| **0.512 s** | OK | OK | OK | OK | **kept** |
+| 0.512 s | OK | OK | OK | **worse** (v 18.5 % > 1.05 × 15.6 %) | **not kept** |
 | two-window | OK | worse (f0 1.44 %) | OK | OK | not kept |
+
+No variant is kept. Before the correction, 0.512 s was OK on every cell and was recorded as kept.
 
 ### Resolution against effective sample count (Harris 1978 eq. 17)
 
@@ -198,22 +202,26 @@ bridges fewest at 0.512 s; the rise and hop cuts still fire.
 
 ## Outcome
 
-- **The 0.512 s window meets the criterion. 1.024 s and the two-window composite don't.**
-  - At 0.512 s, Livermore's median errors fall for v (brightness 9.8 % → 4.4 %) and d
-    (18.6 % → 13.1 %), with f0 unchanged. The development events' medians fall too.
-  - But no paired test separates 0.512 s from 2.048 s on Livermore (p ≥ 0.46). On the manoeuvring
-    passes it is worse.
-  - The criterion as fixed says keep it. The evidence for a large, consistent gain is weak: the median
-    moves while about half the passes get worse.
+- **No variant meets the criterion.** 1.024 s and the two-window composite fail on Livermore's
+  brightness f0. 0.512 s, once ob-e03 is corrected, fails on the development events' brightness
+  speed (18.5 % against 15.6 %).
+  - The first version of this record said 0.512 s met the criterion; that rested on the mis-fitted
+    ob-e03 (see Correction).
+  - At 0.512 s, Livermore's median errors still fall for v (brightness 9.8 % → 4.4 %) and d
+    (18.6 % → 13.1 %), with f0 unchanged.
+  - But no paired test separates 0.512 s from 2.048 s on Livermore (p ≥ 0.46), on the manoeuvring
+    passes it is worse, and on the development events it is mixed.
+  - The evidence for a large, consistent gain was weak before the correction. After it, the criterion
+    as fixed is not met.
 - **Gain from resolution.** Where 0.512 s helps, the gain is resolution near CPA, not effective sample
   count (the 2.048 s window at a 1 s hop is worse).
 - **The two-window rule isn't safe.** Choosing windows from the true sweep rate does worse than from
   the first fit, so the composite's one significant gain is likely its narrowed second fit.
 - **Recommendation**, for the PM:
-  - keep 0.512 s as the criterion says, as the window for `fit_event`'s steep-part evidence;
-  - leave the package default at 2.048 s until Phase 2 item 4's least-squares fit is measured at
-    both windows. Errors of 13–27 % in d are dominated by model error, not by the window
-    (dopplerprint reports 14 % on this corpus).
+  - keep 2.048 s as the package default;
+  - re-measure the window at Phase 2 item 4, on the least-squares fit, where a track rather than a
+    brightness sum carries the steep part. Errors of 13–27 % in d are dominated by model error, not
+    by the window (dopplerprint reports 14 % on this corpus).
   - freqtrack doesn't benefit enough to change its verdict.
 - **Limits.**
   - Livermore is one group, development only. The six development events are too few to decide
@@ -221,6 +229,26 @@ bridges fewest at 0.512 s; the rise and hop cuts still fire.
   - The oracle band is used on Livermore.
   - Neither objective is a likelihood, so the errors are point estimates against an ADS-B truth that
     itself carries interpolation error across 8–16 s KML gaps.
+
+## Correction (after the result)
+
+The first version of this record fitted the blind-labelled event ob-e03 on the wrong line.
+- **Cause.** `window_length.py`'s event list used a band of 0.85 × 65 to 1.15 × 130 Hz, which is
+  the label's first line (130 → 65 Hz). The flight N360NY is associated with its second line,
+  345 → 255 Hz (`bench/labels/oyster_bay-0000-1200.json`). So that row compared a fit to another
+  source's line against N360NY's speed and distance.
+- **Found by** an outside review, verified by the PM.
+- **Fix.** ob-e03 was re-fitted at every window on 0.85 × 255 to 1.15 × 345 Hz (`window_length.py
+  correct-ob-e03`). The other five events and all Livermore numbers are unchanged.
+- **First version's numbers:**
+  - ob-e03 row: 2.048 s contrast v 89 % and d 95 %, brightness v 70 % and d 90 %; 0.512 s contrast
+    v 18 % and d 74 %, brightness v 35 % and d 141 %.
+  - Brightness speed medians over the six: 20.5 % at 2.048 s and 18.5 % at 0.512 s, so 0.512 s was
+    OK.
+- **Sensitivity.** Without ob-e03, the brightness speed medians are 4.74 % at 2.048 s and 10.34 % at
+  0.512 s. The development-event comparison reverses, as the review found.
+- **Files.** The first version's files are kept as `window_dev_before_ob-e03_correction.json` and
+  `window_summary_before_ob-e03_correction.txt`.
 
 ## Script and run folder
 

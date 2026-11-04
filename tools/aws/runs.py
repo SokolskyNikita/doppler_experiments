@@ -869,7 +869,8 @@ def main(argv=None) -> None:
     fl.add_argument("--watch", type=float, metavar="MIN", help="with --util: a snapshot every MIN minutes into a run folder")
     sub.add_parser("seed-tools", help="put uv and ffmpeg for each architecture in the bucket")
     fs = sub.add_parser("fetch-sources", help="fetch the public raw files the bucket lacks on a box")
-    fs.add_argument("--size", default="4xlarge", help="instance size (default: 4xlarge; the job is network-bound)")
+    fs.add_argument("--size", default="large", help="instance size (default: large, 2 vCPU: the job only waits on "
+                    "the network, at 0 %% CPU on a 4xlarge)")
     fs.add_argument("--dry-run", action="store_true", help="only print the plan")
     sd = sub.add_parser("seed", help="upload what has no public source, and the caches")
     sd.add_argument("--dry-run", action="store_true")

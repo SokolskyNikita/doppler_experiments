@@ -15,7 +15,6 @@ import os
 import subprocess
 import sys
 import time
-import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -25,15 +24,15 @@ CHUNK = 1 << 22
 
 
 def download(url: str, dest: Path) -> tuple[int, str]:
-    """Streams url to dest; returns its size and SHA-256."""
-    h, n = hashlib.sha256(), 0
-    req = urllib.request.Request(url, headers={"User-Agent": "dopplertrack-fetch/1"})
-    with urllib.request.urlopen(req, timeout=120) as r, open(dest, "wb") as f:
-        while chunk := r.read(CHUNK):
+    """Fetches url to dest with curl, resuming after a dropped connection (Zenodo cuts long downloads short),
+    then returns the file's size and SHA-256."""
+    subprocess.run(["curl", "-sSfL", "--retry", "20", "--retry-all-errors", "--retry-delay", "5", "-C", "-",
+                    "-A", "dopplertrack-fetch/1", "-o", str(dest), url], check=True)
+    h = hashlib.sha256()
+    with open(dest, "rb") as f:
+        while chunk := f.read(CHUNK):
             h.update(chunk)
-            f.write(chunk)
-            n += len(chunk)
-    return n, h.hexdigest()
+    return dest.stat().st_size, h.hexdigest()
 
 
 def present(url: str, size: int) -> bool:

@@ -11,22 +11,35 @@ Reported separately, as the PM asked: whether the true pair survives the coarse 
 reference (the runner's triples sidecar), and its rank once retained.
 
 usage, from the repo root:
-  event_pairs_z.py RUN_DIR DETECTED_RUN CASE [CASE ...]   prepare, run, rank, reveal, evaluate
-  event_pairs_z.py one RUN_DIR VARIANT CODE               (internal) one variant"""
+  event_pairs_z.py [RUN] --detected DETECTED_RUN --case CASE [CASE ...] [--hypotheses] [--score comparable|raw]
+                   [--workers-per-search 4] [--shard K/N] [--resume DIR ...] [--merge] [--inputs]
+  event_pairs_z.py one RUN_DIR VARIANT CODE PARAMS      (internal) one variant
+
+Each of the pairs' searches is a unit (tools/data/shards.py): --shard splits them across machines, a stopped run
+resumes from its folder with --resume, and once every unit is finished in RUN or the --resume folders the ranking
+is written, hashed and only then revealed. The searches run $DOPPLERTRACK_JOBS / --workers-per-search at a time.
+--score raw ranks by the search's own score, as SDE-B's event_pairs.py did; --hypotheses is stage B's
+run_search(hypotheses=True) (the EVENT_PAIRS_HYPOTHESES=1 switch before)."""
+import argparse
+import hashlib
 import itertools
 import json
+import os
 import subprocess
 import sys
 import time
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+REPO = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(REPO))
+sys.path.insert(0, str(REPO / "tools" / "data"))
+import shards                                                     # noqa: E402
 from bench import cases, runner                                   # noqa: E402
+from dopplertrack.parallel import JOBS_ENV, default_jobs          # noqa: E402
 from dopplertrack.result import read_record, sha256_bytes, write_record   # noqa: E402
 
+DATA = Path(os.environ.get("DOPPLERTRACK_DATA", Path.home() / "data" / "dopplertrack"))
 TOP = 5
-JOBS = 2
-WORKERS = 4                     # run_search's pool per variant
 TRUE_EVENTS = {"eagle-cam-clip-18000s": [2, 5], "oyster-bay": [1, 2]}
 
 
@@ -61,24 +74,26 @@ def prepare(run: Path, detected_run: Path, case_ids: list[str]) -> dict:
     return plan
 
 
-def one(run: Path, vid: str):
+def one(run: Path, vid: str, params: dict):
     case = cases.blind_case(vid, run / "cases.json")
-    out = run / vid
+    out = run / "units" / vid
     out.mkdir(parents=True, exist_ok=True)
+    overrides = {"workers": params["workers_per_search"], **({"comparable": True} if params["score"] == "comparable" else {}),
+                 **({"hypotheses": True} if params["hypotheses"] else {})}
     with open(out / "run.log", "w") as fh:
         record = runner.execute_case(case, out, log=lambda m: print(m, file=fh, flush=True), code=CODE,
-                                     overrides={"workers": WORKERS, "comparable": True})
+                                     overrides=overrides)
     sha = write_record(out / "result.json", record)
     (out / runner.HASH_FILE).write_text(f"{sha}  result.json\n")
 
 
-def rank(run: Path, plan: dict) -> dict:
+def rank(folders: dict, plan: dict) -> dict:
     """Each case's ten pairs ordered by the search's own top score, from the hashed records only."""
     table = {}
     for cid, rows in plan.items():
         out = []
         for r in rows:
-            d = run / r["variant"]
+            d = folders[r["variant"]]
             rec = read_record(d / "result.json", (d / runner.HASH_FILE).read_text().split()[0])
             c = rec["candidates"]
             out.append({**r, "errors": rec["execution"]["errors"], "flight_pairs": len(c),
@@ -96,23 +111,73 @@ def rank(run: Path, plan: dict) -> dict:
     return table
 
 
+def detected_file(detected_run: Path, cid: str) -> Path:
+    return detected_run / cid / "detected.json"
+
+
 def main():
-    run, detected_run, case_ids = Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3:]
-    plan = prepare(run, detected_run, case_ids)
-    pending = [r["variant"] for rows in plan.values() for r in rows]
-    running = []
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    shards.add_args(ap)
+    ap.add_argument("--detected", type=Path, required=True, help="the raw-audio run whose detections are paired")
+    ap.add_argument("--case", nargs="+", required=True)
+    ap.add_argument("--score", choices=("comparable", "raw"), default="comparable")
+    ap.add_argument("--hypotheses", action="store_true")
+    ap.add_argument("--workers-per-search", type=int, default=4)
+    a = ap.parse_args()
+    if a.inputs:
+        rel = [str(detected_file(a.detected, c).resolve().relative_to(DATA.resolve())) for c in a.case]
+        caches = sorted({cases.latest_case(c)["search"]["cpa_cache"] for c in a.case})
+        shards.print_inputs(a.case, rel, caches)
+        return
+    params = {"cases": a.case, "score": a.score, "hypotheses": a.hypotheses, "top": TOP,
+              "workers_per_search": a.workers_per_search,
+              "detected": {c: hashlib.sha256(detected_file(a.detected, c).read_bytes()).hexdigest() for c in a.case}}
+    topic = "hypotheses-pairs" if a.hypotheses else ("comparable-score" if a.score == "comparable" else "event-pairs")
+    run = shards.open_run(a.run, topic, {"script": "tools/experiments/2026-11-04/event_pairs_z.py",
+                                        "detected": str(a.detected), "params": params,
+                                        "invocation": {"shard": "%d/%d" % a.shard,
+                                                       "resume": [str(r) for r in a.resume], "merge": a.merge}})
+    plan = prepare(run, a.detected, a.case)
+    units = shards.Units(run, [r["variant"] for rows in plan.values() for r in rows], params, a.shard, a.resume)
+    if not a.merge:
+        search(run, units, params)
+    try:
+        folders = units.all()
+    except SystemExit as e:
+        if a.merge:
+            raise
+        print(f"this shard is done; not merging yet: {e}", flush=True)
+        return
+    finish(run, plan, folders)
+
+
+def search(run: Path, units, params: dict):
+    """This shard's unfinished searches, as many at once as $DOPPLERTRACK_JOBS allows at
+    --workers-per-search each."""
+    per = params["workers_per_search"]
+    slots = max(1, default_jobs() // per)
+    env = {**os.environ, JOBS_ENV: str(per)}
+    pending, running = units.todo(), []
     t0 = time.time()
+    print(f"{len(pending)} searches, {slots} at a time with {per} workers each", flush=True)
     while pending or running:
-        while pending and len(running) < JOBS:
+        while pending and len(running) < slots:
             vid = pending.pop(0)
-            running.append((vid, subprocess.Popen([sys.executable, __file__, "one", str(run), vid, json.dumps(CODE)])))
+            running.append((vid, subprocess.Popen([sys.executable, __file__, "one", str(run), vid, json.dumps(CODE),
+                                                   json.dumps(params)], env=env)))
             print(f"[{time.time() - t0:5.0f} s] started {vid}", flush=True)
         for vid, p in list(running):
             if p.poll() is not None:
                 running.remove((vid, p))
                 print(f"[{time.time() - t0:5.0f} s] {vid} exited {p.returncode}", flush=True)
+                d = units.dir(vid)
+                if p.returncode == 0 and (d / runner.HASH_FILE).exists():
+                    units.finish(vid, {"seconds": round(time.time() - t0)})
         time.sleep(2)
-    table = rank(run, plan)
+
+
+def finish(run: Path, plan: dict, folders: dict):
+    table = rank(folders, plan)
     data = (json.dumps(table, indent=1, sort_keys=True) + "\n").encode()
     (run / "ranking.json").write_bytes(data)
     (run / "ranking.json.sha256").write_text(f"{sha256_bytes(data)}  ranking.json\n")
@@ -122,7 +187,7 @@ def main():
         lab = cases.case_labels(cid, cases.latest_case(cid)["version"])
         for r in rows:
             meta = {"id": r["variant"], "version": 1, "group": "", "set": "development", "expected_outcome": ""}
-            e = runner.compare_case(run / r["variant"], meta, lambda: lab)
+            e = runner.compare_case(folders[r["variant"]], meta, lambda: lab)
             r.update({k: e.get(k) for k in ("status", "true_pair_rank", "top_error_m", "refined_error_m",
                                             "true_pair_near_reference", "true_pair_within_refine_reach",
                                             "true_pair_min_distance_m")})
@@ -161,9 +226,9 @@ def evaluate(reveal: dict) -> dict:
 
 
 if __name__ == "__main__":         # run_search may start spawn pools, which re-import this file
-    if sys.argv[1] == "one":
+    if len(sys.argv) > 1 and sys.argv[1] == "one":
         CODE = json.loads(sys.argv[4])
-        one(Path(sys.argv[2]), sys.argv[3])
+        one(Path(sys.argv[2]), sys.argv[3], json.loads(sys.argv[5]))
     else:
         CODE = runner.code_revision()
         main()

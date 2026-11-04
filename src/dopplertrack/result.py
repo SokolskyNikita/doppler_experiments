@@ -16,7 +16,7 @@ import os
 import threading
 from pathlib import Path
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 KIND = "dopplertrack.result"
 
 
@@ -149,7 +149,19 @@ SCHEMA_V1 = {
     },
     "execution": {"errors": ListOf(str), "warnings": ListOf(str), "stages": ListOf(STAGE)},
 }
-SCHEMAS = {1: SCHEMA_V1}
+# Version 2 (2026-11-04, `locate` step A): the verdict takes PLAN Phase 3's outcomes with machine-readable reason
+# codes, and pair_rules records how each event-pair rule chose and what it found. "located" is reserved for Phase 4
+# and step B: step A never emits it. Version 1 records still validate under their own schema.
+VERDICT_OUTCOMES = ("located", "ambiguous", "insufficient_evidence")
+REASON_CODES = ("no_usable_flyovers", "flight_data_missing_box", "flight_data_missing_time", "past_utc_midnight",
+                "no_surviving_candidate", "winner_only_refined", "silence_filter_off")
+SCHEMA_V2 = {**SCHEMA_V1,
+             "verdict": Maybe({"outcome": OneOf(*VERDICT_OUTCOMES), "reason_codes": ListOf(OneOf(*REASON_CODES)),
+                               "reasons": ListOf(str)}),
+             "pair_rules": Maybe(ListOf({"rule": str, "events": ListOf(int), "top_flights": Maybe(ListOf(str)),
+                                         "top_score": Maybe(NUMBER), "margin_pct": Maybe(NUMBER),
+                                         "wall_s": NUMBER, "chosen": bool}))}
+SCHEMAS = {1: SCHEMA_V1, 2: SCHEMA_V2}
 
 
 def _check(value, spec, where: str, problems: list[str]):

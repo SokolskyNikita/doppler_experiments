@@ -130,3 +130,35 @@ test can't decide at this N, and the retune, if spent, goes on N.
   expected maximum of Z over the triples each search scored (about √(2 ln n) per event, Gumbel). A busier box
   tries more wrong flight pairs, so its best wrong answer scores higher by chance. That is the WSW result, and
   only a verdict that accounts for how many hypotheses were tried can make it less confident.
+
+## A frozen-clock test of the eagle cam's two best candidates
+
+Asked for by the PM; development data only. Inside the eagle cam's true-pair search, the two best candidates score
+almost alike:
+- 1st: Z 8.342, the true flights a2baea/a336e4, 917 m from the nest;
+- 2nd: Z 8.323, a0e90b/a25807, 14.6 km away, with a recording clock 792 s (13.2 min) different.
+
+Each was frozen at its location and clock (its record's `audio_minus_utc_s` and `shift_s`), and the clip's other
+detections were scored under each without readjusting the clock. These are `detect`'s ranks 1, 3 and 4; rank 1,
+at 820 s, is the README's extra flyover at full-stream 18,820 s. Two rules for the explaining flight:
+`pick_flight`'s (`refine --extra`), and the [extra-consistency](2026-11-03-extra-consistency.md) record's ±15 s
+heard-CPA gate.
+
+| Extra flyover | true candidate, ±15 s | wrong candidate, ±15 s | true, pick_flight | wrong, pick_flight |
+|---|---|---|---|---|
+| rank 1, 820 s | **a68cab, 4.27** (heard 6.2 s off) | **none** | 4.27 | 4.13 |
+| rank 3, 4,283 s | **a44af9, 3.54** (2.3 s) | **none** | 3.54 | 2.76 |
+| rank 4, 2,175 s | **a13d1e, 3.34** (4.9 s) | **none** | 4.00 (a2baea) | 3.56 |
+
+- **The ±15 s gate separates them completely.** At the true candidate's clock, every extra flyover has a flight
+  whose heard CPA lands within 2–6 s. At the wrong candidate's, none has one within 15 s. Under the 2026-11-03
+  record's bar of 3.0, the true candidate explains 3 of 3 and the wrong one 0 of 3.
+- **`pick_flight`'s ±5 min rule doesn't separate them** (11.8 against 10.5 summed), as the 2026-11-03 record found.
+- So the two candidates that Z can't tell apart make different physical predictions, and one extra flyover
+  is enough to test them.
+- This is Phase 4's verdict material. It is the first case where it decided between two candidates of one
+  search that a score couldn't.
+
+One recording, three extras, one pair of candidates: a lead. Script:
+[`frozen_clock_extra.py`](../../tools/experiments/2026-11-04/frozen_clock_extra.py). Output:
+`runs/2026-11-04-frozen-clock-extra/frozen_clock_extra.json`.

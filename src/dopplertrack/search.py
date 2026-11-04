@@ -14,6 +14,7 @@ import pandas as pd
 from scipy.spatial import cKDTree
 
 from .adsb import Trace
+from .atmosphere import point_sound_speed
 from .doppler import speed_of_sound
 from .geo import lla_to_enu
 
@@ -148,8 +149,9 @@ def _nearest_samples(g, gg, p, pp, max_range_m, tile_m):
 
 
 def _segment_cpa(enu: np.ndarray, tree: cKDTree, s: Segment, max_range_m: float, c: float, chunk: int,
-                 tile_m: float = CPA_TILE_M):
-    """CPA rows for one segment, in grid-index order: (gidx, t_emit, t_heard, d, v) arrays, or None."""
+                 tile_m: float = CPA_TILE_M, temperature_c: float | None = None):
+    """CPA rows for one segment, in grid-index order: (gidx, t_emit, t_heard, d, v) arrays, or None. With a
+    ground temperature, t_heard uses each CPA's own sound speed (atmosphere.point_sound_speed) instead of c."""
     m = _corridor(tree, s, max_range_m)
     out = []
     for k in range(0, len(m), chunk):
@@ -164,7 +166,8 @@ def _segment_cpa(enu: np.ndarray, tree: cKDTree, s: Segment, max_range_m: float,
         r = np.sqrt(np.maximum(best, 0.0))
         ok = (r <= max_range_m) & (j > 0) & (j < len(s.t) - 1)     # interior CPA only
         if ok.any():
-            out.append((idx[ok].astype(np.int32), s.t[j[ok]], s.t[j[ok]] + r[ok] / c,
+            cc = c if temperature_c is None else point_sound_speed(temperature_c, s.enu[j[ok], 2] - enu[idx[ok], 2])
+            out.append((idx[ok].astype(np.int32), s.t[j[ok]], s.t[j[ok]] + r[ok] / cc,
                         r[ok].astype(np.float32), s.speed[j[ok]].astype(np.float32)))
     if not out:
         return None
@@ -179,14 +182,17 @@ def _init_cpa_worker(enu):
 
 
 def _cpa_task(args):
-    s, max_range_m, c, chunk = args
-    return _segment_cpa(_WORKER["enu"], _WORKER["tree"], s, max_range_m, c, chunk)
+    s, max_range_m, c, chunk, temperature_c = args
+    return _segment_cpa(_WORKER["enu"], _WORKER["tree"], s, max_range_m, c, chunk, temperature_c=temperature_c)
 
 
 def cpa_table(grid: Grid, segs: list[Segment], max_range_m: float = 10000.0, c: float | None = None,
-              chunk: int = 20000, workers: int | None = None) -> pd.DataFrame:
+              chunk: int = 20000, workers: int | None = None, temperature_c: float | None = None) -> pd.DataFrame:
     """For every (grid point, segment) within max_range: CPA emission time, heard time,
     slant distance and ground-track speed at CPA.
+
+    temperature_c: the ground temperature. If given, each heard time uses the sound speed at that CPA's
+    mid-height temperature (its emission point's height above the grid point), not c.
 
     Rows are ordered by segment, then grid index. Segments run in `workers` processes
     (parallel.default_jobs() by default); the table is the same, byte for byte, for any number."""
@@ -195,13 +201,13 @@ def cpa_table(grid: Grid, segs: list[Segment], max_range_m: float = 10000.0, c: 
     workers = min(resolve_jobs(workers), max(len(segs), 1))    # no idle workers for a short list
     if workers == 1:
         tree = cKDTree(grid.enu[:, :2])
-        parts = [_segment_cpa(grid.enu, tree, s, max_range_m, c, chunk) for s in segs]
+        parts = [_segment_cpa(grid.enu, tree, s, max_range_m, c, chunk, temperature_c=temperature_c) for s in segs]
     else:
         # longest segments first, so no long one starts last and keeps the others waiting
         order = sorted(range(len(segs)), key=lambda i: -len(segs[i].t))
         parts = [None] * len(segs)
         with process_pool(workers, _init_cpa_worker, (grid.enu,)) as ex:
-            for i, part in zip(order, ex.map(_cpa_task, ((segs[i], max_range_m, c, chunk) for i in order))):
+            for i, part in zip(order, ex.map(_cpa_task, ((segs[i], max_range_m, c, chunk, temperature_c) for i in order))):
                 parts[i] = part
     cols: dict[str, list[np.ndarray]] = {"gidx": [], "seg": [], "t_emit": [], "t_heard": [], "d": [], "v": []}
     for si, part in enumerate(parts):
@@ -227,11 +233,14 @@ def empty_cpa_table() -> pd.DataFrame:
 CPA_CACHE_VERSION = 1      # bump when cpa_table's output changes for the same inputs
 
 
-def cpa_fingerprint(grid: Grid, segs: list[Segment], max_range_m: float, c: float) -> str:
+def cpa_fingerprint(grid: Grid, segs: list[Segment], max_range_m: float, c: float,
+                    temperature_c: float | None = None) -> str:
     """SHA-256 of everything cpa_table depends on: the grid's coordinates and elevations, every segment's
-    times, positions and speeds, max_range, the speed of sound and the format version. Changing any of
-    them, e.g. running with and without a DEM, changes the fingerprint even when no array changes size."""
-    h = hashlib.sha256(f"cpa-table v{CPA_CACHE_VERSION} {float(max_range_m)!r} {float(c)!r} "
+    times, positions and speeds, max_range, the speed of sound (and the ground temperature, when one sets
+    each CPA's own) and the format version. Changing any of them, e.g. running with and without a DEM,
+    changes the fingerprint even when no array changes size. Without a temperature it is as before."""
+    air = "" if temperature_c is None else f" ground {float(temperature_c)!r} C"
+    h = hashlib.sha256(f"cpa-table v{CPA_CACHE_VERSION} {float(max_range_m)!r} {float(c)!r}{air} "
                        f"{float(grid.lat0)!r} {float(grid.lon0)!r} {len(grid)} {len(segs)}".encode())
     for a in (grid.lat, grid.lon, grid.elev, grid.enu):
         h.update(np.ascontiguousarray(a, np.float64).tobytes())
@@ -295,6 +304,16 @@ def pair_candidates(cpa: pd.DataFrame, dt_offset: float, tol_s: float = 6.0,
     a = cpa[(cpa.v.between(*v1)) & (cpa.d.between(*d1))]
     b = cpa[(cpa.v.between(*v2)) & (cpa.d.between(*d2))]
     funnel.update(cpa_rows=len(cpa), event1_gates=len(a), event2_gates=len(b))
+    return join_pairs(a, b, cpa, dt_offset, tol_s, time_col=time_col, silence_d_m=silence_d_m,
+                      silence_margin_s=silence_margin_s, funnel=funnel, triples=triples)
+
+
+def join_pairs(a: pd.DataFrame, b: pd.DataFrame, cpa: pd.DataFrame, dt_offset: float, tol_s: float,
+               time_col: str = "t_heard", silence_d_m: float | None = 6000.0, silence_margin_s: float = 40.0,
+               funnel: dict | None = None, triples: dict | None = None) -> pd.DataFrame:
+    """pair_candidates' time join and silence filter, on rows already admitted for event 1 (a) and
+    event 2 (b); cpa is the whole table, which the silence filter needs."""
+    funnel = {} if funnel is None else funnel
     w = 2.0 * tol_s
     a = a.assign(key=np.floor(a[time_col].to_numpy() / w).astype(np.int64))
     kb = np.floor((b[time_col].to_numpy() - dt_offset) / w).astype(np.int64)

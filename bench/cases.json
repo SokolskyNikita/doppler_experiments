@@ -264,6 +264,23 @@
       ]
      ],
      "note": "legacy file, streamed with the pre-Phase 0 fetch-day (no search-range margin, no extraction metadata; log in derived/oyster_bay/traces_ny.fetch.log). Today's fetch-day pads the box by the search range and writes metadata, so its output will not match this hash"
+    },
+    {
+     "path": "derived/traces/2026-09-08/ny_margin12_v2.npz",
+     "sha256": "b0aafdf2bffc971208b94ff69e6d58d391f64a1941e21c5579e8dc279373f17b",
+     "recipe": [
+      [
+       "python",
+       "-I",
+       "{repo}/tools/data/extract_boxes.py",
+       "--max-range",
+       "12000",
+       "{data}/raw/adsb/2026-09-08",
+       "{out_dir}",
+       "ny_margin12_v2=40.4,41.3,-74.4,-72.6"
+      ]
+     ],
+     "note": "cut 2026-11-04 with extraction metadata and the 12 km search-range margin from the search box (runs/2026-11-04-recut-oyster-essex-v2/); the locate profile reads it, the other profiles keep the legacy file"
     }
    ],
    "spectrogram": "derived/oyster_bay/rec.npz",
@@ -287,7 +304,216 @@
      -74.4,
      -72.6
     ],
-    "extraction_note": "streamed with fetch-day from the adsb.lol release whose local copies are the archive_assets; box from traces_ny.fetch.log, with no search-range margin; predates Phase 0's extraction metadata, so the envelope is declared, not measured"
+    "extraction_note": "streamed with fetch-day from the adsb.lol release whose local copies are the archive_assets; box from traces_ny.fetch.log, with no search-range margin; predates Phase 0's extraction metadata, so the envelope is declared, not measured",
+    "locate_traces": "derived/traces/2026-09-08/ny_margin12_v2.npz"
+   },
+   "search": {
+    "bbox": [
+     40.4,
+     41.3,
+     -74.4,
+     -72.6
+    ],
+    "harmonics": [
+     2,
+     1
+    ],
+    "spacing_m": 200,
+    "tol_s": 6.0,
+    "v_tol": 0.35,
+    "d_tol": [
+     0.4,
+     2.5
+    ],
+    "silence_d_m": 6000.0,
+    "max_range_m": 12000.0,
+    "dem": true,
+    "cpa_cache": "cpa/bench/oyster-bay_200m_dem.npz"
+   },
+   "refine": {
+    "rank": 1,
+    "spacing_m": 50.0,
+    "half_m": 600.0
+   },
+   "events": {
+    "mode": "saved_fits",
+    "files": [
+     "docs/results/oyster_bay_ev1.json",
+     "docs/results/oyster_bay_ev2.json"
+    ],
+    "pick": null,
+    "time_offset_s": 0.0
+   },
+   "labels": {
+    "reference": {
+     "lat": 40.876466,
+     "lon": -73.524951,
+     "source": "colsto's stated recording location"
+    },
+    "true_pair": [
+     "a1dfeb",
+     "ace391"
+    ],
+    "checked_by": "upstream README and committed tables; known-point check in tests/test_oyster_bay.py (2026-11-03). Not a blind label",
+    "blind": false
+   },
+   "built_with": "8d8a5b2",
+   "role": "seed case (PLAN 5.1)",
+   "traffic": {
+    "basis": "tools/data/site_traffic.py over the local 2026-09-08 tar: prop or unknown-type airborne segments below 4 km MSL passing within 12 km and 6 km slant of each point, where each moved point is the truth moved 150 km on the box's bearing; runs/2026-11-03-moved-box-traffic/site_traffic.csv and site_traffic2.csv. Other bearings tried: W 86/29, SW 243/174, NW 21/9, NNE 51/22. No 150 km move over land matched Oyster Bay; the seed negative takes the busier box (PM decision 2026-11-04)",
+    "counts": {
+     "oyster_bay_truth": {
+      "passes_12km": 158,
+      "passes_6km": 53,
+      "point": [
+       40.876466,
+       -73.524951
+      ]
+     },
+     "moved_wsw150": {
+      "passes_12km": 339,
+      "passes_6km": 102,
+      "point": [
+       40.403073,
+       -75.189671
+      ]
+     },
+     "moved_north150": {
+      "passes_12km": 46,
+      "passes_6km": 26,
+      "point": [
+       42.225448,
+       -73.524951
+      ]
+     }
+    }
+   },
+   "notes": "Saved-fit search scores drift from the committed docs/results tables in the fourth significant figure (top 27.1008 against 27.0993; 40,889 triples against 40,885) because of the Phase 0 trajectory evidence masks; ranks and coordinates are exact. The 2026-11-03 cache check at 2bf61cc already showed it (27.1036). Not a regression",
+   "weather": {
+    "temperature_c": null,
+    "source": null,
+    "station": null,
+    "station_distance_km": null,
+    "observed_utc": null,
+    "aircraft_height_m": null
+   },
+   "version_note": "v2 adds flight_data.locate_traces, the box cut again with extraction metadata and the search-range margin, read only by the locate profile; the other profiles run exactly as v1"
+  },
+  {
+   "id": "oyster-bay",
+   "version": 3,
+   "group": "oyster-bay",
+   "set": "development",
+   "expected_outcome": "located",
+   "description": "Oyster Bay, 1 h: the reference result (PLAN 5.1)",
+   "source": {
+    "identifiers": {
+     "youtube": "4CxVxuMVkMc",
+     "url": "https://youtu.be/4CxVxuMVkMc",
+     "creator": "colsto"
+    },
+    "acquisition": "yt-dlp download of the Opus audio track (format 251), see raw/audio/youtube/oyster_bay.ytdlp.log; licence: copyright retained by the creator, local only",
+    "raw": [
+     {
+      "path": "raw/audio/youtube/oyster_bay.webm",
+      "sha256": "6884324b4fb9babbc89b10de71f283dd338766a15d2fbd1aeedb52216276692d"
+     },
+     {
+      "path": "raw/audio/youtube/oyster_bay.ytdlp.log",
+      "sha256": "075c66cb1d1233f14d36cd74c417c22595249465286827becad0c95ed8b1d10e"
+     }
+    ]
+   },
+   "start_time": {
+    "source": "unknown, UTC date only: colsto states the date (2026-09-08) and not the time",
+    "utc": "2026-09-08T12:00:00Z",
+    "uncertainty_s": 43200
+   },
+   "reference_clock_utc": {
+    "audio_zero_utc_unix_s": 1788898650.72,
+    "audio_zero_utc": "2026-09-08T20:17:30.72Z",
+    "basis": "derived from the development search: t_heard1 of the committed top candidate (a1dfeb at 1788900805.682) minus event 1's heard CPA (2155.959 s) minus its shift (-1.0 s), docs/results/oyster_bay_search_best_per_pair.csv. It depends on the matched flights, is not an independent source and never counts as the start time's source"
+   },
+   "audio": {
+    "path": "raw/audio/youtube/oyster_bay.webm",
+    "of": "raw/audio/youtube/oyster_bay.webm",
+    "clip_offset_s": 0.0,
+    "clip_offset_samples": 0,
+    "sample_rate_hz": 48000
+   },
+   "derived": [
+    {
+     "path": "derived/oyster_bay/rec.npz",
+     "sha256": "f996b61a2b596498d34e59af2e555446ef6ab879263e669868acb2b6221b531b",
+     "recipe": [
+      [
+       "dopplertrack",
+       "spectrogram",
+       "{data}/raw/audio/youtube/oyster_bay.webm",
+       "{out}"
+      ]
+     ],
+     "note": "spectrogram of the Opus track with the CLI defaults (0.25 s hop, 40-450 Hz)"
+    },
+    {
+     "path": "derived/oyster_bay/traces_ny.npz",
+     "sha256": "2acd0be71c7011e730ff2b25af8a9cd36c97691be6d72154342f44ec882f2caa",
+     "recipe": [
+      [
+       "dopplertrack",
+       "fetch-day",
+       "2026-09-08",
+       "{out}",
+       "--bbox",
+       "40.4",
+       "41.3",
+       "-74.4",
+       "-72.6"
+      ]
+     ],
+     "note": "legacy file, streamed with the pre-Phase 0 fetch-day (no search-range margin, no extraction metadata; log in derived/oyster_bay/traces_ny.fetch.log). Today's fetch-day pads the box by the search range and writes metadata, so its output will not match this hash"
+    },
+    {
+     "path": "derived/traces/2026-09-08/ny_margin12_v2.npz",
+     "sha256": "b0aafdf2bffc971208b94ff69e6d58d391f64a1941e21c5579e8dc279373f17b",
+     "recipe": [
+      [
+       "python",
+       "-I",
+       "{repo}/tools/data/extract_boxes.py",
+       "--max-range",
+       "12000",
+       "{data}/raw/adsb/2026-09-08",
+       "{out_dir}",
+       "ny_margin12_v2=40.4,41.3,-74.4,-72.6"
+      ]
+     ],
+     "note": "cut 2026-11-04 with extraction metadata and the 12 km search-range margin from the search box (runs/2026-11-04-recut-oyster-essex-v2/); the locate profile reads it, the other profiles keep the legacy file"
+    }
+   ],
+   "spectrogram": "derived/oyster_bay/rec.npz",
+   "flight_data": {
+    "date": "2026-09-08",
+    "pod": "planes-readsb-prod-0",
+    "archive_assets": [
+     {
+      "path": "raw/adsb/2026-09-08/v2026.09.08-planes-readsb-prod-0.tar.aa",
+      "sha256": "f9804df3f9e9e173928ee239938d955bb661266f76393d1042bf12b7cb85de44"
+     },
+     {
+      "path": "raw/adsb/2026-09-08/v2026.09.08-planes-readsb-prod-0.tar.ab",
+      "sha256": "0d41348dbd9f4c64ee00eafd28ad89e8e748d14c3a2c9c0b11b6b6adae7f9579"
+     }
+    ],
+    "traces": "derived/oyster_bay/traces_ny.npz",
+    "extraction_box": [
+     40.4,
+     41.3,
+     -74.4,
+     -72.6
+    ],
+    "extraction_note": "streamed with fetch-day from the adsb.lol release whose local copies are the archive_assets; box from traces_ny.fetch.log, with no search-range margin; predates Phase 0's extraction metadata, so the envelope is declared, not measured",
+    "locate_traces": "derived/traces/2026-09-08/ny_margin12_v2.npz"
    },
    "search": {
     "bbox": [
@@ -339,7 +565,7 @@
     "checked_by": "upstream README and committed tables; known-point check in tests/test_oyster_bay.py (2026-11-03). Not a blind label",
     "blind": false
    },
-   "built_with": "1cb9c34",
+   "built_with": "8d8a5b2",
    "role": "seed case (PLAN 5.1)",
    "traffic": {
     "basis": "tools/data/site_traffic.py over the local 2026-09-08 tar: prop or unknown-type airborne segments below 4 km MSL passing within 12 km and 6 km slant of each point, where each moved point is the truth moved 150 km on the box's bearing; runs/2026-11-03-moved-box-traffic/site_traffic.csv and site_traffic2.csv. Other bearings tried: W 86/29, SW 243/174, NW 21/9, NNE 51/22. No 150 km move over land matched Oyster Bay; the seed negative takes the busier box (PM decision 2026-11-04)",
@@ -378,7 +604,8 @@
     "station_distance_km": 18.9,
     "observed_utc": "2026-09-08T20:53Z",
     "aircraft_height_m": null
-   }
+   },
+   "version_note": "v2 adds flight_data.locate_traces, the box cut again with extraction metadata and the search-range margin, read only by the locate profile; the other profiles run exactly as v1"
   },
   {
    "id": "eagle-cam-clip-18000s",
@@ -630,6 +857,23 @@
       ]
      ],
      "note": "spectrogram of the clip with the CLI defaults; its whitening sees only the clip, so it differs from the full recording's near the clip edges"
+    },
+    {
+     "path": "derived/traces/2024-12-28/swfl_margin12_v2.npz",
+     "sha256": "5da069103c6252e64f9e56b2fa3d82f78cdc1f8d88f3e43c8240f1621c7ad766",
+     "recipe": [
+      [
+       "python",
+       "-I",
+       "{repo}/tools/data/extract_boxes.py",
+       "--max-range",
+       "12000",
+       "{data}/raw/adsb/2024-12-28",
+       "{out_dir}",
+       "swfl_margin12_v2=26.1,27.3,-82.5,-81.2"
+      ]
+     ],
+     "note": "cut 2026-11-04 with extraction metadata and the 12 km search-range margin from the search box (runs/2026-11-04-recut-oyster-essex-v2/); the locate profile reads it, the other profiles keep the legacy file"
     }
    ],
    "spectrogram": "derived/swfl_clip/rec.npz",
@@ -649,7 +893,194 @@
      -82.5,
      -81.2
     ],
-    "extraction_note": "legacy file, streamed with the pre-Phase 0 fetch-day (no search-range margin, no metadata; log in derived/swfl/traces_swfl.fetch.log); predates Phase 0's extraction metadata, so the envelope is declared, not measured"
+    "extraction_note": "legacy file, streamed with the pre-Phase 0 fetch-day (no search-range margin, no metadata; log in derived/swfl/traces_swfl.fetch.log); predates Phase 0's extraction metadata, so the envelope is declared, not measured",
+    "locate_traces": "derived/traces/2024-12-28/swfl_margin12_v2.npz"
+   },
+   "search": {
+    "bbox": [
+     26.1,
+     27.3,
+     -82.5,
+     -81.2
+    ],
+    "harmonics": [
+     1,
+     1
+    ],
+    "spacing_m": 200,
+    "tol_s": 6.0,
+    "v_tol": 0.35,
+    "d_tol": [
+     0.4,
+     2.5
+    ],
+    "silence_d_m": 6000.0,
+    "max_range_m": 12000.0,
+    "dem": true,
+    "cpa_cache": "cpa/bench/eagle-cam_200m_dem.npz"
+   },
+   "refine": {
+    "rank": 1,
+    "spacing_m": 50.0,
+    "half_m": 600.0
+   },
+   "events": {
+    "mode": "saved_fits",
+    "files": [
+     "docs/results/swfl_detected.json"
+    ],
+    "pick": [
+     5,
+     13
+    ],
+    "time_offset_s": -18000.0
+   },
+   "labels": {
+    "reference": {
+     "lat": 26.702359,
+     "lon": -81.847766,
+     "source": "nest LE-026B coordinates"
+    },
+    "true_pair": [
+     "a2baea",
+     "a336e4"
+    ],
+    "checked_by": "upstream README and committed tables (docs/results/swfl_search_best_per_pair.csv). Not a blind label",
+    "blind": false
+   },
+   "built_with": "8d8a5b2",
+   "role": "seed case (PLAN 5.1)",
+   "weather": {
+    "temperature_c": null,
+    "source": null,
+    "station": null,
+    "station_distance_km": null,
+    "observed_utc": null,
+    "aircraft_height_m": null
+   },
+   "version_note": "v2 adds flight_data.locate_traces, the box cut again with extraction metadata and the search-range margin, read only by the locate profile; the other profiles run exactly as v1"
+  },
+  {
+   "id": "eagle-cam-clip-18000s",
+   "version": 3,
+   "group": "eagle-cam",
+   "set": "development",
+   "expected_outcome": "located",
+   "description": "SWFL Eagle Cam #3, 1.5 h clip from 18,000 s holding the two search events (detect ranks 5 and 13 at 20,247 and 20,585 s; windows 20,117-20,697 s, so 2,117 s and 2,703 s of margin)",
+   "source": {
+    "identifiers": {
+     "youtube": "zs2o5Rhlp5w",
+     "url": "https://youtu.be/zs2o5Rhlp5w",
+     "nest": "LE-026B"
+    },
+    "acquisition": "yt-dlp download of the archived live stream's Opus track (format 251), see raw/audio/youtube/swfl_2024-12-28.ytdlp.log and .info.json; local only",
+    "raw": [
+     {
+      "path": "raw/audio/youtube/swfl_2024-12-28.webm",
+      "sha256": "58dd4c1259598c85579d1aba1311d18651f70501c2df822104cacb54b4a0ddc0"
+     },
+     {
+      "path": "raw/audio/youtube/swfl_2024-12-28.info.json",
+      "sha256": "532a1ce8d2e1bedbcb6f137616438d5d36a2fda1c06c75bef8724c81165f5e48"
+     },
+     {
+      "path": "raw/audio/youtube/swfl_2024-12-28.ytdlp.log",
+      "sha256": "ba602fa88c1d1a5a169dc4ea7bbe8c61d183479ede5d52b00579e8ce4fd541c8"
+     }
+    ]
+   },
+   "start_time": {
+    "source": "YouTube info.json release_timestamp (1735395676, whole seconds): the live broadcast's start. How the archived VOD's first sample relates to it is undocumented, so the uncertainty is a judgement, not a measurement. The clip starts 18,000 s later",
+    "utc": "2024-12-28T19:21:16Z",
+    "uncertainty_s": 60
+   },
+   "reference_clock_utc": {
+    "audio_zero_utc_unix_s": 1735413673.29,
+    "audio_zero_utc": "2024-12-28T19:21:13.29Z",
+    "basis": "derived from the development search on the full recording: t_heard1 of the committed top candidate (a2baea at 1735415920.772) minus event 1's heard CPA (20,247.487 s) minus its shift (0.0 s), plus the 18,000 s clip offset. Depends on the matched flights; not an independent source"
+   },
+   "audio": {
+    "path": "derived/swfl_clip/swfl_18000s_5400s.wav",
+    "of": "raw/audio/youtube/swfl_2024-12-28.webm",
+    "clip_offset_s": 18000.0,
+    "clip_offset_samples": 864000000,
+    "sample_rate_hz": 48000,
+    "duration_s": 5400.0,
+    "duration_samples": 259200000
+   },
+   "derived": [
+    {
+     "path": "derived/swfl_clip/swfl_18000s_5400s.wav",
+     "sha256": "4375f8af692956eb4aa75cc413ec30e475328aa75c028c4e286daa82dbe41710",
+     "recipe": [
+      [
+       "ffmpeg",
+       "-nostdin",
+       "-v",
+       "error",
+       "-i",
+       "{data}/raw/audio/youtube/swfl_2024-12-28.webm",
+       "-af",
+       "atrim=start_sample=864000000:end_sample=1123200000,asetpts=PTS-STARTPTS",
+       "-c:a",
+       "pcm_s16le",
+       "-f",
+       "wav",
+       "{out}"
+      ]
+     ],
+     "note": "sample-exact cut of the decoded 48 kHz stereo stream (atrim counts samples after decoding, so the offset holds exactly), written as 16-bit WAV"
+    },
+    {
+     "path": "derived/swfl_clip/rec.npz",
+     "sha256": "5306a1795200252b0c84beae87f6d772f243849fe8cbd501e5a53cfe95ee1b70",
+     "recipe": [
+      [
+       "dopplertrack",
+       "spectrogram",
+       "{data}/derived/swfl_clip/swfl_18000s_5400s.wav",
+       "{out}"
+      ]
+     ],
+     "note": "spectrogram of the clip with the CLI defaults; its whitening sees only the clip, so it differs from the full recording's near the clip edges"
+    },
+    {
+     "path": "derived/traces/2024-12-28/swfl_margin12_v2.npz",
+     "sha256": "5da069103c6252e64f9e56b2fa3d82f78cdc1f8d88f3e43c8240f1621c7ad766",
+     "recipe": [
+      [
+       "python",
+       "-I",
+       "{repo}/tools/data/extract_boxes.py",
+       "--max-range",
+       "12000",
+       "{data}/raw/adsb/2024-12-28",
+       "{out_dir}",
+       "swfl_margin12_v2=26.1,27.3,-82.5,-81.2"
+      ]
+     ],
+     "note": "cut 2026-11-04 with extraction metadata and the 12 km search-range margin from the search box (runs/2026-11-04-recut-oyster-essex-v2/); the locate profile reads it, the other profiles keep the legacy file"
+    }
+   ],
+   "spectrogram": "derived/swfl_clip/rec.npz",
+   "flight_data": {
+    "date": "2024-12-28",
+    "pod": "planes-readsb-prod-0",
+    "archive_assets": [
+     {
+      "path": "raw/adsb/2024-12-28/v2024.12.28-planes-readsb-prod-0.tar",
+      "sha256": "dda2169e0075ee00c833b5a49fbc831cb75c71d3f5697a1072a917bda2dee8f4"
+     }
+    ],
+    "traces": "derived/swfl/traces_swfl.npz",
+    "extraction_box": [
+     26.1,
+     27.3,
+     -82.5,
+     -81.2
+    ],
+    "extraction_note": "legacy file, streamed with the pre-Phase 0 fetch-day (no search-range margin, no metadata; log in derived/swfl/traces_swfl.fetch.log); predates Phase 0's extraction metadata, so the envelope is declared, not measured",
+    "locate_traces": "derived/traces/2024-12-28/swfl_margin12_v2.npz"
    },
    "search": {
     "bbox": [
@@ -703,7 +1134,7 @@
     "checked_by": "upstream README and committed tables (docs/results/swfl_search_best_per_pair.csv). Not a blind label",
     "blind": false
    },
-   "built_with": "1cb9c34",
+   "built_with": "8d8a5b2",
    "role": "seed case (PLAN 5.1)",
    "weather": {
     "temperature_c": 26.1,
@@ -712,7 +1143,8 @@
     "station_distance_km": 13.1,
     "observed_utc": "2024-12-28T19:53Z",
     "aircraft_height_m": null
-   }
+   },
+   "version_note": "v2 adds flight_data.locate_traces, the box cut again with extraction metadata and the search-range margin, read only by the locate profile; the other profiles run exactly as v1"
   },
   {
    "id": "oyster-bay-moved-wsw150",
@@ -1371,6 +1803,23 @@
       ]
      ],
      "note": "legacy file, streamed with the pre-Phase 0 fetch-day (no search-range margin, no extraction metadata; log in derived/oyster_bay/traces_ny.fetch.log). Today's fetch-day pads the box by the search range and writes metadata, so its output will not match this hash"
+    },
+    {
+     "path": "derived/traces/2026-09-08/ny_margin12_v2.npz",
+     "sha256": "b0aafdf2bffc971208b94ff69e6d58d391f64a1941e21c5579e8dc279373f17b",
+     "recipe": [
+      [
+       "python",
+       "-I",
+       "{repo}/tools/data/extract_boxes.py",
+       "--max-range",
+       "12000",
+       "{data}/raw/adsb/2026-09-08",
+       "{out_dir}",
+       "ny_margin12_v2=40.4,41.3,-74.4,-72.6"
+      ]
+     ],
+     "note": "cut 2026-11-04 with extraction metadata and the 12 km search-range margin from the search box (runs/2026-11-04-recut-oyster-essex-v2/); the locate profile reads it, the other profiles keep the legacy file"
     }
    ],
    "spectrogram": "derived/oyster_bay_degraded/rec.npz",
@@ -1394,7 +1843,212 @@
      -74.4,
      -72.6
     ],
-    "extraction_note": "streamed with fetch-day from the adsb.lol release whose local copies are the archive_assets; box from traces_ny.fetch.log, with no search-range margin; predates Phase 0's extraction metadata, so the envelope is declared, not measured"
+    "extraction_note": "streamed with fetch-day from the adsb.lol release whose local copies are the archive_assets; box from traces_ny.fetch.log, with no search-range margin; predates Phase 0's extraction metadata, so the envelope is declared, not measured",
+    "locate_traces": "derived/traces/2026-09-08/ny_margin12_v2.npz"
+   },
+   "search": {
+    "bbox": [
+     40.4,
+     41.3,
+     -74.4,
+     -72.6
+    ],
+    "harmonics": [
+     2,
+     1
+    ],
+    "spacing_m": 200,
+    "tol_s": 6.0,
+    "v_tol": 0.35,
+    "d_tol": [
+     0.4,
+     2.5
+    ],
+    "silence_d_m": 6000.0,
+    "max_range_m": 12000.0,
+    "dem": true,
+    "cpa_cache": "cpa/bench/oyster-bay_200m_dem.npz"
+   },
+   "refine": {
+    "rank": 1,
+    "spacing_m": 50.0,
+    "half_m": 600.0
+   },
+   "events": {
+    "mode": "saved_fits",
+    "files": [
+     "docs/results/oyster_bay_ev1.json",
+     "docs/results/oyster_bay_ev2.json"
+    ],
+    "pick": null,
+    "time_offset_s": 0.0
+   },
+   "labels": {
+    "reference": {
+     "lat": 40.876466,
+     "lon": -73.524951,
+     "source": "colsto's stated recording location"
+    },
+    "true_pair": [
+     "a1dfeb",
+     "ace391"
+    ],
+    "checked_by": "upstream README and committed tables; known-point check in tests/test_oyster_bay.py (2026-11-03). Not a blind label",
+    "blind": false
+   },
+   "built_with": "8d8a5b2",
+   "role": "seed case (PLAN 5.1)",
+   "notes": "Saved-fit search scores drift from the committed docs/results tables in the fourth significant figure (top 27.1008 against 27.0993; 40,889 triples against 40,885) because of the Phase 0 trajectory evidence masks; ranks and coordinates are exact. The 2026-11-03 cache check at 2bf61cc already showed it (27.1036). Not a regression",
+   "weather": {
+    "temperature_c": null,
+    "source": null,
+    "station": null,
+    "station_distance_km": null,
+    "observed_utc": null,
+    "aircraft_height_m": null
+   },
+   "version_note": "v2 adds flight_data.locate_traces, the box cut again with extraction metadata and the search-range margin, read only by the locate profile; the other profiles run exactly as v1"
+  },
+  {
+   "id": "oyster-bay-hp150-aac32k",
+   "version": 3,
+   "group": "oyster-bay",
+   "set": "development",
+   "expected_outcome": "located_or_abstain",
+   "description": "Oyster Bay high-passed at 150 Hz and re-encoded as 32 kbit/s mono AAC; the source Opus is already lossy",
+   "source": {
+    "identifiers": {
+     "youtube": "4CxVxuMVkMc",
+     "url": "https://youtu.be/4CxVxuMVkMc",
+     "creator": "colsto"
+    },
+    "acquisition": "yt-dlp download of the Opus audio track (format 251), see raw/audio/youtube/oyster_bay.ytdlp.log; licence: copyright retained by the creator, local only",
+    "raw": [
+     {
+      "path": "raw/audio/youtube/oyster_bay.webm",
+      "sha256": "6884324b4fb9babbc89b10de71f283dd338766a15d2fbd1aeedb52216276692d"
+     },
+     {
+      "path": "raw/audio/youtube/oyster_bay.ytdlp.log",
+      "sha256": "075c66cb1d1233f14d36cd74c417c22595249465286827becad0c95ed8b1d10e"
+     }
+    ]
+   },
+   "start_time": {
+    "source": "unknown, UTC date only: colsto states the date (2026-09-08) and not the time",
+    "utc": "2026-09-08T12:00:00Z",
+    "uncertainty_s": 43200
+   },
+   "reference_clock_utc": {
+    "audio_zero_utc_unix_s": 1788898650.72,
+    "audio_zero_utc": "2026-09-08T20:17:30.72Z",
+    "basis": "derived from the development search: t_heard1 of the committed top candidate (a1dfeb at 1788900805.682) minus event 1's heard CPA (2155.959 s) minus its shift (-1.0 s), docs/results/oyster_bay_search_best_per_pair.csv. It depends on the matched flights, is not an independent source and never counts as the start time's source"
+   },
+   "audio": {
+    "path": "derived/oyster_bay_degraded/hp150_aac32k.m4a",
+    "of": "raw/audio/youtube/oyster_bay.webm",
+    "clip_offset_s": 0.0,
+    "clip_offset_samples": 0,
+    "sample_rate_hz": 48000
+   },
+   "derived": [
+    {
+     "path": "derived/oyster_bay_degraded/hp150_aac32k.m4a",
+     "sha256": "0a72b702c56d44436c58d57e49fadadb2ff24c875007d020e76e7023f089bfb2",
+     "recipe": [
+      [
+       "ffmpeg",
+       "-nostdin",
+       "-v",
+       "error",
+       "-i",
+       "{data}/raw/audio/youtube/oyster_bay.webm",
+       "-af",
+       "highpass=f=150",
+       "-ac",
+       "1",
+       "-c:a",
+       "aac",
+       "-b:a",
+       "32k",
+       "-f",
+       "mp4",
+       "{out}"
+      ]
+     ],
+     "note": "ffmpeg's native AAC encoder; its bytes may differ under another ffmpeg version (built with ffmpeg 9.0.2)"
+    },
+    {
+     "path": "derived/oyster_bay_degraded/rec.npz",
+     "sha256": "cb2eaf44c62fa127c7faefab8b6f5f74a771482d2a798e329f08927752d160a1",
+     "recipe": [
+      [
+       "dopplertrack",
+       "spectrogram",
+       "{data}/derived/oyster_bay_degraded/hp150_aac32k.m4a",
+       "{out}"
+      ]
+     ]
+    },
+    {
+     "path": "derived/oyster_bay/traces_ny.npz",
+     "sha256": "2acd0be71c7011e730ff2b25af8a9cd36c97691be6d72154342f44ec882f2caa",
+     "recipe": [
+      [
+       "dopplertrack",
+       "fetch-day",
+       "2026-09-08",
+       "{out}",
+       "--bbox",
+       "40.4",
+       "41.3",
+       "-74.4",
+       "-72.6"
+      ]
+     ],
+     "note": "legacy file, streamed with the pre-Phase 0 fetch-day (no search-range margin, no extraction metadata; log in derived/oyster_bay/traces_ny.fetch.log). Today's fetch-day pads the box by the search range and writes metadata, so its output will not match this hash"
+    },
+    {
+     "path": "derived/traces/2026-09-08/ny_margin12_v2.npz",
+     "sha256": "b0aafdf2bffc971208b94ff69e6d58d391f64a1941e21c5579e8dc279373f17b",
+     "recipe": [
+      [
+       "python",
+       "-I",
+       "{repo}/tools/data/extract_boxes.py",
+       "--max-range",
+       "12000",
+       "{data}/raw/adsb/2026-09-08",
+       "{out_dir}",
+       "ny_margin12_v2=40.4,41.3,-74.4,-72.6"
+      ]
+     ],
+     "note": "cut 2026-11-04 with extraction metadata and the 12 km search-range margin from the search box (runs/2026-11-04-recut-oyster-essex-v2/); the locate profile reads it, the other profiles keep the legacy file"
+    }
+   ],
+   "spectrogram": "derived/oyster_bay_degraded/rec.npz",
+   "flight_data": {
+    "date": "2026-09-08",
+    "pod": "planes-readsb-prod-0",
+    "archive_assets": [
+     {
+      "path": "raw/adsb/2026-09-08/v2026.09.08-planes-readsb-prod-0.tar.aa",
+      "sha256": "f9804df3f9e9e173928ee239938d955bb661266f76393d1042bf12b7cb85de44"
+     },
+     {
+      "path": "raw/adsb/2026-09-08/v2026.09.08-planes-readsb-prod-0.tar.ab",
+      "sha256": "0d41348dbd9f4c64ee00eafd28ad89e8e748d14c3a2c9c0b11b6b6adae7f9579"
+     }
+    ],
+    "traces": "derived/oyster_bay/traces_ny.npz",
+    "extraction_box": [
+     40.4,
+     41.3,
+     -74.4,
+     -72.6
+    ],
+    "extraction_note": "streamed with fetch-day from the adsb.lol release whose local copies are the archive_assets; box from traces_ny.fetch.log, with no search-range margin; predates Phase 0's extraction metadata, so the envelope is declared, not measured",
+    "locate_traces": "derived/traces/2026-09-08/ny_margin12_v2.npz"
    },
    "search": {
     "bbox": [
@@ -1446,7 +2100,7 @@
     "checked_by": "upstream README and committed tables; known-point check in tests/test_oyster_bay.py (2026-11-03). Not a blind label",
     "blind": false
    },
-   "built_with": "1cb9c34",
+   "built_with": "8d8a5b2",
    "role": "seed case (PLAN 5.1)",
    "notes": "Saved-fit search scores drift from the committed docs/results tables in the fourth significant figure (top 27.1008 against 27.0993; 40,889 triples against 40,885) because of the Phase 0 trajectory evidence masks; ranks and coordinates are exact. The 2026-11-03 cache check at 2bf61cc already showed it (27.1036). Not a regression",
    "weather": {
@@ -1456,7 +2110,8 @@
     "station_distance_km": 18.9,
     "observed_utc": "2026-09-08T20:53Z",
     "aircraft_height_m": null
-   }
+   },
+   "version_note": "v2 adds flight_data.locate_traces, the box cut again with extraction metadata and the search-range margin, read only by the locate profile; the other profiles run exactly as v1"
   },
   {
    "id": "oyster-bay-moved-north150",
@@ -3161,9 +3816,6 @@
    "set": "development",
    "expected_outcome": "not_located",
    "description": "xeno-canto XC990819, Essex, 92 min: jets only (13 jet passes, no prop within 12 km); recorded with XC990820 400 m away, one group",
-   "runnable": {
-    "blocked": "a background negative for detect's threshold (Phase 2): no prop pass, so it needs detect-mode events, which the runner does not have yet"
-   },
    "source": {
     "identifiers": {
      "xeno_canto": "XC990819",
@@ -3200,7 +3852,14 @@
       "sha256": "eb8284984c5a7d046e640c01fcc97d0d6d415287cc16218546fe8660b57d0e29"
      }
     ],
-    "traces": "derived/traces/2025-04-20/essex_margin12.npz"
+    "traces": "derived/traces/2025-04-20/essex_margin12_v2.npz",
+    "extraction_box": [
+     51.081475657147514,
+     52.19852434285249,
+     -0.7966282600315752,
+     1.7166282600315752
+    ],
+    "extraction_note": "cut with extraction metadata; locate reads the envelope from the file"
    },
    "labels": {
     "reference": {
@@ -3212,7 +3871,154 @@
     "checked_by": "not yet labelled; data root MANIFEST.md lists the passes",
     "blind": true
    },
-   "built_with": "4088419",
+   "built_with": "8d8a5b2",
+   "weather": {
+    "temperature_c": null,
+    "source": null,
+    "station": null,
+    "station_distance_km": null,
+    "observed_utc": null,
+    "aircraft_height_m": null
+   },
+   "profiles": [
+    "locate"
+   ],
+   "events": {
+    "mode": "detect"
+   },
+   "version_note": "v2 makes it runnable under the locate profile, which detects its own events",
+   "audio": {
+    "path": "raw/audio/xenocanto/XC990819_2025-04-20_0510.mp3",
+    "of": "raw/audio/xenocanto/XC990819_2025-04-20_0510.mp3",
+    "clip_offset_s": 0.0,
+    "clip_offset_samples": 0,
+    "sample_rate_hz": 48000
+   },
+   "derived": [
+    {
+     "path": "derived/background/XC990819_2025-04-20_0510.npz",
+     "sha256": "35099919e1793320c6706a6808d0378b04e8dd57bfb9914675a9df0a9595714d",
+     "recipe": [
+      [
+       "dopplertrack",
+       "spectrogram",
+       "{data}/raw/audio/xenocanto/XC990819_2025-04-20_0510.mp3",
+       "{out}"
+      ]
+     ],
+     "note": "the Tier 1 background span's spectrogram (bench/tier1.json); CC BY-NC-SA, local only"
+    },
+    {
+     "path": "derived/traces/2025-04-20/essex_margin12_v2.npz",
+     "sha256": "eeba0be89725ad8849f1cf20ef7855bdd12ceedbb109cac94ba16f013ea7822e",
+     "recipe": [
+      [
+       "python",
+       "-I",
+       "{repo}/tools/data/extract_boxes.py",
+       "--max-range",
+       "12000",
+       "{data}/raw/adsb/2025-04-20",
+       "{out_dir}",
+       "essex_margin12_v2=51.19,52.09,-0.62,1.54"
+      ]
+     ],
+     "note": "cut 2026-11-04 with extraction metadata from the search box padded by 12 km (runs/2026-11-04-recut-oyster-essex-v2/); the box is the legacy essex_margin12 envelope less the margin, rounded inward"
+    }
+   ],
+   "spectrogram": "derived/background/XC990819_2025-04-20_0510.npz",
+   "search": {
+    "bbox": [
+     51.19,
+     52.09,
+     -0.62,
+     1.54
+    ],
+    "harmonics": [
+     1,
+     1
+    ],
+    "spacing_m": 200,
+    "tol_s": 6.0,
+    "v_tol": 0.35,
+    "d_tol": [
+     0.4,
+     2.5
+    ],
+    "silence_d_m": 6000.0,
+    "max_range_m": 12000.0,
+    "dem": true,
+    "cpa_cache": "cpa/bench/xenocanto-essex-2025-04-20_200m_dem.npz"
+   },
+   "refine": {
+    "rank": 1,
+    "spacing_m": 50.0,
+    "half_m": 600.0
+   }
+  },
+  {
+   "id": "xenocanto-xc990819",
+   "version": 3,
+   "group": "xenocanto-essex-2025-04-20",
+   "set": "development",
+   "expected_outcome": "not_located",
+   "description": "xeno-canto XC990819, Essex, 92 min: jets only (13 jet passes, no prop within 12 km); recorded with XC990820 400 m away, one group",
+   "source": {
+    "identifiers": {
+     "xeno_canto": "XC990819",
+     "url": "https://xeno-canto.org/990819",
+     "recordist": "David Bissett"
+    },
+    "acquisition": "xeno-canto API v3 download (raw/audio/xenocanto/selected.json); CC BY-NC-SA 4.0, local only",
+    "raw": [
+     {
+      "path": "raw/audio/xenocanto/XC990819_2025-04-20_0510.mp3",
+      "sha256": "1f1cbf5333af6725aa19d756bb8df6264a6c76754984cf0d7b8a6b9d916bfb1a"
+     },
+     {
+      "path": "raw/audio/xenocanto/selected.json",
+      "sha256": "c41ef63b64ccb5d8ee0031f23793e1765a2bbeb0bbfa47cfc396aca5801ff1b0"
+     }
+    ]
+   },
+   "start_time": {
+    "source": "xeno-canto's recording time, local and to the minute (BST, so UTC+1); whether it was rounded or truncated is unknown",
+    "utc": "2025-04-20T04:10:00Z",
+    "uncertainty_s": 60
+   },
+   "flight_data": {
+    "date": "2025-04-20",
+    "pod": "planes-readsb-prod-0",
+    "archive_assets": [
+     {
+      "path": "raw/adsb/2025-04-20/v2025.04.20-planes-readsb-prod-0.tar.aa",
+      "sha256": "ed094f669c48140a43a20d70932565b6bc8fee69eedc6c3b7c861ec89830b19f"
+     },
+     {
+      "path": "raw/adsb/2025-04-20/v2025.04.20-planes-readsb-prod-0.tar.ab",
+      "sha256": "eb8284984c5a7d046e640c01fcc97d0d6d415287cc16218546fe8660b57d0e29"
+     }
+    ],
+    "traces": "derived/traces/2025-04-20/essex_margin12_v2.npz",
+    "extraction_box": [
+     51.081475657147514,
+     52.19852434285249,
+     -0.7966282600315752,
+     1.7166282600315752
+    ],
+    "extraction_note": "cut with extraction metadata; locate reads the envelope from the file"
+   },
+   "labels": {
+    "reference": {
+     "lat": 51.6483,
+     "lon": 0.4953,
+     "source": "xeno-canto record coordinates (4 decimal places, about 10 m)"
+    },
+    "true_pair": null,
+    "checked_by": "not yet labelled; data root MANIFEST.md lists the passes",
+    "blind": true
+   },
+   "built_with": "8d8a5b2",
    "weather": {
     "temperature_c": 6.0,
     "source": "IEM ASOS (IEM tmpc), raw/aux/metar/EGMC_2025-04-19.csv",
@@ -3220,6 +4026,81 @@
     "station_distance_km": 16.3,
     "observed_utc": "2025-04-20T04:50Z",
     "aircraft_height_m": null
+   },
+   "profiles": [
+    "locate"
+   ],
+   "events": {
+    "mode": "detect"
+   },
+   "version_note": "v2 makes it runnable under the locate profile, which detects its own events",
+   "audio": {
+    "path": "raw/audio/xenocanto/XC990819_2025-04-20_0510.mp3",
+    "of": "raw/audio/xenocanto/XC990819_2025-04-20_0510.mp3",
+    "clip_offset_s": 0.0,
+    "clip_offset_samples": 0,
+    "sample_rate_hz": 48000
+   },
+   "derived": [
+    {
+     "path": "derived/background/XC990819_2025-04-20_0510.npz",
+     "sha256": "35099919e1793320c6706a6808d0378b04e8dd57bfb9914675a9df0a9595714d",
+     "recipe": [
+      [
+       "dopplertrack",
+       "spectrogram",
+       "{data}/raw/audio/xenocanto/XC990819_2025-04-20_0510.mp3",
+       "{out}"
+      ]
+     ],
+     "note": "the Tier 1 background span's spectrogram (bench/tier1.json); CC BY-NC-SA, local only"
+    },
+    {
+     "path": "derived/traces/2025-04-20/essex_margin12_v2.npz",
+     "sha256": "eeba0be89725ad8849f1cf20ef7855bdd12ceedbb109cac94ba16f013ea7822e",
+     "recipe": [
+      [
+       "python",
+       "-I",
+       "{repo}/tools/data/extract_boxes.py",
+       "--max-range",
+       "12000",
+       "{data}/raw/adsb/2025-04-20",
+       "{out_dir}",
+       "essex_margin12_v2=51.19,52.09,-0.62,1.54"
+      ]
+     ],
+     "note": "cut 2026-11-04 with extraction metadata from the search box padded by 12 km (runs/2026-11-04-recut-oyster-essex-v2/); the box is the legacy essex_margin12 envelope less the margin, rounded inward"
+    }
+   ],
+   "spectrogram": "derived/background/XC990819_2025-04-20_0510.npz",
+   "search": {
+    "bbox": [
+     51.19,
+     52.09,
+     -0.62,
+     1.54
+    ],
+    "harmonics": [
+     1,
+     1
+    ],
+    "spacing_m": 200,
+    "tol_s": 6.0,
+    "v_tol": 0.35,
+    "d_tol": [
+     0.4,
+     2.5
+    ],
+    "silence_d_m": 6000.0,
+    "max_range_m": 12000.0,
+    "dem": true,
+    "cpa_cache": "cpa/bench/xenocanto-essex-2025-04-20_200m_dem_6C.npz"
+   },
+   "refine": {
+    "rank": 1,
+    "spacing_m": 50.0,
+    "half_m": 600.0
    }
   },
   {
@@ -3493,6 +4374,1434 @@
     "observed_utc": "2025-04-07T05:20Z",
     "aircraft_height_m": null
    }
+  },
+  {
+   "id": "oyster-bay-traces-end-early",
+   "version": 1,
+   "group": "oyster-bay",
+   "set": "development",
+   "expected_outcome": "not_located",
+   "description": "Oyster Bay audio with its flight data cut to end at 2026-09-08T19:17:30Z, an hour before the recording starts on the reference clock: the file's metadata says it covers only that much of the day, so locate must stop at missing flight data for the time and search nothing",
+   "source": {
+    "identifiers": {
+     "youtube": "4CxVxuMVkMc",
+     "url": "https://youtu.be/4CxVxuMVkMc",
+     "creator": "colsto"
+    },
+    "acquisition": "yt-dlp download of the Opus audio track (format 251), see raw/audio/youtube/oyster_bay.ytdlp.log; licence: copyright retained by the creator, local only",
+    "raw": [
+     {
+      "path": "raw/audio/youtube/oyster_bay.webm",
+      "sha256": "6884324b4fb9babbc89b10de71f283dd338766a15d2fbd1aeedb52216276692d"
+     },
+     {
+      "path": "raw/audio/youtube/oyster_bay.ytdlp.log",
+      "sha256": "075c66cb1d1233f14d36cd74c417c22595249465286827becad0c95ed8b1d10e"
+     }
+    ]
+   },
+   "start_time": {
+    "source": "unknown, UTC date only: colsto states the date (2026-09-08) and not the time",
+    "utc": "2026-09-08T12:00:00Z",
+    "uncertainty_s": 43200
+   },
+   "audio": {
+    "path": "raw/audio/youtube/oyster_bay.webm",
+    "of": "raw/audio/youtube/oyster_bay.webm",
+    "clip_offset_s": 0.0,
+    "clip_offset_samples": 0,
+    "sample_rate_hz": 48000
+   },
+   "derived": [
+    {
+     "path": "derived/oyster_bay/rec.npz",
+     "sha256": "f996b61a2b596498d34e59af2e555446ef6ab879263e669868acb2b6221b531b",
+     "recipe": [
+      [
+       "dopplertrack",
+       "spectrogram",
+       "{data}/raw/audio/youtube/oyster_bay.webm",
+       "{out}"
+      ]
+     ],
+     "note": "spectrogram of the Opus track with the CLI defaults (0.25 s hop, 40-450 Hz)"
+    },
+    {
+     "path": "derived/traces/2026-09-08/ny_margin12_v2.npz",
+     "sha256": "b0aafdf2bffc971208b94ff69e6d58d391f64a1941e21c5579e8dc279373f17b",
+     "recipe": [
+      [
+       "python",
+       "-I",
+       "{repo}/tools/data/extract_boxes.py",
+       "--max-range",
+       "12000",
+       "{data}/raw/adsb/2026-09-08",
+       "{out_dir}",
+       "ny_margin12_v2=40.4,41.3,-74.4,-72.6"
+      ]
+     ],
+     "note": "cut 2026-11-04 with extraction metadata and the 12 km search-range margin from the search box (runs/2026-11-04-recut-oyster-essex-v2/); the locate profile reads it, the other profiles keep the legacy file"
+    },
+    {
+     "path": "derived/traces/2026-09-08/ny_margin12_v2_end1917.npz",
+     "sha256": "7f36e2a2c522666f47584adaeb918f61ed130b0f175c4de7331bcfa876542aa2",
+     "recipe": [
+      [
+       "python",
+       "-I",
+       "{repo}/tools/data/edit_traces.py",
+       "{data}/derived/traces/2026-09-08/ny_margin12_v2.npz",
+       "{out}",
+       "--end-utc",
+       "2026-09-08T19:17:30Z"
+      ]
+     ],
+     "note": "ny_margin12_v2 with every point after the end time dropped and covered_utc set to match"
+    }
+   ],
+   "spectrogram": "derived/oyster_bay/rec.npz",
+   "flight_data": {
+    "date": "2026-09-08",
+    "pod": "planes-readsb-prod-0",
+    "archive_assets": [
+     {
+      "path": "raw/adsb/2026-09-08/v2026.09.08-planes-readsb-prod-0.tar.aa",
+      "sha256": "f9804df3f9e9e173928ee239938d955bb661266f76393d1042bf12b7cb85de44"
+     },
+     {
+      "path": "raw/adsb/2026-09-08/v2026.09.08-planes-readsb-prod-0.tar.ab",
+      "sha256": "0d41348dbd9f4c64ee00eafd28ad89e8e748d14c3a2c9c0b11b6b6adae7f9579"
+     }
+    ],
+    "traces": "derived/traces/2026-09-08/ny_margin12_v2_end1917.npz",
+    "extraction_box": [
+     40.291475657147515,
+     41.40852434285248,
+     -74.54445570884563,
+     -72.45554429115437
+    ],
+    "extraction_note": "cut with extraction metadata; locate reads the envelope from the file"
+   },
+   "search": {
+    "bbox": [
+     40.4,
+     41.3,
+     -74.4,
+     -72.6
+    ],
+    "harmonics": [
+     2,
+     1
+    ],
+    "spacing_m": 200,
+    "tol_s": 6.0,
+    "v_tol": 0.35,
+    "d_tol": [
+     0.4,
+     2.5
+    ],
+    "silence_d_m": 6000.0,
+    "max_range_m": 12000.0,
+    "dem": true,
+    "cpa_cache": "cpa/bench/oyster-bay-traces-end-early_200m_dem.npz"
+   },
+   "refine": {
+    "rank": 1,
+    "spacing_m": 50.0,
+    "half_m": 600.0
+   },
+   "events": {
+    "mode": "detect"
+   },
+   "labels": {
+    "reference": {
+     "lat": 40.876466,
+     "lon": -73.524951,
+     "source": "colsto's stated recording location"
+    },
+    "true_pair": null,
+    "expected_verdict": {
+     "outcome": "insufficient_evidence",
+     "reason_codes": [
+      "flight_data_missing_time"
+     ]
+    },
+    "checked_by": "constructed: the cut's end time and the case's reference clock",
+    "blind": false
+   },
+   "built_with": "8d8a5b2",
+   "notes": "Saved-fit search scores drift from the committed docs/results tables in the fourth significant figure (top 27.1008 against 27.0993; 40,889 triples against 40,885) because of the Phase 0 trajectory evidence masks; ranks and coordinates are exact. The 2026-11-03 cache check at 2bf61cc already showed it (27.1036). Not a regression",
+   "weather": {
+    "temperature_c": null,
+    "source": null,
+    "station": null,
+    "station_distance_km": null,
+    "observed_utc": null,
+    "aircraft_height_m": null
+   },
+   "profiles": [
+    "locate"
+   ]
+  },
+  {
+   "id": "oyster-bay-traces-end-early",
+   "version": 2,
+   "group": "oyster-bay",
+   "set": "development",
+   "expected_outcome": "not_located",
+   "description": "Oyster Bay audio with its flight data cut to end at 2026-09-08T19:17:30Z, an hour before the recording starts on the reference clock: the file's metadata says it covers only that much of the day, so locate must stop at missing flight data for the time and search nothing",
+   "source": {
+    "identifiers": {
+     "youtube": "4CxVxuMVkMc",
+     "url": "https://youtu.be/4CxVxuMVkMc",
+     "creator": "colsto"
+    },
+    "acquisition": "yt-dlp download of the Opus audio track (format 251), see raw/audio/youtube/oyster_bay.ytdlp.log; licence: copyright retained by the creator, local only",
+    "raw": [
+     {
+      "path": "raw/audio/youtube/oyster_bay.webm",
+      "sha256": "6884324b4fb9babbc89b10de71f283dd338766a15d2fbd1aeedb52216276692d"
+     },
+     {
+      "path": "raw/audio/youtube/oyster_bay.ytdlp.log",
+      "sha256": "075c66cb1d1233f14d36cd74c417c22595249465286827becad0c95ed8b1d10e"
+     }
+    ]
+   },
+   "start_time": {
+    "source": "unknown, UTC date only: colsto states the date (2026-09-08) and not the time",
+    "utc": "2026-09-08T12:00:00Z",
+    "uncertainty_s": 43200
+   },
+   "audio": {
+    "path": "raw/audio/youtube/oyster_bay.webm",
+    "of": "raw/audio/youtube/oyster_bay.webm",
+    "clip_offset_s": 0.0,
+    "clip_offset_samples": 0,
+    "sample_rate_hz": 48000
+   },
+   "derived": [
+    {
+     "path": "derived/oyster_bay/rec.npz",
+     "sha256": "f996b61a2b596498d34e59af2e555446ef6ab879263e669868acb2b6221b531b",
+     "recipe": [
+      [
+       "dopplertrack",
+       "spectrogram",
+       "{data}/raw/audio/youtube/oyster_bay.webm",
+       "{out}"
+      ]
+     ],
+     "note": "spectrogram of the Opus track with the CLI defaults (0.25 s hop, 40-450 Hz)"
+    },
+    {
+     "path": "derived/traces/2026-09-08/ny_margin12_v2.npz",
+     "sha256": "b0aafdf2bffc971208b94ff69e6d58d391f64a1941e21c5579e8dc279373f17b",
+     "recipe": [
+      [
+       "python",
+       "-I",
+       "{repo}/tools/data/extract_boxes.py",
+       "--max-range",
+       "12000",
+       "{data}/raw/adsb/2026-09-08",
+       "{out_dir}",
+       "ny_margin12_v2=40.4,41.3,-74.4,-72.6"
+      ]
+     ],
+     "note": "cut 2026-11-04 with extraction metadata and the 12 km search-range margin from the search box (runs/2026-11-04-recut-oyster-essex-v2/); the locate profile reads it, the other profiles keep the legacy file"
+    },
+    {
+     "path": "derived/traces/2026-09-08/ny_margin12_v2_end1917.npz",
+     "sha256": "7f36e2a2c522666f47584adaeb918f61ed130b0f175c4de7331bcfa876542aa2",
+     "recipe": [
+      [
+       "python",
+       "-I",
+       "{repo}/tools/data/edit_traces.py",
+       "{data}/derived/traces/2026-09-08/ny_margin12_v2.npz",
+       "{out}",
+       "--end-utc",
+       "2026-09-08T19:17:30Z"
+      ]
+     ],
+     "note": "ny_margin12_v2 with every point after the end time dropped and covered_utc set to match"
+    }
+   ],
+   "spectrogram": "derived/oyster_bay/rec.npz",
+   "flight_data": {
+    "date": "2026-09-08",
+    "pod": "planes-readsb-prod-0",
+    "archive_assets": [
+     {
+      "path": "raw/adsb/2026-09-08/v2026.09.08-planes-readsb-prod-0.tar.aa",
+      "sha256": "f9804df3f9e9e173928ee239938d955bb661266f76393d1042bf12b7cb85de44"
+     },
+     {
+      "path": "raw/adsb/2026-09-08/v2026.09.08-planes-readsb-prod-0.tar.ab",
+      "sha256": "0d41348dbd9f4c64ee00eafd28ad89e8e748d14c3a2c9c0b11b6b6adae7f9579"
+     }
+    ],
+    "traces": "derived/traces/2026-09-08/ny_margin12_v2_end1917.npz",
+    "extraction_box": [
+     40.291475657147515,
+     41.40852434285248,
+     -74.54445570884563,
+     -72.45554429115437
+    ],
+    "extraction_note": "cut with extraction metadata; locate reads the envelope from the file"
+   },
+   "search": {
+    "bbox": [
+     40.4,
+     41.3,
+     -74.4,
+     -72.6
+    ],
+    "harmonics": [
+     2,
+     1
+    ],
+    "spacing_m": 200,
+    "tol_s": 6.0,
+    "v_tol": 0.35,
+    "d_tol": [
+     0.4,
+     2.5
+    ],
+    "silence_d_m": 6000.0,
+    "max_range_m": 12000.0,
+    "dem": true,
+    "cpa_cache": "cpa/bench/oyster-bay-traces-end-early_200m_dem_25.6C.npz"
+   },
+   "refine": {
+    "rank": 1,
+    "spacing_m": 50.0,
+    "half_m": 600.0
+   },
+   "events": {
+    "mode": "detect"
+   },
+   "labels": {
+    "reference": {
+     "lat": 40.876466,
+     "lon": -73.524951,
+     "source": "colsto's stated recording location"
+    },
+    "true_pair": null,
+    "expected_verdict": {
+     "outcome": "insufficient_evidence",
+     "reason_codes": [
+      "flight_data_missing_time"
+     ]
+    },
+    "checked_by": "constructed: the cut's end time and the case's reference clock",
+    "blind": false
+   },
+   "built_with": "8d8a5b2",
+   "notes": "Saved-fit search scores drift from the committed docs/results tables in the fourth significant figure (top 27.1008 against 27.0993; 40,889 triples against 40,885) because of the Phase 0 trajectory evidence masks; ranks and coordinates are exact. The 2026-11-03 cache check at 2bf61cc already showed it (27.1036). Not a regression",
+   "weather": {
+    "temperature_c": 25.6,
+    "source": "IEM ASOS (METAR T group), raw/aux/metar/KFRG_2026-09-07.csv",
+    "station": "KFRG FARMINGDALE/REPUBLC",
+    "station_distance_km": 18.9,
+    "observed_utc": "2026-09-08T20:53Z",
+    "aircraft_height_m": null
+   },
+   "profiles": [
+    "locate"
+   ]
+  },
+  {
+   "id": "oyster-bay-sources-removed",
+   "version": 1,
+   "group": "oyster-bay",
+   "set": "development",
+   "expected_outcome": "not_located",
+   "description": "Oyster Bay audio with the true pair's two flights (a1dfeb and ace391) removed from the flight data and every other trace kept point for point, so the traffic around the removed flights is untouched: the right answer is gone, and locate must not report a location from the wrong pairs that remain",
+   "source": {
+    "identifiers": {
+     "youtube": "4CxVxuMVkMc",
+     "url": "https://youtu.be/4CxVxuMVkMc",
+     "creator": "colsto"
+    },
+    "acquisition": "yt-dlp download of the Opus audio track (format 251), see raw/audio/youtube/oyster_bay.ytdlp.log; licence: copyright retained by the creator, local only",
+    "raw": [
+     {
+      "path": "raw/audio/youtube/oyster_bay.webm",
+      "sha256": "6884324b4fb9babbc89b10de71f283dd338766a15d2fbd1aeedb52216276692d"
+     },
+     {
+      "path": "raw/audio/youtube/oyster_bay.ytdlp.log",
+      "sha256": "075c66cb1d1233f14d36cd74c417c22595249465286827becad0c95ed8b1d10e"
+     }
+    ]
+   },
+   "start_time": {
+    "source": "unknown, UTC date only: colsto states the date (2026-09-08) and not the time",
+    "utc": "2026-09-08T12:00:00Z",
+    "uncertainty_s": 43200
+   },
+   "audio": {
+    "path": "raw/audio/youtube/oyster_bay.webm",
+    "of": "raw/audio/youtube/oyster_bay.webm",
+    "clip_offset_s": 0.0,
+    "clip_offset_samples": 0,
+    "sample_rate_hz": 48000
+   },
+   "derived": [
+    {
+     "path": "derived/oyster_bay/rec.npz",
+     "sha256": "f996b61a2b596498d34e59af2e555446ef6ab879263e669868acb2b6221b531b",
+     "recipe": [
+      [
+       "dopplertrack",
+       "spectrogram",
+       "{data}/raw/audio/youtube/oyster_bay.webm",
+       "{out}"
+      ]
+     ],
+     "note": "spectrogram of the Opus track with the CLI defaults (0.25 s hop, 40-450 Hz)"
+    },
+    {
+     "path": "derived/traces/2026-09-08/ny_margin12_v2.npz",
+     "sha256": "b0aafdf2bffc971208b94ff69e6d58d391f64a1941e21c5579e8dc279373f17b",
+     "recipe": [
+      [
+       "python",
+       "-I",
+       "{repo}/tools/data/extract_boxes.py",
+       "--max-range",
+       "12000",
+       "{data}/raw/adsb/2026-09-08",
+       "{out_dir}",
+       "ny_margin12_v2=40.4,41.3,-74.4,-72.6"
+      ]
+     ],
+     "note": "cut 2026-11-04 with extraction metadata and the 12 km search-range margin from the search box (runs/2026-11-04-recut-oyster-essex-v2/); the locate profile reads it, the other profiles keep the legacy file"
+    },
+    {
+     "path": "derived/traces/2026-09-08/ny_margin12_v2_no_a1dfeb_ace391.npz",
+     "sha256": "dbe088c60428481c5434b1be41f2170021f86d26673cdf29534cb4189f6e63aa",
+     "recipe": [
+      [
+       "python",
+       "-I",
+       "{repo}/tools/data/edit_traces.py",
+       "{data}/derived/traces/2026-09-08/ny_margin12_v2.npz",
+       "{out}",
+       "--drop",
+       "a1dfeb,ace391"
+      ]
+     ],
+     "note": "ny_margin12_v2 without any trace of a1dfeb or ace391; the rest copied unchanged"
+    }
+   ],
+   "spectrogram": "derived/oyster_bay/rec.npz",
+   "flight_data": {
+    "date": "2026-09-08",
+    "pod": "planes-readsb-prod-0",
+    "archive_assets": [
+     {
+      "path": "raw/adsb/2026-09-08/v2026.09.08-planes-readsb-prod-0.tar.aa",
+      "sha256": "f9804df3f9e9e173928ee239938d955bb661266f76393d1042bf12b7cb85de44"
+     },
+     {
+      "path": "raw/adsb/2026-09-08/v2026.09.08-planes-readsb-prod-0.tar.ab",
+      "sha256": "0d41348dbd9f4c64ee00eafd28ad89e8e748d14c3a2c9c0b11b6b6adae7f9579"
+     }
+    ],
+    "traces": "derived/traces/2026-09-08/ny_margin12_v2_no_a1dfeb_ace391.npz",
+    "extraction_box": [
+     40.291475657147515,
+     41.40852434285248,
+     -74.54445570884563,
+     -72.45554429115437
+    ],
+    "extraction_note": "cut with extraction metadata; locate reads the envelope from the file"
+   },
+   "search": {
+    "bbox": [
+     40.4,
+     41.3,
+     -74.4,
+     -72.6
+    ],
+    "harmonics": [
+     2,
+     1
+    ],
+    "spacing_m": 200,
+    "tol_s": 6.0,
+    "v_tol": 0.35,
+    "d_tol": [
+     0.4,
+     2.5
+    ],
+    "silence_d_m": 6000.0,
+    "max_range_m": 12000.0,
+    "dem": true,
+    "cpa_cache": "cpa/bench/oyster-bay-sources-removed_200m_dem.npz"
+   },
+   "refine": {
+    "rank": 1,
+    "spacing_m": 50.0,
+    "half_m": 600.0
+   },
+   "events": {
+    "mode": "detect"
+   },
+   "labels": {
+    "reference": {
+     "lat": 40.876466,
+     "lon": -73.524951,
+     "source": "colsto's stated recording location"
+    },
+    "true_pair": null,
+    "removed_pair": [
+     "a1dfeb",
+     "ace391"
+    ],
+    "checked_by": "constructed from oyster-bay's labelled true pair",
+    "blind": false
+   },
+   "built_with": "8d8a5b2",
+   "notes": "Saved-fit search scores drift from the committed docs/results tables in the fourth significant figure (top 27.1008 against 27.0993; 40,889 triples against 40,885) because of the Phase 0 trajectory evidence masks; ranks and coordinates are exact. The 2026-11-03 cache check at 2bf61cc already showed it (27.1036). Not a regression",
+   "weather": {
+    "temperature_c": null,
+    "source": null,
+    "station": null,
+    "station_distance_km": null,
+    "observed_utc": null,
+    "aircraft_height_m": null
+   },
+   "profiles": [
+    "locate"
+   ]
+  },
+  {
+   "id": "oyster-bay-sources-removed",
+   "version": 2,
+   "group": "oyster-bay",
+   "set": "development",
+   "expected_outcome": "not_located",
+   "description": "Oyster Bay audio with the true pair's two flights (a1dfeb and ace391) removed from the flight data and every other trace kept point for point, so the traffic around the removed flights is untouched: the right answer is gone, and locate must not report a location from the wrong pairs that remain",
+   "source": {
+    "identifiers": {
+     "youtube": "4CxVxuMVkMc",
+     "url": "https://youtu.be/4CxVxuMVkMc",
+     "creator": "colsto"
+    },
+    "acquisition": "yt-dlp download of the Opus audio track (format 251), see raw/audio/youtube/oyster_bay.ytdlp.log; licence: copyright retained by the creator, local only",
+    "raw": [
+     {
+      "path": "raw/audio/youtube/oyster_bay.webm",
+      "sha256": "6884324b4fb9babbc89b10de71f283dd338766a15d2fbd1aeedb52216276692d"
+     },
+     {
+      "path": "raw/audio/youtube/oyster_bay.ytdlp.log",
+      "sha256": "075c66cb1d1233f14d36cd74c417c22595249465286827becad0c95ed8b1d10e"
+     }
+    ]
+   },
+   "start_time": {
+    "source": "unknown, UTC date only: colsto states the date (2026-09-08) and not the time",
+    "utc": "2026-09-08T12:00:00Z",
+    "uncertainty_s": 43200
+   },
+   "audio": {
+    "path": "raw/audio/youtube/oyster_bay.webm",
+    "of": "raw/audio/youtube/oyster_bay.webm",
+    "clip_offset_s": 0.0,
+    "clip_offset_samples": 0,
+    "sample_rate_hz": 48000
+   },
+   "derived": [
+    {
+     "path": "derived/oyster_bay/rec.npz",
+     "sha256": "f996b61a2b596498d34e59af2e555446ef6ab879263e669868acb2b6221b531b",
+     "recipe": [
+      [
+       "dopplertrack",
+       "spectrogram",
+       "{data}/raw/audio/youtube/oyster_bay.webm",
+       "{out}"
+      ]
+     ],
+     "note": "spectrogram of the Opus track with the CLI defaults (0.25 s hop, 40-450 Hz)"
+    },
+    {
+     "path": "derived/traces/2026-09-08/ny_margin12_v2.npz",
+     "sha256": "b0aafdf2bffc971208b94ff69e6d58d391f64a1941e21c5579e8dc279373f17b",
+     "recipe": [
+      [
+       "python",
+       "-I",
+       "{repo}/tools/data/extract_boxes.py",
+       "--max-range",
+       "12000",
+       "{data}/raw/adsb/2026-09-08",
+       "{out_dir}",
+       "ny_margin12_v2=40.4,41.3,-74.4,-72.6"
+      ]
+     ],
+     "note": "cut 2026-11-04 with extraction metadata and the 12 km search-range margin from the search box (runs/2026-11-04-recut-oyster-essex-v2/); the locate profile reads it, the other profiles keep the legacy file"
+    },
+    {
+     "path": "derived/traces/2026-09-08/ny_margin12_v2_no_a1dfeb_ace391.npz",
+     "sha256": "dbe088c60428481c5434b1be41f2170021f86d26673cdf29534cb4189f6e63aa",
+     "recipe": [
+      [
+       "python",
+       "-I",
+       "{repo}/tools/data/edit_traces.py",
+       "{data}/derived/traces/2026-09-08/ny_margin12_v2.npz",
+       "{out}",
+       "--drop",
+       "a1dfeb,ace391"
+      ]
+     ],
+     "note": "ny_margin12_v2 without any trace of a1dfeb or ace391; the rest copied unchanged"
+    }
+   ],
+   "spectrogram": "derived/oyster_bay/rec.npz",
+   "flight_data": {
+    "date": "2026-09-08",
+    "pod": "planes-readsb-prod-0",
+    "archive_assets": [
+     {
+      "path": "raw/adsb/2026-09-08/v2026.09.08-planes-readsb-prod-0.tar.aa",
+      "sha256": "f9804df3f9e9e173928ee239938d955bb661266f76393d1042bf12b7cb85de44"
+     },
+     {
+      "path": "raw/adsb/2026-09-08/v2026.09.08-planes-readsb-prod-0.tar.ab",
+      "sha256": "0d41348dbd9f4c64ee00eafd28ad89e8e748d14c3a2c9c0b11b6b6adae7f9579"
+     }
+    ],
+    "traces": "derived/traces/2026-09-08/ny_margin12_v2_no_a1dfeb_ace391.npz",
+    "extraction_box": [
+     40.291475657147515,
+     41.40852434285248,
+     -74.54445570884563,
+     -72.45554429115437
+    ],
+    "extraction_note": "cut with extraction metadata; locate reads the envelope from the file"
+   },
+   "search": {
+    "bbox": [
+     40.4,
+     41.3,
+     -74.4,
+     -72.6
+    ],
+    "harmonics": [
+     2,
+     1
+    ],
+    "spacing_m": 200,
+    "tol_s": 6.0,
+    "v_tol": 0.35,
+    "d_tol": [
+     0.4,
+     2.5
+    ],
+    "silence_d_m": 6000.0,
+    "max_range_m": 12000.0,
+    "dem": true,
+    "cpa_cache": "cpa/bench/oyster-bay-sources-removed_200m_dem_25.6C.npz"
+   },
+   "refine": {
+    "rank": 1,
+    "spacing_m": 50.0,
+    "half_m": 600.0
+   },
+   "events": {
+    "mode": "detect"
+   },
+   "labels": {
+    "reference": {
+     "lat": 40.876466,
+     "lon": -73.524951,
+     "source": "colsto's stated recording location"
+    },
+    "true_pair": null,
+    "removed_pair": [
+     "a1dfeb",
+     "ace391"
+    ],
+    "checked_by": "constructed from oyster-bay's labelled true pair",
+    "blind": false
+   },
+   "built_with": "8d8a5b2",
+   "notes": "Saved-fit search scores drift from the committed docs/results tables in the fourth significant figure (top 27.1008 against 27.0993; 40,889 triples against 40,885) because of the Phase 0 trajectory evidence masks; ranks and coordinates are exact. The 2026-11-03 cache check at 2bf61cc already showed it (27.1036). Not a regression",
+   "weather": {
+    "temperature_c": 25.6,
+    "source": "IEM ASOS (METAR T group), raw/aux/metar/KFRG_2026-09-07.csv",
+    "station": "KFRG FARMINGDALE/REPUBLC",
+    "station_distance_km": 18.9,
+    "observed_utc": "2026-09-08T20:53Z",
+    "aircraft_height_m": null
+   },
+   "profiles": [
+    "locate"
+   ]
+  },
+  {
+   "id": "eagle-cam-midnight-days0",
+   "version": 1,
+   "group": "eagle-cam",
+   "set": "development",
+   "expected_outcome": "not_located",
+   "description": "SWFL Eagle Cam #3, 3 h from 22:29:56Z across UTC midnight, with only 2024-12-28's flight data (locate --days 0): a clock that puts the recording past midnight must end at past_utc_midnight, not at a location from half the hours",
+   "source": {
+    "identifiers": {
+     "youtube": "zs2o5Rhlp5w",
+     "url": "https://youtu.be/zs2o5Rhlp5w",
+     "nest": "LE-026B"
+    },
+    "acquisition": "yt-dlp download of the archived live stream's Opus track (format 251), see raw/audio/youtube/swfl_2024-12-28.ytdlp.log and .info.json; local only",
+    "raw": [
+     {
+      "path": "raw/audio/youtube/swfl_2024-12-28.webm",
+      "sha256": "58dd4c1259598c85579d1aba1311d18651f70501c2df822104cacb54b4a0ddc0"
+     },
+     {
+      "path": "raw/audio/youtube/swfl_2024-12-28.info.json",
+      "sha256": "532a1ce8d2e1bedbcb6f137616438d5d36a2fda1c06c75bef8724c81165f5e48"
+     },
+     {
+      "path": "raw/audio/youtube/swfl_2024-12-28.ytdlp.log",
+      "sha256": "ba602fa88c1d1a5a169dc4ea7bbe8c61d183479ede5d52b00579e8ce4fd541c8"
+     }
+    ]
+   },
+   "start_time": {
+    "source": "the stream's YouTube release_timestamp (1735395676) plus the clip offset; how the VOD's first sample relates to it is undocumented, so the uncertainty is a judgement",
+    "utc": "2024-12-28T22:29:56Z",
+    "uncertainty_s": 60
+   },
+   "audio": {
+    "path": "derived/swfl_clip/swfl_29320s_10800s.wav",
+    "of": "raw/audio/youtube/swfl_2024-12-28.webm",
+    "clip_offset_s": 29320.0,
+    "clip_offset_samples": 1407360000,
+    "sample_rate_hz": 48000,
+    "duration_s": 10800.0,
+    "duration_samples": 518400000
+   },
+   "derived": [
+    {
+     "path": "derived/traces/2024-12-28/swfl_margin12_v2.npz",
+     "sha256": "5da069103c6252e64f9e56b2fa3d82f78cdc1f8d88f3e43c8240f1621c7ad766",
+     "recipe": [
+      [
+       "python",
+       "-I",
+       "{repo}/tools/data/extract_boxes.py",
+       "--max-range",
+       "12000",
+       "{data}/raw/adsb/2024-12-28",
+       "{out_dir}",
+       "swfl_margin12_v2=26.1,27.3,-82.5,-81.2"
+      ]
+     ],
+     "note": "cut 2026-11-04 with extraction metadata and the 12 km search-range margin from the search box (runs/2026-11-04-recut-oyster-essex-v2/); the locate profile reads it, the other profiles keep the legacy file"
+    },
+    {
+     "path": "derived/swfl_clip/swfl_29320s_10800s.wav",
+     "sha256": "9e9ffe6f219bf70898061be1a30b616bf67bcace81ecb2fbf9e3aa793a74442d",
+     "recipe": [
+      [
+       "ffmpeg",
+       "-nostdin",
+       "-v",
+       "error",
+       "-i",
+       "{data}/raw/audio/youtube/swfl_2024-12-28.webm",
+       "-af",
+       "atrim=start_sample=1407360000:end_sample=1925760000,asetpts=PTS-STARTPTS",
+       "-c:a",
+       "pcm_s16le",
+       "-f",
+       "wav",
+       "{out}"
+      ]
+     ],
+     "note": "sample-exact cut of the decoded 48 kHz stream, as the 18,000 s clip"
+    },
+    {
+     "path": "derived/swfl_clip/rec_29320s_10800s.npz",
+     "sha256": "2e2eec4137ca37dc16c8a6482b96497ec3e661fe7bb1cac4c89e92616b0773b3",
+     "recipe": [
+      [
+       "dopplertrack",
+       "spectrogram",
+       "{data}/derived/swfl_clip/swfl_29320s_10800s.wav",
+       "{out}"
+      ]
+     ],
+     "note": "spectrogram of the clip with the CLI defaults"
+    }
+   ],
+   "spectrogram": "derived/swfl_clip/rec_29320s_10800s.npz",
+   "flight_data": {
+    "date": "2024-12-28",
+    "pod": "planes-readsb-prod-0",
+    "archive_assets": [
+     {
+      "path": "raw/adsb/2024-12-28/v2024.12.28-planes-readsb-prod-0.tar",
+      "sha256": "dda2169e0075ee00c833b5a49fbc831cb75c71d3f5697a1072a917bda2dee8f4"
+     }
+    ],
+    "traces": "derived/traces/2024-12-28/swfl_margin12_v2.npz",
+    "extraction_box": [
+     25.991475657147518,
+     27.408524342852484,
+     -82.62212722885779,
+     -81.07787277114221
+    ],
+    "extraction_note": "cut with extraction metadata; locate reads the envelope from the file"
+   },
+   "search": {
+    "bbox": [
+     26.1,
+     27.3,
+     -82.5,
+     -81.2
+    ],
+    "harmonics": [
+     1,
+     1
+    ],
+    "spacing_m": 200,
+    "tol_s": 6.0,
+    "v_tol": 0.35,
+    "d_tol": [
+     0.4,
+     2.5
+    ],
+    "silence_d_m": 6000.0,
+    "max_range_m": 12000.0,
+    "dem": true,
+    "cpa_cache": "cpa/bench/eagle-cam_200m_dem-locate.npz"
+   },
+   "refine": {
+    "rank": 1,
+    "spacing_m": 50.0,
+    "half_m": 600.0
+   },
+   "events": {
+    "mode": "detect"
+   },
+   "labels": {
+    "reference": {
+     "lat": 26.702359,
+     "lon": -81.847766,
+     "source": "nest LE-026B coordinates"
+    },
+    "true_pair": null,
+    "expected_verdict": {
+     "outcome": "insufficient_evidence",
+     "reason_codes": [
+      "past_utc_midnight"
+     ]
+    },
+    "checked_by": "constructed: the clip's span on the stream's start time; no pair labelled in it",
+    "blind": false
+   },
+   "built_with": "8d8a5b2",
+   "weather": {
+    "temperature_c": null,
+    "source": null,
+    "station": null,
+    "station_distance_km": null,
+    "observed_utc": null,
+    "aircraft_height_m": null
+   },
+   "profiles": [
+    "locate"
+   ]
+  },
+  {
+   "id": "eagle-cam-midnight-days0",
+   "version": 2,
+   "group": "eagle-cam",
+   "set": "development",
+   "expected_outcome": "not_located",
+   "description": "SWFL Eagle Cam #3, 3 h from 22:29:56Z across UTC midnight, with only 2024-12-28's flight data (locate --days 0): a clock that puts the recording past midnight must end at past_utc_midnight, not at a location from half the hours",
+   "source": {
+    "identifiers": {
+     "youtube": "zs2o5Rhlp5w",
+     "url": "https://youtu.be/zs2o5Rhlp5w",
+     "nest": "LE-026B"
+    },
+    "acquisition": "yt-dlp download of the archived live stream's Opus track (format 251), see raw/audio/youtube/swfl_2024-12-28.ytdlp.log and .info.json; local only",
+    "raw": [
+     {
+      "path": "raw/audio/youtube/swfl_2024-12-28.webm",
+      "sha256": "58dd4c1259598c85579d1aba1311d18651f70501c2df822104cacb54b4a0ddc0"
+     },
+     {
+      "path": "raw/audio/youtube/swfl_2024-12-28.info.json",
+      "sha256": "532a1ce8d2e1bedbcb6f137616438d5d36a2fda1c06c75bef8724c81165f5e48"
+     },
+     {
+      "path": "raw/audio/youtube/swfl_2024-12-28.ytdlp.log",
+      "sha256": "ba602fa88c1d1a5a169dc4ea7bbe8c61d183479ede5d52b00579e8ce4fd541c8"
+     }
+    ]
+   },
+   "start_time": {
+    "source": "the stream's YouTube release_timestamp (1735395676) plus the clip offset; how the VOD's first sample relates to it is undocumented, so the uncertainty is a judgement",
+    "utc": "2024-12-28T22:29:56Z",
+    "uncertainty_s": 60
+   },
+   "audio": {
+    "path": "derived/swfl_clip/swfl_29320s_10800s.wav",
+    "of": "raw/audio/youtube/swfl_2024-12-28.webm",
+    "clip_offset_s": 29320.0,
+    "clip_offset_samples": 1407360000,
+    "sample_rate_hz": 48000,
+    "duration_s": 10800.0,
+    "duration_samples": 518400000
+   },
+   "derived": [
+    {
+     "path": "derived/traces/2024-12-28/swfl_margin12_v2.npz",
+     "sha256": "5da069103c6252e64f9e56b2fa3d82f78cdc1f8d88f3e43c8240f1621c7ad766",
+     "recipe": [
+      [
+       "python",
+       "-I",
+       "{repo}/tools/data/extract_boxes.py",
+       "--max-range",
+       "12000",
+       "{data}/raw/adsb/2024-12-28",
+       "{out_dir}",
+       "swfl_margin12_v2=26.1,27.3,-82.5,-81.2"
+      ]
+     ],
+     "note": "cut 2026-11-04 with extraction metadata and the 12 km search-range margin from the search box (runs/2026-11-04-recut-oyster-essex-v2/); the locate profile reads it, the other profiles keep the legacy file"
+    },
+    {
+     "path": "derived/swfl_clip/swfl_29320s_10800s.wav",
+     "sha256": "9e9ffe6f219bf70898061be1a30b616bf67bcace81ecb2fbf9e3aa793a74442d",
+     "recipe": [
+      [
+       "ffmpeg",
+       "-nostdin",
+       "-v",
+       "error",
+       "-i",
+       "{data}/raw/audio/youtube/swfl_2024-12-28.webm",
+       "-af",
+       "atrim=start_sample=1407360000:end_sample=1925760000,asetpts=PTS-STARTPTS",
+       "-c:a",
+       "pcm_s16le",
+       "-f",
+       "wav",
+       "{out}"
+      ]
+     ],
+     "note": "sample-exact cut of the decoded 48 kHz stream, as the 18,000 s clip"
+    },
+    {
+     "path": "derived/swfl_clip/rec_29320s_10800s.npz",
+     "sha256": "2e2eec4137ca37dc16c8a6482b96497ec3e661fe7bb1cac4c89e92616b0773b3",
+     "recipe": [
+      [
+       "dopplertrack",
+       "spectrogram",
+       "{data}/derived/swfl_clip/swfl_29320s_10800s.wav",
+       "{out}"
+      ]
+     ],
+     "note": "spectrogram of the clip with the CLI defaults"
+    }
+   ],
+   "spectrogram": "derived/swfl_clip/rec_29320s_10800s.npz",
+   "flight_data": {
+    "date": "2024-12-28",
+    "pod": "planes-readsb-prod-0",
+    "archive_assets": [
+     {
+      "path": "raw/adsb/2024-12-28/v2024.12.28-planes-readsb-prod-0.tar",
+      "sha256": "dda2169e0075ee00c833b5a49fbc831cb75c71d3f5697a1072a917bda2dee8f4"
+     }
+    ],
+    "traces": "derived/traces/2024-12-28/swfl_margin12_v2.npz",
+    "extraction_box": [
+     25.991475657147518,
+     27.408524342852484,
+     -82.62212722885779,
+     -81.07787277114221
+    ],
+    "extraction_note": "cut with extraction metadata; locate reads the envelope from the file"
+   },
+   "search": {
+    "bbox": [
+     26.1,
+     27.3,
+     -82.5,
+     -81.2
+    ],
+    "harmonics": [
+     1,
+     1
+    ],
+    "spacing_m": 200,
+    "tol_s": 6.0,
+    "v_tol": 0.35,
+    "d_tol": [
+     0.4,
+     2.5
+    ],
+    "silence_d_m": 6000.0,
+    "max_range_m": 12000.0,
+    "dem": true,
+    "cpa_cache": "cpa/bench/eagle-cam_200m_dem-locate_22.2C.npz"
+   },
+   "refine": {
+    "rank": 1,
+    "spacing_m": 50.0,
+    "half_m": 600.0
+   },
+   "events": {
+    "mode": "detect"
+   },
+   "labels": {
+    "reference": {
+     "lat": 26.702359,
+     "lon": -81.847766,
+     "source": "nest LE-026B coordinates"
+    },
+    "true_pair": null,
+    "expected_verdict": {
+     "outcome": "insufficient_evidence",
+     "reason_codes": [
+      "past_utc_midnight"
+     ]
+    },
+    "checked_by": "constructed: the clip's span on the stream's start time; no pair labelled in it",
+    "blind": false
+   },
+   "built_with": "8d8a5b2",
+   "weather": {
+    "temperature_c": 22.2,
+    "source": "IEM ASOS (METAR T group), raw/aux/metar/KFMY_2024-12-27.csv",
+    "station": "KFMY FORT MYERS/PAGE FLD",
+    "station_distance_km": 13.1,
+    "observed_utc": "2024-12-28T23:53Z",
+    "aircraft_height_m": null
+   },
+   "profiles": [
+    "locate"
+   ]
+  },
+  {
+   "id": "eagle-cam-midnight",
+   "version": 1,
+   "group": "eagle-cam",
+   "set": "development",
+   "expected_outcome": "located_or_abstain",
+   "description": "SWFL Eagle Cam #3, 3 h from 22:29:56Z across UTC midnight, with 2024-12-28 and 2024-12-29 joined (locate --days 1)",
+   "source": {
+    "identifiers": {
+     "youtube": "zs2o5Rhlp5w",
+     "url": "https://youtu.be/zs2o5Rhlp5w",
+     "nest": "LE-026B"
+    },
+    "acquisition": "yt-dlp download of the archived live stream's Opus track (format 251), see raw/audio/youtube/swfl_2024-12-28.ytdlp.log and .info.json; local only",
+    "raw": [
+     {
+      "path": "raw/audio/youtube/swfl_2024-12-28.webm",
+      "sha256": "58dd4c1259598c85579d1aba1311d18651f70501c2df822104cacb54b4a0ddc0"
+     },
+     {
+      "path": "raw/audio/youtube/swfl_2024-12-28.info.json",
+      "sha256": "532a1ce8d2e1bedbcb6f137616438d5d36a2fda1c06c75bef8724c81165f5e48"
+     },
+     {
+      "path": "raw/audio/youtube/swfl_2024-12-28.ytdlp.log",
+      "sha256": "ba602fa88c1d1a5a169dc4ea7bbe8c61d183479ede5d52b00579e8ce4fd541c8"
+     }
+    ]
+   },
+   "start_time": {
+    "source": "the stream's YouTube release_timestamp (1735395676) plus the clip offset; how the VOD's first sample relates to it is undocumented, so the uncertainty is a judgement",
+    "utc": "2024-12-28T22:29:56Z",
+    "uncertainty_s": 60
+   },
+   "audio": {
+    "path": "derived/swfl_clip/swfl_29320s_10800s.wav",
+    "of": "raw/audio/youtube/swfl_2024-12-28.webm",
+    "clip_offset_s": 29320.0,
+    "clip_offset_samples": 1407360000,
+    "sample_rate_hz": 48000,
+    "duration_s": 10800.0,
+    "duration_samples": 518400000
+   },
+   "derived": [
+    {
+     "path": "derived/traces/2024-12-28/swfl_margin12_v2.npz",
+     "sha256": "5da069103c6252e64f9e56b2fa3d82f78cdc1f8d88f3e43c8240f1621c7ad766",
+     "recipe": [
+      [
+       "python",
+       "-I",
+       "{repo}/tools/data/extract_boxes.py",
+       "--max-range",
+       "12000",
+       "{data}/raw/adsb/2024-12-28",
+       "{out_dir}",
+       "swfl_margin12_v2=26.1,27.3,-82.5,-81.2"
+      ]
+     ],
+     "note": "cut 2026-11-04 with extraction metadata and the 12 km search-range margin from the search box (runs/2026-11-04-recut-oyster-essex-v2/); the locate profile reads it, the other profiles keep the legacy file"
+    },
+    {
+     "path": "derived/traces/2024-12-29/swfl_margin12.npz",
+     "sha256": "4bd1c5dd7913311c51424afec63deb3ae4dd2b04244b0aa5b4cac6bb2b1415c0",
+     "recipe": [
+      [
+       "python",
+       "-I",
+       "{repo}/tools/data/extract_boxes.py",
+       "--max-range",
+       "12000",
+       "{data}/raw/adsb/2024-12-29",
+       "{out_dir}",
+       "swfl_margin12=26.1,27.3,-82.5,-81.2"
+      ]
+     ],
+     "note": "2024-12-29 fetched 2026-11-04 for the eagle cam's UTC-midnight crossing (runs/2026-11-04-adsb-2024-12-29/), cut with extraction metadata and the 12 km margin from the search box (runs/2026-11-04-recut-oyster-essex-v2/)"
+    },
+    {
+     "path": "derived/swfl_clip/swfl_29320s_10800s.wav",
+     "sha256": "9e9ffe6f219bf70898061be1a30b616bf67bcace81ecb2fbf9e3aa793a74442d",
+     "recipe": [
+      [
+       "ffmpeg",
+       "-nostdin",
+       "-v",
+       "error",
+       "-i",
+       "{data}/raw/audio/youtube/swfl_2024-12-28.webm",
+       "-af",
+       "atrim=start_sample=1407360000:end_sample=1925760000,asetpts=PTS-STARTPTS",
+       "-c:a",
+       "pcm_s16le",
+       "-f",
+       "wav",
+       "{out}"
+      ]
+     ],
+     "note": "sample-exact cut of the decoded 48 kHz stream, as the 18,000 s clip"
+    },
+    {
+     "path": "derived/swfl_clip/rec_29320s_10800s.npz",
+     "sha256": "2e2eec4137ca37dc16c8a6482b96497ec3e661fe7bb1cac4c89e92616b0773b3",
+     "recipe": [
+      [
+       "dopplertrack",
+       "spectrogram",
+       "{data}/derived/swfl_clip/swfl_29320s_10800s.wav",
+       "{out}"
+      ]
+     ],
+     "note": "spectrogram of the clip with the CLI defaults"
+    }
+   ],
+   "spectrogram": "derived/swfl_clip/rec_29320s_10800s.npz",
+   "flight_data": {
+    "date": "2024-12-28",
+    "pod": "planes-readsb-prod-0",
+    "archive_assets": [
+     {
+      "path": "raw/adsb/2024-12-28/v2024.12.28-planes-readsb-prod-0.tar",
+      "sha256": "dda2169e0075ee00c833b5a49fbc831cb75c71d3f5697a1072a917bda2dee8f4"
+     },
+     {
+      "path": "raw/adsb/2024-12-29/v2024.12.29-planes-readsb-prod-0.tar",
+      "sha256": "a0d87a2f03ae64105004121035227910fd79da12f1f633a9e938a78d31c00056"
+     }
+    ],
+    "traces": [
+     "derived/traces/2024-12-28/swfl_margin12_v2.npz",
+     "derived/traces/2024-12-29/swfl_margin12.npz"
+    ],
+    "extraction_box": [
+     [
+      25.991475657147518,
+      27.408524342852484,
+      -82.62212722885779,
+      -81.07787277114221
+     ],
+     [
+      25.991475657147518,
+      27.408524342852484,
+      -82.62212722885779,
+      -81.07787277114221
+     ]
+    ],
+    "extraction_note": "cut with extraction metadata; locate reads the envelope from the file"
+   },
+   "search": {
+    "bbox": [
+     26.1,
+     27.3,
+     -82.5,
+     -81.2
+    ],
+    "harmonics": [
+     1,
+     1
+    ],
+    "spacing_m": 200,
+    "tol_s": 6.0,
+    "v_tol": 0.35,
+    "d_tol": [
+     0.4,
+     2.5
+    ],
+    "silence_d_m": 6000.0,
+    "max_range_m": 12000.0,
+    "dem": true,
+    "cpa_cache": "cpa/bench/eagle-cam-midnight_200m_dem.npz"
+   },
+   "refine": {
+    "rank": 1,
+    "spacing_m": 50.0,
+    "half_m": 600.0
+   },
+   "events": {
+    "mode": "detect"
+   },
+   "labels": {
+    "reference": {
+     "lat": 26.702359,
+     "lon": -81.847766,
+     "source": "nest LE-026B coordinates"
+    },
+    "true_pair": null,
+    "checked_by": "the nest's coordinates; no pair labelled in the clip",
+    "blind": false
+   },
+   "built_with": "8d8a5b2",
+   "weather": {
+    "temperature_c": null,
+    "source": null,
+    "station": null,
+    "station_distance_km": null,
+    "observed_utc": null,
+    "aircraft_height_m": null
+   },
+   "profiles": [
+    "locate"
+   ]
+  },
+  {
+   "id": "eagle-cam-midnight",
+   "version": 2,
+   "group": "eagle-cam",
+   "set": "development",
+   "expected_outcome": "located_or_abstain",
+   "description": "SWFL Eagle Cam #3, 3 h from 22:29:56Z across UTC midnight, with 2024-12-28 and 2024-12-29 joined (locate --days 1)",
+   "source": {
+    "identifiers": {
+     "youtube": "zs2o5Rhlp5w",
+     "url": "https://youtu.be/zs2o5Rhlp5w",
+     "nest": "LE-026B"
+    },
+    "acquisition": "yt-dlp download of the archived live stream's Opus track (format 251), see raw/audio/youtube/swfl_2024-12-28.ytdlp.log and .info.json; local only",
+    "raw": [
+     {
+      "path": "raw/audio/youtube/swfl_2024-12-28.webm",
+      "sha256": "58dd4c1259598c85579d1aba1311d18651f70501c2df822104cacb54b4a0ddc0"
+     },
+     {
+      "path": "raw/audio/youtube/swfl_2024-12-28.info.json",
+      "sha256": "532a1ce8d2e1bedbcb6f137616438d5d36a2fda1c06c75bef8724c81165f5e48"
+     },
+     {
+      "path": "raw/audio/youtube/swfl_2024-12-28.ytdlp.log",
+      "sha256": "ba602fa88c1d1a5a169dc4ea7bbe8c61d183479ede5d52b00579e8ce4fd541c8"
+     }
+    ]
+   },
+   "start_time": {
+    "source": "the stream's YouTube release_timestamp (1735395676) plus the clip offset; how the VOD's first sample relates to it is undocumented, so the uncertainty is a judgement",
+    "utc": "2024-12-28T22:29:56Z",
+    "uncertainty_s": 60
+   },
+   "audio": {
+    "path": "derived/swfl_clip/swfl_29320s_10800s.wav",
+    "of": "raw/audio/youtube/swfl_2024-12-28.webm",
+    "clip_offset_s": 29320.0,
+    "clip_offset_samples": 1407360000,
+    "sample_rate_hz": 48000,
+    "duration_s": 10800.0,
+    "duration_samples": 518400000
+   },
+   "derived": [
+    {
+     "path": "derived/traces/2024-12-28/swfl_margin12_v2.npz",
+     "sha256": "5da069103c6252e64f9e56b2fa3d82f78cdc1f8d88f3e43c8240f1621c7ad766",
+     "recipe": [
+      [
+       "python",
+       "-I",
+       "{repo}/tools/data/extract_boxes.py",
+       "--max-range",
+       "12000",
+       "{data}/raw/adsb/2024-12-28",
+       "{out_dir}",
+       "swfl_margin12_v2=26.1,27.3,-82.5,-81.2"
+      ]
+     ],
+     "note": "cut 2026-11-04 with extraction metadata and the 12 km search-range margin from the search box (runs/2026-11-04-recut-oyster-essex-v2/); the locate profile reads it, the other profiles keep the legacy file"
+    },
+    {
+     "path": "derived/traces/2024-12-29/swfl_margin12.npz",
+     "sha256": "4bd1c5dd7913311c51424afec63deb3ae4dd2b04244b0aa5b4cac6bb2b1415c0",
+     "recipe": [
+      [
+       "python",
+       "-I",
+       "{repo}/tools/data/extract_boxes.py",
+       "--max-range",
+       "12000",
+       "{data}/raw/adsb/2024-12-29",
+       "{out_dir}",
+       "swfl_margin12=26.1,27.3,-82.5,-81.2"
+      ]
+     ],
+     "note": "2024-12-29 fetched 2026-11-04 for the eagle cam's UTC-midnight crossing (runs/2026-11-04-adsb-2024-12-29/), cut with extraction metadata and the 12 km margin from the search box (runs/2026-11-04-recut-oyster-essex-v2/)"
+    },
+    {
+     "path": "derived/swfl_clip/swfl_29320s_10800s.wav",
+     "sha256": "9e9ffe6f219bf70898061be1a30b616bf67bcace81ecb2fbf9e3aa793a74442d",
+     "recipe": [
+      [
+       "ffmpeg",
+       "-nostdin",
+       "-v",
+       "error",
+       "-i",
+       "{data}/raw/audio/youtube/swfl_2024-12-28.webm",
+       "-af",
+       "atrim=start_sample=1407360000:end_sample=1925760000,asetpts=PTS-STARTPTS",
+       "-c:a",
+       "pcm_s16le",
+       "-f",
+       "wav",
+       "{out}"
+      ]
+     ],
+     "note": "sample-exact cut of the decoded 48 kHz stream, as the 18,000 s clip"
+    },
+    {
+     "path": "derived/swfl_clip/rec_29320s_10800s.npz",
+     "sha256": "2e2eec4137ca37dc16c8a6482b96497ec3e661fe7bb1cac4c89e92616b0773b3",
+     "recipe": [
+      [
+       "dopplertrack",
+       "spectrogram",
+       "{data}/derived/swfl_clip/swfl_29320s_10800s.wav",
+       "{out}"
+      ]
+     ],
+     "note": "spectrogram of the clip with the CLI defaults"
+    }
+   ],
+   "spectrogram": "derived/swfl_clip/rec_29320s_10800s.npz",
+   "flight_data": {
+    "date": "2024-12-28",
+    "pod": "planes-readsb-prod-0",
+    "archive_assets": [
+     {
+      "path": "raw/adsb/2024-12-28/v2024.12.28-planes-readsb-prod-0.tar",
+      "sha256": "dda2169e0075ee00c833b5a49fbc831cb75c71d3f5697a1072a917bda2dee8f4"
+     },
+     {
+      "path": "raw/adsb/2024-12-29/v2024.12.29-planes-readsb-prod-0.tar",
+      "sha256": "a0d87a2f03ae64105004121035227910fd79da12f1f633a9e938a78d31c00056"
+     }
+    ],
+    "traces": [
+     "derived/traces/2024-12-28/swfl_margin12_v2.npz",
+     "derived/traces/2024-12-29/swfl_margin12.npz"
+    ],
+    "extraction_box": [
+     [
+      25.991475657147518,
+      27.408524342852484,
+      -82.62212722885779,
+      -81.07787277114221
+     ],
+     [
+      25.991475657147518,
+      27.408524342852484,
+      -82.62212722885779,
+      -81.07787277114221
+     ]
+    ],
+    "extraction_note": "cut with extraction metadata; locate reads the envelope from the file"
+   },
+   "search": {
+    "bbox": [
+     26.1,
+     27.3,
+     -82.5,
+     -81.2
+    ],
+    "harmonics": [
+     1,
+     1
+    ],
+    "spacing_m": 200,
+    "tol_s": 6.0,
+    "v_tol": 0.35,
+    "d_tol": [
+     0.4,
+     2.5
+    ],
+    "silence_d_m": 6000.0,
+    "max_range_m": 12000.0,
+    "dem": true,
+    "cpa_cache": "cpa/bench/eagle-cam-midnight_200m_dem_22.2C.npz"
+   },
+   "refine": {
+    "rank": 1,
+    "spacing_m": 50.0,
+    "half_m": 600.0
+   },
+   "events": {
+    "mode": "detect"
+   },
+   "labels": {
+    "reference": {
+     "lat": 26.702359,
+     "lon": -81.847766,
+     "source": "nest LE-026B coordinates"
+    },
+    "true_pair": null,
+    "checked_by": "the nest's coordinates; no pair labelled in the clip",
+    "blind": false
+   },
+   "built_with": "8d8a5b2",
+   "weather": {
+    "temperature_c": 22.2,
+    "source": "IEM ASOS (METAR T group), raw/aux/metar/KFMY_2024-12-27.csv",
+    "station": "KFMY FORT MYERS/PAGE FLD",
+    "station_distance_km": 13.1,
+    "observed_utc": "2024-12-28T23:53Z",
+    "aircraft_height_m": null
+   },
+   "profiles": [
+    "locate"
+   ]
   }
  ]
 }

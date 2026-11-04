@@ -21,7 +21,7 @@ Criterion: a variant is kept if, for each objective and each of f0, v and d, its
 over the 29 primary passes is at most 1.05x the 2.048 s window's, and the same for v and d on the
 development events; the paired sign test is reported.
 
-Passes and events run in parallel, one per process (JOBS, default 10).
+Passes and events run in parallel, one per process (DOPPLERTRACK_JOBS, default the performance cores).
 
 usage: window_length.py RUN [livermore|dev|all]"""
 import csv
@@ -39,7 +39,8 @@ from scipy.stats import binomtest
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import livermore_audit as LA                                            # noqa: E402
 
-from dopplertrack import audio                                           # noqa: E402
+from dopplertrack import audio
+from dopplertrack.parallel import default_jobs                                           # noqa: E402
 from dopplertrack.adsb import load_traces                                # noqa: E402
 from dopplertrack.audio import Spectrogram                               # noqa: E402
 from dopplertrack.doppler import ideal_curve, speed_of_sound             # noqa: E402
@@ -170,7 +171,7 @@ def _pool(fn, items, init=None):
     from concurrent.futures import ProcessPoolExecutor
     for k in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "VECLIB_MAXIMUM_THREADS", "MKL_NUM_THREADS"):
         os.environ[k] = "1"
-    with ProcessPoolExecutor(int(os.environ.get("JOBS", "10")), initializer=init) as ex:
+    with ProcessPoolExecutor(default_jobs(), initializer=init) as ex:
         return list(ex.map(fn, items))
 
 

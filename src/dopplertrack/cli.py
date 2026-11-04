@@ -10,7 +10,6 @@ from . import pipeline
 from .adsb import join_days
 from .audio import FFmpegNotFoundError, Spectrogram
 from .coverage import DEFAULT_MAX_RANGE_M, report_coverage
-from .atmosphere import mid_height_temperature
 from .doppler import speed_of_sound
 from .parallel import JOBS_ENV
 from .score import SF_FLAT_RATIO
@@ -130,32 +129,48 @@ def main(argv=None):
     g.add_argument("--spacing", type=float, default=200.0); g.add_argument("--harmonics", type=int, default=1)
     g.add_argument("--no-dem", action="store_true")
 
-    for parser in (f, d, r, rf, g):
+    lo = sub.add_parser("locate", help="audio, a date and a box to a verdict (PLAN Phase 3 step A): detect, choose a pair, "
+                                        "search, refine; every failure an outcome with its reason")
+    lo.add_argument("audio", help="audio file, AudioMoth folder, or a spectrogram .npz")
+    lo.add_argument("--date", required=True, help="the UTC date the recording starts on, YYYY-MM-DD")
+    lo.add_argument("--bbox", nargs=4, type=float, required=True, metavar=("LATMIN", "LATMAX", "LONMIN", "LONMAX"))
+    lo.add_argument("--out", required=True, help="folder for result.json, its hash and the funnel triples")
+    lo.add_argument("--traces", nargs="+", metavar="NPZ", help="flight data, one file per day (default: none unless --fetch)")
+    lo.add_argument("--fetch", action="store_true", help="stream the day(s) from adsb.lol with fetch-day (network, about 4 GB a day)")
+    lo.add_argument("--days", type=int, choices=(0, 1), default=0, help="also use the next UTC day (with --fetch, fetch it)")
+    lo.add_argument("--pair-rule", choices=("top2", "comparable", "both"), default="top2",
+                    help="top2: detect's two best events (default); comparable: every pair of the top five searched with "
+                         "comparable scores (about ten times slower); both: top2's result with comparable reported beside it")
+    lo.add_argument("--silence", action="store_true", help="turn on the silence filter (off by default in locate, S4)")
+    lo.add_argument("--band", nargs=2, type=float, default=(60.0, 300.0), metavar=("FLO", "FHI"))
+    lo.add_argument("--spacing", type=float, default=200.0)
+    lo.add_argument("--no-dem", action="store_true")
+    lo.add_argument("--assume-envelope", nargs=4, type=float, action="append", metavar=("LATMIN", "LATMAX", "LONMIN", "LONMAX"),
+                    help="the box a trace file without extraction metadata was cut to, one per --traces file, in order")
+    for parser in (f, d, r, rf, g, lo):
         parser.add_argument("--temperature", type=float, metavar="C",
-                            help="air temperature at the ground in degrees C, for the speed of sound (default: the 15 C value)")
-        parser.add_argument("--aircraft-height", type=float, metavar="METRES",
-                            help="with --temperature: the aircraft's typical height above the ground, to use the temperature "
-                                 "halfway up the path (ground - 3.25 C per km)")
-    for parser in (d, r, rf, g):
+                            help="air temperature at the ground in degrees C, for the speed of sound (default: the 15 C value); "
+                                 "search, refine and search-single then give each flight the speed at its own mid-height "
+                                 "temperature (ground - 3.25 C per km)")
+    for parser in (d, r, rf, g, lo):
         parser.add_argument("--jobs", type=_jobs, metavar="N",
                             help=f"worker processes (default: ${JOBS_ENV}, else the performance-core count); "
                                  "results don't depend on it")
-    for parser in (e, fd, r, rf, g):
+    for parser in (e, fd, r, rf, g, lo):
         parser.add_argument("--max-range", type=float, default=DEFAULT_MAX_RANGE_M, metavar="METRES",
                             help="search range / extraction margin in metres (default: 12000); use the same value for extraction and search")
 
     a = ap.parse_args(argv)
     if hasattr(a, "max_range") and (not np.isfinite(a.max_range) or a.max_range <= 0):
         ap.error("--max-range must be finite and positive")
-    # the speed of sound is passed only when a temperature is given, so the default path is today's, unchanged
-    c_kw = {}
-    if getattr(a, "aircraft_height", None) is not None and a.temperature is None:
-        ap.error("--aircraft-height needs --temperature")
+    # the speed of sound is passed only when a temperature is given, so the default path is today's, unchanged:
+    # the ground temperature's c for the fits, and for the geometry each flight's own, from its height
+    c_kw: dict = {}
     if getattr(a, "temperature", None) is not None:
-        t = a.temperature if a.aircraft_height is None else mid_height_temperature(a.temperature, a.aircraft_height)
-        if not np.isfinite(t) or t <= -273.15:
+        if not np.isfinite(a.temperature) or a.temperature <= -273.15:
             ap.error("--temperature must be finite and above absolute zero")
-        c_kw = {"c": speed_of_sound(t)}
+        c_kw = {"c": speed_of_sound(a.temperature)}
+    geo_kw = dict(c_kw, temperature_c=a.temperature) if c_kw else {}
     if a.cmd in ("search", "refine"):
         try:
             ev1, ev2 = load_events(a.events, a.pick)
@@ -223,7 +238,7 @@ def main(argv=None):
                                         search_bbox=tuple(a.bbox) if a.bbox else (a.point[0], a.point[0], a.point[1], a.point[1]),
                                         workers=a.jobs, time_convention=a.convention, sf_tol_s=a.sf_tol,
                                         sf_smooth_s=a.sf_smooth, sf_window_s=a.sf_window, sf_flat_ratio=a.sf_flat_ratio,
-                                        clock_anchor=a.anchor, **c_kw)
+                                        clock_anchor=a.anchor, **geo_kw)
         for name, t in res.attrs.get("stages", {}).items():
             pipeline.log(f"stage {name}: {t['wall_s']:.1f} s wall, {t['cpu_s']:.1f} s CPU")
         pipeline.log("funnel: " + ", ".join(f"{k} {v}" for k, v in res.attrs.get("funnel", {}).items()))
@@ -246,11 +261,13 @@ def main(argv=None):
         print(f"refining rank {a.rank}: {row.icao1}/{row.icao2} at {row.lat:.5f}, {row.lon:.5f} (score {row.score:.2f})")
         fine = pipeline.refine(sp, ev1, ev2, segs, row, spacing_m=a.spacing, half_m=a.half, harmonics=tuple(a.harmonics),
                                elevation=elev, extra=extra, extra_harmonics=xh, max_range_m=a.max_range,
-                               workers=a.jobs, **c_kw)
+                               workers=a.jobs, **geo_kw)
         fine.to_csv(a.out, index=False)
         b = fine.iloc[0]
         print(f"peak score {b.score:.2f} at {b.lat:.6f}, {b.lon:.6f}" + (f"; extra flights {fine.attrs['extra_icao']}" if extra else ""))
         print(fine.head(10).to_string())
+    elif a.cmd == "locate":
+        _locate(a, c_kw)
     elif a.cmd == "search-single":
         from datetime import datetime, timezone
         sp = Spectrogram.load(a.spec)
@@ -264,10 +281,51 @@ def main(argv=None):
         grid = Grid.make(*a.bbox, a.spacing, elev)
         res, segs = pipeline.run_single_search(sp, ev, traces, grid, t_unix, tol_s=a.tol, harmonics=a.harmonics,
                                                max_range_m=a.max_range, trace_metadata=trace_meta,
-                                               search_bbox=tuple(a.bbox), workers=a.jobs, **c_kw)
+                                               search_bbox=tuple(a.bbox), workers=a.jobs, **geo_kw)
         res["lat0"] = grid.lat0; res["lon0"] = grid.lon0
         res.to_csv(a.out, index=False)
         print(res.head(20).to_string())
+
+
+def _locate(a, c_kw):
+    """The locate command: the spectrogram and the flight data it needs, then locate.locate and its record."""
+    import os
+    from pathlib import Path
+
+    from . import locate as loc
+    from .audio import cached_spectrogram
+    from .cache import cache_root
+    from .result import write_record
+    out = Path(a.out)
+    out.mkdir(parents=True, exist_ok=True)
+    if str(a.audio).endswith(".npz"):
+        spec = Path(a.audio)
+    else:
+        spec = out / "spectrogram.npz"
+        cached_spectrogram(a.audio).save(spec)
+    days = [a.date]
+    if a.days:
+        from datetime import date, timedelta
+        days.append((date.fromisoformat(a.date) + timedelta(days=1)).isoformat())
+    traces = list(a.traces or [])
+    if not traces and a.fetch:
+        for day in days:
+            path = out / f"traces_{day}.npz"
+            if not path.exists():
+                pipeline.fetch_region(day, tuple(a.bbox), path, max_range_m=a.max_range)
+            traces.append(str(path))
+    box = "_".join(f"{x:g}" for x in a.bbox)
+    cfg = loc.LocateConfig(band_hz=tuple(a.band), spacing_m=a.spacing, max_range_m=a.max_range,
+                           silence_d_m=6000.0 if a.silence else None, pair_rule=a.pair_rule, dem=not a.no_dem,
+                           c=c_kw.get("c"), temperature_c=a.temperature, workers=a.jobs, envelope=a.assume_envelope,
+                           cpa_cache=str(cache_root() / "cpa" / "locate" / f"{a.date}-days{a.days}-{box}-{a.spacing:g}m.npz"))
+    os.makedirs(Path(cfg.cpa_cache).parent, exist_ok=True)
+    result = loc.locate(spec, a.date, a.bbox, traces, cfg, out_dir=out, log=pipeline.log)
+    sha = write_record(out / "result.json", result.record)
+    (out / "result.json.sha256").write_text(f"{sha}  result.json\n")
+    for line in result.summary:
+        print(line)
+    print(f"wrote {out / 'result.json'}")
 
 
 if __name__ == "__main__":

@@ -188,8 +188,11 @@ class Track:
         return out
 
     def piece(self, i: int, j: int) -> "Track":
+        """Frames i..j-1; a flag holding a list of times keeps only those inside the piece."""
+        lo, hi = self.t[i], self.t[j - 1]
+        flags = {k: ([x for x in v if lo <= x <= hi] if isinstance(v, list) else v) for k, v in self.flags.items()}
         return Track(self.t[i:j], self.f[i:j], self.amp[i:j], self.level[i:j], self.measured[i:j], self.bins[i:j],
-                     dict(self.flags))
+                     {k: v for k, v in flags.items() if v != []})
 
 
 @dataclass

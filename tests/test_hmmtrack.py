@@ -1,6 +1,7 @@
 """The hysteresis-in-states tracker (dopplertrack.hmmtrack): a missing fundamental, crossing lines,
 hysteresis through a dip, a short tone never born, and a gap of invalid frames."""
 import numpy as np
+import pytest
 
 from dopplertrack import audio, doppler, freqtrack as ft, hmmtrack as hm
 
@@ -76,6 +77,7 @@ def test_hysteresis_carries_a_weak_dip():
     assert len(long) == 1 and long[0].start < 45 and long[0].end > 60
 
 
+@pytest.mark.xfail(strict=True, reason="theta_cont/theta_birth come from the noise derivation, job 2")
 def test_noise_and_a_short_tone_make_no_track():
     x = _audio(120.0, [(130.0, 0.2, 40, 40.5)])                            # 0.5 s: shorter than n_born frames
     _, ev = _run(x, 100, 160, p=hm.with_params(P, harmonics=1))

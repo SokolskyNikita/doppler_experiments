@@ -175,3 +175,20 @@ def test_pooled_curves_sum_extras_over_spans_and_leave_matches_undefined_without
     assert by[0.0]["extra"] == 3 and by[0.0]["extra_per_hour"] == pytest.approx(3.0)
     assert by[2.0]["extra"] == 2 and by[4.0]["extra"] == 1
     assert by[0.0]["matched"] is None and by[0.0]["missed"] is None
+
+
+def test_a_non_finite_fit_is_a_missing_fit(tmp_path, monkeypatch):
+    import numpy as np
+    from dopplertrack import tracks
+    from dopplertrack.audio import Spectrogram
+    from dopplertrack.cache import spectrogram_sha256
+    monkeypatch.setenv("DOPPLERTRACK_CACHE", str(tmp_path))
+
+    class Fit:
+        def to_dict(self):
+            return {"t_cpa": float("nan"), "f0": 100.0}
+    monkeypatch.setattr(tracks, "fit_event", lambda *a, **k: Fit())
+    sp = Spectrogram(np.arange(10.0), np.arange(5.0), np.zeros((5, 10), np.float32))
+    tier1._set_fit_crop(sp, spectrogram_sha256(sp))
+    fit = tier1._fit_window((0, 0, 1.0, 8.0, 100.0, 200.0, "contrast"))["fit"]
+    assert "non-finite" in fit["unavailable"]

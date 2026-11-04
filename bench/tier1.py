@@ -175,6 +175,8 @@ def _fit_window(task) -> dict:
              "producer": "tracks.fit_event", "source": source_sha256(*FIT_MODULES),
              "versions": {"numpy": np.__version__, "scipy": scipy.__version__}}
     fit = cached("window_fits", parts, produce)
+    if "unavailable" not in fit and not all(np.isfinite(v) for v in fit.values()):
+        fit = unavailable("fit_event returned a non-finite fit: no curve to follow in this window and band")
     return {"window": window, "line": line, "band_hz": [lo, hi], "objective": objective, "fit": fit}
 
 

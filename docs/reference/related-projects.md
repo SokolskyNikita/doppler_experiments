@@ -1,6 +1,6 @@
 # Related projects
 
-Open-source projects that attack the same problem, what they report, and what [PLAN.md](../../PLAN.md) takes from them. Reviewed 2026-11-03 from a proposal by Sol; every claim below was checked against the file at the pinned commit.
+Open-source projects that attack the same problem, what they report and what [PLAN.md](../../PLAN.md) takes from them. Reviewed 2026-11-03 from a proposal by Sol; every claim below was checked against the file at the pinned commit.
 
 **Read their numbers as hypotheses, not findings.** Nearly every repository here was created between 2026-11-02 and 2026-11-04, after colsto's video; none is peer reviewed, every figure is self-reported on the project's own development data, and the three in the first table developed on the same Livermore recordings (Pathak 2026). Only two of the rest report a distance on a real recording, both on colsto's Oyster Bay clip against his stated answer with hand-set windows, and none has a blind real result. So a result that holds in one of them is a reason to run the experiment here, never a reason to skip it. Anything we adopt is recorded in [docs/experiments/](../experiments/README.md) with our own measurement.
 
@@ -61,5 +61,5 @@ Judged and not taken: [Bortlesboat/hermes-aircraft-doppler-geolocation](https://
 ## What we don't take
 
 - dopplerprint's whole pipeline as a dependency. It would replace the parts Phase 2 is meant to measure, and its automatic detection is unbenchmarked even by its author.
-- Their accuracy figures as evidence for the method. Both Oyster Bay references are approximate public coordinates, the Livermore microphone is reconstructed, and the start times were supplied.
+- Their accuracy figures as evidence for the method. Both Oyster Bay references are approximate public coordinates, the Livermore microphone is reconstructed and the start times were supplied.
 - unheard's thresholds. They were fitted on the same evals they are reported on.

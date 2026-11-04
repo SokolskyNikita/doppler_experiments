@@ -12,9 +12,9 @@ from .adsb import AircraftTypes, Trace, load_region, save_traces
 from .audio import Spectrogram, compute_spectrogram, load_audio
 from .coverage import (DEFAULT_MAX_RANGE_M, ScanReport, extraction_metadata, padded_bbox,
                        report_altitude_sources, report_candidate_gaps, report_coverage)
-from .doppler import speed_of_sound
+from .doppler import ideal_curve, speed_of_sound
 from .parallel import ordered_map, resolve_jobs
-from .score import EventWindow, locked_score
+from .score import SF_FLAT_RATIO, EventWindow, locked_score, modelled_curve, steepest_fall
 from .search import Grid, Segment, build_segments, cpa_fingerprint, cpa_table, pair_candidates, save_cpa_table, load_cpa_table
 from .tracks import EventFit
 
@@ -159,19 +159,61 @@ def _set_score_state(state: dict):
     _SCORE_STATE.update(state)
 
 
-def _score_triples(task) -> list[tuple[float, float, float, float]]:
-    """locked_score for a chunk of (observer ENU, segment 1, segment 2, heard time of segment 1)."""
-    obs, seg1, seg2, t_heard1 = task
-    w1, w2, segs, c = (_SCORE_STATE[k] for k in ("w1", "w2", "segs", "c"))
-    return [locked_score(w1, w2, segs[int(a)], segs[int(b)], o, float(t), c=c) for o, a, b, t in zip(obs, seg1, seg2, t_heard1)]
+def _score_triples(task) -> list[tuple[tuple[float, float, float, float] | None, bool]]:
+    """locked_score for a chunk of (observer ENU, segment 1, segment 2, heard time of segment 1, emission
+    times of segments 1 and 2). Each result is (scores, unplaceable): scores is None for a triple the
+    steepest-fall check rejects, and unplaceable says a steepest fall couldn't be placed, so the check
+    was skipped and, under the steepest anchor, the heard anchor used instead."""
+    obs, seg1, seg2, t_heard1, t_emit1, t_emit2 = task
+    w1, w2, segs, c, sf = (_SCORE_STATE[k] for k in ("w1", "w2", "segs", "c", "sf"))
+    out: list[tuple[tuple[float, float, float, float] | None, bool]] = []
+    for o, a, b, th, te1, te2 in zip(obs, seg1, seg2, t_heard1, t_emit1, t_emit2):
+        to1, r1 = modelled_curve(segs[int(a)], o, c)
+        to2, r2 = modelled_curve(segs[int(b)], o, c)
+        t0_map, unplaceable = None, False
+        if sf is not None:
+            m1 = steepest_fall(to1, r1, float(te1), sf["window_s"], sf["smooth_s"], sf["flat_ratio"])
+            m2 = steepest_fall(to2, r2, float(te2), sf["window_s"], sf["smooth_s"], sf["flat_ratio"])
+            f1, f2 = sf["fit"]
+            if m1 is None or m2 is None or f1 is None or f2 is None:
+                unplaceable = True
+            else:
+                if sf["tol_s"] is not None and abs((m2 - m1) - (f2 - f1)) > sf["tol_s"]:
+                    out.append((None, False))
+                    continue
+                if sf["anchor"] == "steepest":
+                    t0_map = f1 - m1
+        out.append((locked_score(w1, w2, segs[int(a)], segs[int(b)], o, float(th), c=c,
+                                 curves=(to1, r1, to2, r2), t0_map=t0_map), unplaceable))
+    return out
+
+
+def fitted_steepest_fall(ev: EventFit, c: float, window_s: float = 60.0, smooth_s: float = 3.0,
+                         flat_ratio: float = SF_FLAT_RATIO) -> float | None:
+    """steepest_fall of a fit's own ideal curve, in recording seconds (within 0.3 s of t_cpa_emit for the
+    development fits)."""
+    tq = ev.t_cpa_emit + np.arange(-window_s - smooth_s - 2, window_s + smooth_s + 3, 1.0)
+    return steepest_fall(tq, ideal_curve(tq, ev.f0, ev.v, ev.d, ev.t_cpa_emit, c=c) / ev.f0, ev.t_cpa_emit,
+                         window_s, smooth_s, flat_ratio)
 
 
 def run_search(sp: Spectrogram, ev1: EventFit, ev2: EventFit, traces: list[Trace], grid: Grid,
                harmonics=(1, 1), tol_s=6.0, v_tol=0.35, d_tol=(0.4, 2.5), silence_d_m=6000.0,
                max_range_m=DEFAULT_MAX_RANGE_M, c=None, top_pairs=None, progress=True,
                cpa_cache=None, trace_metadata=None, search_bbox=None,
-               workers: int | None = None) -> tuple[pd.DataFrame, list[Segment]]:
+               workers: int | None = None, time_convention: str = "heard", sf_tol_s: float | None = None,
+               sf_smooth_s: float = 3.0, sf_window_s: float = 60.0, sf_flat_ratio: float = SF_FLAT_RATIO,
+               clock_anchor: str = "heard") -> tuple[pd.DataFrame, list[Segment]]:
     """Rank grid points for a two-event recording.
+
+    Timing (PLAN Phase 2, item 1); the defaults are the original behaviour:
+    - time_convention: "heard" pairs the fits' heard CPA times (t_cpa) against the table's t_heard;
+      "emission" pairs their emission CPA times (t_cpa_emit) against its t_emit. tol_s is the gate's half-width.
+    - sf_tol_s: if set, scoring drops a triple whose two modelled curves' steepest-fall gap differs from
+      the fits' steepest-fall gap by more than this (score.steepest_fall, with sf_smooth_s, sf_window_s
+      and sf_flat_ratio). A triple where either can't be placed skips the check and is counted unplaceable.
+    - clock_anchor: "heard" maps unix to audio time so event 1's modelled heard CPA lands on its fit's;
+      "steepest" so its modelled steepest fall lands on its fit's (heard where unplaceable).
 
     cpa_cache: optional .npz path. The (grid point, flight) CPA table depends only on the grid
     (with its elevations), the traces, max_range and the speed of sound, not on the events, and is
@@ -187,7 +229,13 @@ def run_search(sp: Spectrogram, ev1: EventFit, ev2: EventFit, traces: list[Trace
     - "funnel": hypothesis counts after each filter: "cpa_rows" (the table), "event1_gates" and
       "event2_gates" (CPA rows within each event's speed and distance tolerances), "time_join"
       (triples whose heard-time gap matches the events' within tol_s), "silence" (left after the
-      silence filter; equal to "time_join" when it is off) and "scored"."""
+      silence filter; equal to "time_join" when it is off) and "scored". The emission convention reports
+      "emission_gate" in place of "time_join". With sf_tol_s set or the steepest anchor, "steepest_fall"
+      counts the triples the check kept (unplaceable ones included) and "unplaceable" those it couldn't test."""
+    if time_convention not in ("heard", "emission"):
+        raise ValueError(f"time_convention must be heard or emission, got {time_convention!r}")
+    if clock_anchor not in ("heard", "steepest"):
+        raise ValueError(f"clock_anchor must be heard or steepest, got {clock_anchor!r}")
     c = speed_of_sound() if c is None else c
     stages: dict = {}
     funnel: dict = {}
@@ -204,18 +252,24 @@ def run_search(sp: Spectrogram, ev1: EventFit, ev2: EventFit, traces: list[Trace
         cpa = cached_cpa_table(grid, segs, max_range_m, c, cpa_cache, workers=workers)
         log(f"{len(cpa)} (point, flight) CPA records")
     with _stage(stages, "pairing"):
-        dt = ev2.t_cpa - ev1.t_cpa
-        pairs = pair_candidates(cpa, dt, tol_s=tol_s,
+        emission = time_convention == "emission"
+        dt = ev2.t_cpa_emit - ev1.t_cpa_emit if emission else ev2.t_cpa - ev1.t_cpa
+        pairs = pair_candidates(cpa, dt, tol_s=tol_s, time_col="t_emit" if emission else "t_heard",
                                 v1=(ev1.v * (1 - v_tol), ev1.v * (1 + v_tol)), d1=(ev1.d * d_tol[0], ev1.d * d_tol[1]),
                                 v2=(ev2.v * (1 - v_tol), ev2.v * (1 + v_tol)), d2=(ev2.d * d_tol[0], ev2.d * d_tol[1]),
                                 silence_d_m=silence_d_m, funnel=funnel)
         log(f"{len(pairs)} candidate (point, flight1, flight2) triples after offset + silence filters")
+        sf = None
+        if sf_tol_s is not None or clock_anchor == "steepest":
+            sf = {"tol_s": sf_tol_s, "anchor": clock_anchor, "window_s": sf_window_s, "smooth_s": sf_smooth_s,
+                  "flat_ratio": sf_flat_ratio,
+                  "fit": tuple(fitted_steepest_fall(e, c, sf_window_s, sf_smooth_s, sf_flat_ratio) for e in (ev1, ev2))}
     with _stage(stages, "scoring"):
         w1 = EventWindow.from_fit(sp, ev1, harmonics[0]); w2 = EventWindow.from_fit(sp, ev2, harmonics[1])
         used = np.union1d(pairs.seg1.to_numpy(), pairs.seg2.to_numpy())
-        state = {"w1": w1, "w2": w2, "segs": {int(k): segs[k] for k in used}, "c": c}
-        tasks = [(grid.enu[pairs.gidx.to_numpy()[a:a + SCORE_CHUNK]], pairs.seg1.to_numpy()[a:a + SCORE_CHUNK],
-                  pairs.seg2.to_numpy()[a:a + SCORE_CHUNK], pairs.t_heard1.to_numpy()[a:a + SCORE_CHUNK])
+        state = {"w1": w1, "w2": w2, "segs": {int(k): segs[k] for k in used}, "c": c, "sf": sf}
+        cols_in = [pairs[k].to_numpy() for k in ("gidx", "seg1", "seg2", "t_heard1", "t_emit1", "t_emit2")]
+        tasks = [(grid.enu[cols_in[0][a:a + SCORE_CHUNK]], *(x[a:a + SCORE_CHUNK] for x in cols_in[1:]))
                  for a in range(0, len(pairs), SCORE_CHUNK)]
         scores = []
         t0 = time.time()
@@ -227,7 +281,10 @@ def run_search(sp: Spectrogram, ev1: EventFit, ev2: EventFit, traces: list[Trace
         finally:
             _SCORE_STATE.clear()
         out = [(p.gidx, grid.lat[p.gidx], grid.lon[p.gidx], p.seg1, p.seg2, segs[p.seg1].icao, segs[p.seg2].icao, p.t_heard1, p.d1, p.v1, p.d2, p.v2, *sc)
-               for p, sc in zip(pairs.itertuples(), scores)]
+               for p, (sc, _) in zip(pairs.itertuples(), scores) if sc is not None]
+        if sf is not None:
+            funnel["steepest_fall"] = len(out)
+            funnel["unplaceable"] = sum(u for _, u in scores)
         cols = ["gidx", "lat", "lon", "seg1", "seg2", "icao1", "icao2", "t_heard1", "d1", "v1", "d2", "v2", "score", "s1", "s2", "shift"]
         res = pd.DataFrame(out, columns=cols).sort_values("score", ascending=False).reset_index(drop=True)
         funnel["scored"] = len(res)

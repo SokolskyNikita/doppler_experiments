@@ -93,7 +93,17 @@ def main(argv=None):
     r.add_argument("--point", nargs=2, type=float, metavar=("LAT", "LON"), help="score a single known point instead of a grid")
     r.add_argument("--spacing", type=float, default=200.0); r.add_argument("--harmonics", nargs=2, type=int, default=(1, 1))
     r.add_argument("--no-dem", action="store_true"); r.add_argument("--no-silence", action="store_true")
-    r.add_argument("--tol", type=float, default=6.0)
+    r.add_argument("--tol", type=float, default=6.0, help="pairing gate half-width, s (default 6)")
+    r.add_argument("--convention", choices=["heard", "emission"], default="heard",
+                   help="CPA time the pairing gate compares: heard (t_cpa against t_heard, default) or emission (t_cpa_emit against t_emit)")
+    r.add_argument("--sf-tol", type=float, metavar="S",
+                   help="drop triples whose modelled and fitted steepest-fall gaps differ by more than S seconds (default: off)")
+    r.add_argument("--sf-smooth", type=float, default=3.0, metavar="S", help="steepest fall: moving-average half-width, s")
+    r.add_argument("--sf-window", type=float, default=60.0, metavar="S", help="steepest fall: search half-window around each CPA, s")
+    r.add_argument("--sf-flat-ratio", type=float, default=1.03, metavar="X",
+                   help="steepest fall: a curve whose peak slope is under X times its median slope can't be placed")
+    r.add_argument("--anchor", choices=["heard", "steepest"], default="heard",
+                   help="clock anchor for scoring: event 1's heard CPA (default) or its steepest fall")
     r.add_argument("--cpa-cache", metavar="NPZ", help="cache the (point, flight) CPA table here; reused when the grid (with its elevations), traces, range and speed of sound are identical")
 
     rf = sub.add_parser("refine", help="fine grid around one search result, optionally adding more events")
@@ -193,7 +203,9 @@ def main(argv=None):
                                         silence_d_m=None if a.no_silence else 6000.0, tol_s=a.tol, cpa_cache=a.cpa_cache,
                                         max_range_m=a.max_range, trace_metadata=load_trace_metadata(a.traces),
                                         search_bbox=tuple(a.bbox) if a.bbox else (a.point[0], a.point[0], a.point[1], a.point[1]),
-                                        workers=a.jobs)
+                                        workers=a.jobs, time_convention=a.convention, sf_tol_s=a.sf_tol,
+                                        sf_smooth_s=a.sf_smooth, sf_window_s=a.sf_window, sf_flat_ratio=a.sf_flat_ratio,
+                                        clock_anchor=a.anchor)
         for name, t in res.attrs.get("stages", {}).items():
             pipeline.log(f"stage {name}: {t['wall_s']:.1f} s wall, {t['cpu_s']:.1f} s CPU")
         pipeline.log("funnel: " + ", ".join(f"{k} {v}" for k, v in res.attrs.get("funnel", {}).items()))

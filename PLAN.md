@@ -91,6 +91,11 @@ Execution errors (unreadable audio, a missing ffmpeg, a network failure) are rep
 - the two development recordings, Oyster Bay (1 h) and the eagle cam (12 h);
 - four Eclipse Soundscapes sites recorded on 2024-04-07, CC BY 4.0;
 - seven xeno-canto recordings: one usable single-flyover case, and three Essex recordings that contain only jets;
+- additional audio acquired on 2026-11-03: 40 Livermore passes with frequency tracks and ADS-B KMLs,
+  AeroSonicDB v1.1.2, DataSEC, DataSED, and about 6 h of original A2O audio from three sites. These are
+  development/detection inputs, not validated location cases; DataSEC/DataSED include edited clips and
+  A2O coordinates are obfuscated (default uncertainty is a few hundred metres, custom offsets can differ).
+  Sources, licences, inventories and the pending AeroSonicDB 3K access request are in the data root's `MANIFEST.md`;
 - flight data for each recording's day: 2024-04-07 for the Eclipse sites, but not yet 04-08, which two of them run into. The development cases also have the day before, plus METAR reports and upper-air soundings;
 - 16 papers and books.
 

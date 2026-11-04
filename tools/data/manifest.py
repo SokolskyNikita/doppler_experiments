@@ -24,6 +24,11 @@ SOURCES = [   # (path prefix, source, licence)
     ("raw/audio/youtube/swfl_", "https://youtu.be/zs2o5Rhlp5w (SWFL Eagle Cam #3)", None),
     ("raw/audio/eclipse/sites.csv", "Eclipse Soundscapes site list compiled from Zenodo", None),
     ("raw/audio/xenocanto/", "xeno-canto.org API v3 search results", None),
+    ("raw/audio/livermore/zenodo-23424278/", "https://zenodo.org/records/23424278", "https://creativecommons.org/licenses/by/4.0/"),
+    ("raw/audio/aerosonicdb/zenodo-10215080/", "https://zenodo.org/records/10215080", "https://creativecommons.org/licenses/by-nc/4.0/"),
+    ("raw/audio/datasec/zenodo-23097290/", "https://zenodo.org/records/23097290", "https://creativecommons.org/licenses/by-nc-sa/4.0/"),
+    ("raw/audio/datased/zenodo-15346092/", "https://zenodo.org/records/15346092", "https://creativecommons.org/licenses/by-nc-sa/4.0/"),
+    ("raw/audio/a2o/", "https://data.acousticobservatory.org/projects/1 (Australian Acoustic Observatory; recording/site IDs in filenames and metadata)", "https://creativecommons.org/licenses/by/4.0/"),
     ("raw/aux/metar/", "Iowa Environmental Mesonet: ASOS/METAR and RAOB soundings", None),
     ("raw/models/rnnoise/", "RNNoise models for ffmpeg arnndn", None),
 ]
@@ -39,6 +44,13 @@ def xenocanto_records() -> dict:
 def describe(rel: str, xc: dict) -> tuple[str | None, str | None]:
     """(source, licence) of one raw file, given its path relative to ROOT."""
     name = rel.rsplit("/", 1)[-1]
+    if rel.startswith("raw/audio/a2o/"):
+        recording_id = name.rsplit(".", 1)[0]
+        if recording_id.isdigit():
+            return (f"https://api.acousticobservatory.org/audio_recordings/{recording_id}", CC_BY_4)
+        if name == "site.json":
+            site_id = rel.split("/")[3].removeprefix("site-")
+            return (f"https://api.acousticobservatory.org/sites/{site_id}", CC_BY_4)
     if rel.startswith("raw/audio/xenocanto/XC"):
         r = xc.get(name[2:].split("_")[0])
         return (r["url"], r["lic"]) if r else (None, None)

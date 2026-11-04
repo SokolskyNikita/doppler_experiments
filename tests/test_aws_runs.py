@@ -228,3 +228,11 @@ def test_a_shard_without_capacity_doesnt_stop_the_others(monkeypatch):
     tried = _shard_env(monkeypatch, lambda job, r: True)
     runs.launch_all(runs.argparse.Namespace(topic="t", shards=3, shard=None, only_shard=[2], wait_for_capacity=0))
     assert [j for _, j, _ in tried] == ["t-s2of3"]
+
+
+def test_run_folders_go_up_only_by_name():
+    assert runs.is_run_path("runs/") and runs.is_run_path("runs/2026-11-04-x/a.json") and not runs.is_run_path("derived/runs")
+    assert runs.check_run_input("runs/2026-11-04-livermore-audit/") == "runs/2026-11-04-livermore-audit"
+    for bad in ("runs", "runs/", "derived/x"):
+        with pytest.raises(SystemExit, match="one run folder"):
+            runs.check_run_input(bad)

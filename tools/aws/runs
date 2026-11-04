@@ -1,0 +1,3 @@
+#!/bin/sh
+# runs: see tools/aws/runs.py
+exec uv run --frozen --project "$(dirname "$0")" python "$(dirname "$0")/runs.py" "$@"

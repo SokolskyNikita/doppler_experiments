@@ -1,0 +1,23 @@
+{
+ "note": "Binaries `runs seed-tools` puts under tools/<arch>/ in the bucket; every job box and the dev box installs them. Each archive is checked against its SHA-256 before anything is extracted.",
+ "arch": {
+  "arm64": [
+   {"name": "uv 0.9.7", "licence": "MIT OR Apache-2.0", "source": "https://github.com/astral-sh/uv/releases/tag/0.9.7",
+    "url": "https://github.com/astral-sh/uv/releases/download/0.9.7/uv-aarch64-unknown-linux-gnu.tar.gz",
+    "sha256": "8b3d31a154673c6d357727d2083a33525b515589d153fa5b5455e1db9e9e6363", "members": ["uv", "uvx"]},
+   {"name": "ffmpeg n9.0.2-45-g1e65c6cd5d (BtbN static, GPL)", "licence": "GPL-3.0-or-later",
+    "source": "https://github.com/BtbN/FFmpeg-Builds/releases/tag/autobuild-2026-11-03-12-50",
+    "url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-11-03-12-50/ffmpeg-n9.0.2-45-g1e65c6cd5d-linuxarm64-gpl-9.0.tar.xz",
+    "sha256": "e106143b65627d57703187d2b53b6670e7f202390e9ca1f539f1b5d993012191", "members": ["ffmpeg", "ffprobe"]}
+  ],
+  "amd64": [
+   {"name": "uv 0.9.7", "licence": "MIT OR Apache-2.0", "source": "https://github.com/astral-sh/uv/releases/tag/0.9.7",
+    "url": "https://github.com/astral-sh/uv/releases/download/0.9.7/uv-x86_64-unknown-linux-gnu.tar.gz",
+    "sha256": "b26fcc8dfa1c39b5a5613445af3be3eefda45d9a39359bee271eafe34913583e", "members": ["uv", "uvx"]},
+   {"name": "ffmpeg n9.0.2-45-g1e65c6cd5d (BtbN static, GPL)", "licence": "GPL-3.0-or-later",
+    "source": "https://github.com/BtbN/FFmpeg-Builds/releases/tag/autobuild-2026-11-03-12-50",
+    "url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-11-03-12-50/ffmpeg-n9.0.2-45-g1e65c6cd5d-linux64-gpl-9.0.tar.xz",
+    "sha256": "1e541f07bff565a18d952e71a3fb7efa1c672f8a5f25a0a950e75957f4f07eee", "members": ["ffmpeg", "ffprobe"]}
+  ]
+ }
+}

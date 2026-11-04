@@ -92,7 +92,9 @@ def test_ridge_track_follows_a_painted_pass():
     curve = ideal_curve(t, f0, v, d, tc, c=C)
     on = np.isfinite(curve)
     S[np.rint((curve[on] - f[0]) / 0.5).astype(int), np.flatnonzero(on)] += 10
-    tr = tracks.ridge_track(audio.Spectrogram(t, f, S), 120, 300, 80, 160)
+    S[np.abs(f - 66.0) < 0.3, :] += 30                             # a strong steady line below the band
+    tr = tracks.ridge_track(audio.Spectrogram(t, f, S), 120, 300, 70, 170)
+    assert tr.f.min() >= 70 and tr.f.max() <= 170
     inside = np.isfinite(ideal_curve(tr.t, f0, v, d, tc, c=C))
     assert np.median(np.abs(tr.f[inside] - ideal_curve(tr.t[inside], f0, v, d, tc, c=C))) <= 0.5
     assert tr.amplitude.min() >= 1.0 and tr.valid.all()

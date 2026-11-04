@@ -30,6 +30,12 @@ SOURCES = [   # (path prefix, source, licence)
     ("raw/audio/datasec/zenodo-23097290/", "https://zenodo.org/records/23097290", "https://creativecommons.org/licenses/by-nc-sa/4.0/"),
     ("raw/audio/datased/zenodo-15346092/", "https://zenodo.org/records/15346092", "https://creativecommons.org/licenses/by-nc-sa/4.0/"),
     ("raw/audio/a2o/", "https://data.acousticobservatory.org/projects/1 (Australian Acoustic Observatory; recording/site IDs in filenames and metadata)", "https://creativecommons.org/licenses/by/4.0/"),
+    ("raw/audio/youtube/lorain_", "https://youtu.be/my6GvU6lG0U (Lorain Port and Finance Authority, 24/7 Lorain Lighthouse Cam)", None),
+    ("raw/audio/sussex-gatwick/zenodo-21072869/", "https://zenodo.org/records/21072869", "https://creativecommons.org/licenses/by/4.0/"),
+    ("raw/audio/aeroloop/zenodo-17765718/", "https://zenodo.org/records/17765718", "https://opensource.org/licenses/MIT"),
+    ("raw/seismic/alaska-ze2019/zenodo-16997158/", "https://zenodo.org/records/16997158 (Seppi, Tape & Fee 2025)", "https://creativecommons.org/licenses/by/4.0/"),
+    ("raw/seismic/alaska-ze2019/earthscope-ze/", "EarthScope FDSN web services, network ZE 2019 (doi:10.7914/SN/ZE_2019), DPZ windows around fitted crossings", None),
+    ("raw/aux/geoid/", "https://cdn.proj.org/us_nga_egm96_15.tif (PROJ-data, NGA EGM96 15' grid)", None),
     ("raw/aux/metar/", "Iowa Environmental Mesonet: ASOS/METAR and RAOB soundings", None),
     ("raw/models/rnnoise/", "RNNoise models for ffmpeg arnndn", None),
 ]

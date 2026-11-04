@@ -173,12 +173,27 @@ def test_everything_after_the_double_dash_is_the_command(monkeypatch):
     assert seen["command"] == ["python", "-m", "bench", "run", "--tier", "t2"]
 
 
+def _shard_env(monkeypatch, placeable):
+    """launch_all with AWS stubbed: placeable(job, round) says whether the shard gets a box in that round."""
+    rounds = {"n": 0}
+    monkeypatch.setattr(runs, "launch", lambda a: a.topic)
+    monkeypatch.setattr(runs, "session", lambda region=None: runs.argparse.Namespace(client=lambda name: None))
+    monkeypatch.setattr(runs, "outputs", lambda region=None: {"Bucket": "b"})
+    monkeypatch.setattr(runs.time, "sleep", lambda s: rounds.update(n=rounds["n"] + 1))
+    tried = []
+
+    def place(b, job, s3, bucket, wait_s, final):
+        tried.append((rounds["n"], job, final))
+        return not final and placeable(job, rounds["n"])
+    monkeypatch.setattr(runs, "place", place)
+    return tried
+
+
 def test_shards_launch_one_job_per_box_and_resumed_runs_come_back_home(tmp_path, monkeypatch):
-    seen = []
-    monkeypatch.setattr(runs, "launch", lambda a: seen.append((a.topic, a.shard)) or a.topic)
-    a = runs.argparse.Namespace(topic="whiten", shards=3, shard=None)
+    tried = _shard_env(monkeypatch, lambda job, r: True)
+    a = runs.argparse.Namespace(topic="whiten", shards=3, shard=None, wait_for_capacity=90)
     assert runs.launch_all(a) == ["whiten-s1of3", "whiten-s2of3", "whiten-s3of3"]
-    assert [s for _, s in seen] == [[1, 3], [2, 3], [3, 3]]
+    assert [j for _, j, _ in tried] == ["whiten-s1of3", "whiten-s2of3", "whiten-s3of3"]
     run = tmp_path / "2026-11-04-whiten"
     run.mkdir()
     assert not runs.same_run(run)
@@ -200,14 +215,16 @@ def test_both_input_listings_become_cases_paths_and_cache_kinds():
 
 
 def test_a_shard_without_capacity_doesnt_stop_the_others(monkeypatch):
-    def launch(a):
-        if a.shard[0] == 2:
-            raise SystemExit("no capacity")
-        return a.topic
-    monkeypatch.setattr(runs, "launch", launch)
+    # shard 2 finds room only in the second round; shards 1 and 3 aren't held back by it
+    tried = _shard_env(monkeypatch, lambda job, r: job != "t-s2of3" or r >= 1)
+    a = runs.argparse.Namespace(topic="t", shards=3, shard=None, wait_for_capacity=90)
+    assert sorted(runs.launch_all(a)) == ["t-s1of3", "t-s2of3", "t-s3of3"]
+    assert [(r, j) for r, j, _ in tried] == [(0, "t-s1of3"), (0, "t-s2of3"), (0, "t-s3of3"), (1, "t-s2of3")]
+    # with no wait, a shard still without room is marked failed and named for --only-shard
+    tried = _shard_env(monkeypatch, lambda job, r: job != "t-s2of3")
     with pytest.raises(SystemExit, match=r"1 of 3 shards not launched: \[2\]"):
-        runs.launch_all(runs.argparse.Namespace(topic="t", shards=3, shard=None))
-    got = []
-    monkeypatch.setattr(runs, "launch", lambda a: got.append(a.shard) or a.topic)
-    runs.launch_all(runs.argparse.Namespace(topic="t", shards=3, shard=None, only_shard=[2]))
-    assert got == [[2, 3]]
+        runs.launch_all(runs.argparse.Namespace(topic="t", shards=3, shard=None, wait_for_capacity=0))
+    assert tried[-1] == (0, "t-s2of3", True)
+    tried = _shard_env(monkeypatch, lambda job, r: True)
+    runs.launch_all(runs.argparse.Namespace(topic="t", shards=3, shard=None, only_shard=[2], wait_for_capacity=0))
+    assert [j for _, j, _ in tried] == ["t-s2of3"]

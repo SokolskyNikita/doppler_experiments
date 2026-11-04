@@ -4,6 +4,7 @@ per crossing between two settings, median over crossings).
 
 usage: uv run python tools/experiments/2026-11-04/model_error_alaska_summary.py "$RUN"
 """
+import csv
 import json
 import sys
 from pathlib import Path
@@ -13,6 +14,13 @@ import numpy as np
 from dopplertrack.doppler import speed_of_sound
 
 C15 = speed_of_sound(15.0)
+
+
+def _num(v):
+    try:
+        return float(v)
+    except ValueError:
+        return v
 
 
 def stats(rows, R, v, tau=None):
@@ -26,10 +34,15 @@ def stats(rows, R, v, tau=None):
 
 
 def main(run: Path):
-    rows = [json.loads(line) for line in open(run / "alaska.jsonl")]
+    if (run / "alaska.jsonl").exists():
+        rows = [json.loads(line) for line in open(run / "alaska.jsonl")]
+    else:                        # a merged shards.py run: alaska.csv, numbers as text
+        rows = [{k: _num(v) for k, v in r.items() if v != ""} for r in csv.DictReader(open(run / "alaska.csv"))]
     c = {"c15": lambda r: C15, "cauth": lambda r: r["c_authors"], "ctemp": lambda r: r["c_temp"]}
-    ok = [r for r in rows if all(f"R_{t}" in r for t in c)]
-    out = {"n_rows": len(rows), "n_all_three": len(ok)}
+    ok = [r for r in rows if all(isinstance(r.get(f"R_{t}"), float) and np.isfinite(r[f"R_{t}"]) for t in c)]
+    out_weak = {t: sum(1 for r in rows if f"weak_{t}" in r) for t in c}
+    out = {"n_rows": len(rows), "n_all_three": len(ok), "weak": out_weak,
+           "errors": {t: sum(1 for r in rows if f"error_{t}" in r) for t in c}}
     for t in c:
         out[t] = stats(ok, lambda r: r[f"R_{t}"], lambda r: r[f"v_{t}"], lambda r: r[f"tau_{t}"])
         out[t]["c_median"] = float(np.median([c[t](r) for r in ok]))

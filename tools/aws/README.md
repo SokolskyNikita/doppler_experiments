@@ -69,6 +69,22 @@ tools/aws/runs launch oyster-t2 --case oyster-bay --wait -- .venv/bin/python -m 
 Several invocations on one box: a driver that runs them at once with `DOPPLERTRACK_JOBS` split, like
 [aws_sweep.sh](../experiments/2026-11-04/aws_sweep.sh) (6 settings at a time with 10 jobs each).
 
+## Sizing
+
+Quota is counted in vCPUs per region and market: 256 spot and 256 on-demand in each region until AWS raises it
+(increases requested). A box counts its whole size against that, whatever the job uses: a 16xlarge shard costs 64
+vCPUs even when its job runs 16 workers, so only four fit in a region. Size the box to the job's workers
+(`--size 4xlarge` for 16, `8xlarge` for 32; a vCPU is a core on Graviton and c7a), and shard wider rather than
+deeper: more small boxes start sooner, fit the quota's remainders in every region, and lose less to one
+interruption. Keep 16xlarge for a single process that really uses 64 workers.
+
+**Is the box the right size?** `runs fleet --util` lists every running box's CPU over the last 5 and 15 minutes
+and the vCPU-hours it has left idle, and marks a box under 60 % after its first 5 minutes; `--history` covers
+every job today over its whole run, and `--watch 10` appends a snapshot every 10 minutes to a new run folder. It
+reads EC2's own CPUUtilization metric with GetMetricStatistics, which counts against CloudWatch's free 1M API
+requests a month: nothing to pay at a few dozen boxes every few minutes. A temporary check
+([fleet_util.py](fleet_util.py)).
+
 ## The dev box
 
 A c8g.2xlarge on demand (8 cores, 16 GB, 300 GB gp3) with the fork at `~/dopplertrack` and the data and
@@ -130,7 +146,7 @@ object is kept 30 days), kept when the stack is deleted:
 | `data/raw/`, `data/derived/` | the data root, minus reference/ (the papers) and runs/ | `runs seed`, `fetch-sources` jobs, jobs that build derived files |
 | `cache/{detections,window_fits,terrarium}/` | the seeded caches | `runs seed` only |
 | `cache-deltas/<job>.tar` | the cache entries a job added | that job |
-| `tools/{arm64,amd64}/`, `tools/tools.json` | uv 0.9.7 (MIT or Apache-2.0) and ffmpeg n9.0.2 static (BtbN, GPL-3.0-or-later): sources and hashes in [tools.json](tools.json) | `runs seed-tools` only |
+| `tools/{arm64,amd64}/`, `tools/tools.json` | uv 0.13.7 (MIT or Apache-2.0) and ffmpeg n9.0.2 static (BtbN, GPL-3.0-or-later): sources and hashes in [tools.json](tools.json) | `runs seed-tools` only |
 | `jobs/<job>/` | spec, code, supervisor, status (expire after 60 days) | `runs launch`, the job |
 | `runs/<run>/` | run folders | the job |
 | `dev/`, `plans/` | dev-box syncs (7 days), fetch plans | `runs` |

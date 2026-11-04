@@ -111,8 +111,11 @@ def readings(run, st, day, log):
     return out
 
 
-def midpoint(case, site):
+def midpoint(case, site, clocks):
+    """clocks: the audio clock of each site's base case, for variants of its audio that carry none."""
     rc = (case.get("reference_clock_utc") or {}).get("audio_zero_utc_unix_s")
+    if rc is None and (case.get("audio") or {}).get("duration_s") is None:
+        rc = clocks.get(site)
     t0 = rc if rc is not None else datetime.fromisoformat(case["start_time"]["utc"].replace("Z", "+00:00")).timestamp()
     length = (case.get("audio") or {}).get("duration_s") or SITES[site][1]
     return t0, length, t0 + length / 2
@@ -144,13 +147,14 @@ def main(run, apply):
     latest = {}
     for c in doc["cases"]:
         latest[c["id"]] = max(latest.get(c["id"], 0), c["version"])
+    clocks = {c["id"]: (c.get("reference_clock_utc") or {}).get("audio_zero_utc_unix_s") for c in doc["cases"] if c["id"] == "oyster-bay"}
     for case in doc["cases"]:
         cases.append(case)
         if case["version"] != latest[case["id"]] or (case.get("weather") or {}).get("temperature_c") is not None:
             continue
-        site = SITE_OF.get(case["id"], case["id"])
+        site = SITE_OF.get(case["id"]) or next((k for k in ("oyster-bay", "eagle-cam") if case["id"].startswith(k)), case["id"])
         ref = case["labels"]["reference"]
-        t0, length, tm = midpoint(case, site)
+        t0, length, tm = midpoint(case, site, clocks)
         day = datetime.fromtimestamp(tm, timezone.utc).date()
         cand = sorted(stations(run, SITES[site][0]), key=lambda s: haversine_m(ref["lat"], ref["lon"], s["lat"], s["lon"]))
         pick = None

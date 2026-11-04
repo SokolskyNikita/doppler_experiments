@@ -194,23 +194,39 @@ its search, so it never builds its table.
      stopped 507 s in.
    - Each comparable search reloads the case's CPA table (1.15 GB for the eagle cam), but a load took about 1 s;
      a search's time is its pairing and scoring, which scale with the workers.
+   - decision: PLAN Phase 3 step A's done-when, and locate's pair rule (criteria in
+     `docs/experiments/2026-11-04-locate.md`, written before the results). If every failure case ends in its reason
+     code, step A is done; one that doesn't is a bug fixed first. If `comparable` finds more seed cases than `top2`
+     and loses none, it becomes the default; otherwise `top2` stays. If neither finds a seed case from automatic
+     events, the next work is event choice (Phase 2 item 7's joint hypotheses) before step B.
 2. **Tier 2 locate, silence filter on.** The same with `--search-param silence_d_m=6000`. It reuses job 1's CPA
    tables, so run it after job 1 or with job 1's tables copied in.
+   - decision: S4's silence default in locate. It stays off unless turning it on finds more seed cases, loses none
+     and leaves the negatives unlocated; if it does all three, it turns on and S4's re-ranking penalty is dropped
+     from step B.
 3. **Tier 2 saved-fit**, the five development cases with saved fits.
    - Its run is the baseline for the v2-cut case bump; job 4 runs the bumped cases with the same command.
    - Measured: the four seed cases at `--parallel 4`, warm tables, took 368 s on the Mac
      (`docs/experiments/2026-11-04-tier1.md`).
+   - decision: with job 4, whether the Phase 1 baselines stand (Phase 0 D1, coverage). See job 4.
 4. **Tier 2 saved-fit after the case bump.** Every development case moves to its margin-padded cut (PM,
    2026-11-04), then `bench compare` against job 3. New flight data means new CPA tables, so these cases build
    theirs cold.
    - Measured cold builds at 10 jobs: Oyster Bay 26 s (saved uncompressed) and the eagle cam 43 s (saved
      compressed), from `docs/experiments/2026-11-04-parallel-cpa.md`.
+   - decision: whether the Phase 1 baselines stand. If every seed case keeps its true-pair rank and its margin
+     within 5 % of the legacy value, the legacy-cut baselines stand with a note; if any rank or margin moves, the baselines
+     are restated from the margin-padded cut, and the shift is recorded as a Phase 0 finding (the legacy cuts broke
+     the coverage rule D1 exists to catch).
 5. **Tier 1, development set, cold** (a fresh box has no detection or window-fit cache).
    - Command: `bench tier1 --shard I/N` on N boxes, then `bench merge` and one `bench tier1 --resume`.
    - Measured on the Mac: 788 s cold and 108 s warm with default workers. Each span's detect took 122 s and
      161 s, and each raw-audio-windows known point 113–142 s (`docs/experiments/2026-11-04-tier1.md`).
    - The 788 s run predates the nine background spans. With them, a cold Tier 1 took about 50 minutes under load
      (`docs/experiments/2026-11-04-cache-keys.md`), so the background spans are the bulk of a cold run.
+   - decision: where cold Tier 1 runs (PLAN 5.4's budget). If the sharded fleet run finishes cold in the warm
+     budget's time, a cache-key change no longer costs a long wait and Tier 1 runs cold on the fleet by default; if
+     not, the warm Mac run stays the default and cold runs are batched.
 
 All five launch at once, one box per case or Tier 1 unit: `tools/experiments/2026-11-04/sde_b_cloud.sh launch`, then `... collect` pulls, merges the shards, compares (silence off against on; legacy against margin-padded cut) and renders the reports. Job 3 runs at the commit before the case bump, from a worktree, so it needs no wait.
 
@@ -248,6 +264,33 @@ Every driver runs on `shards.py`:
 | Item 1's timing sweep (`timing-sweep`) | `timing_sweep.py` | 45 `bench run` cells |
 
 Splitting a job across boxes can't bring it under its longest unit.
+
+Each job's `decision:` line names the PLAN decision it informs and what each outcome changes. The jobs are listed
+in the PM's order (2026-11-04); a job whose outcomes change no decision isn't launched.
+- **Stage A comparable score** — decision: whether event choice is the Phase 3 blocker (item 7, stage A).
+  - A1 and A3 met at today's code: ranking a recording's event pairs by Z is the event choice Phase 3 builds on.
+  - Not met: event choice stays the blocker, and the next lever is stage B's joint hypotheses.
+- **B1/B2** — decision: whether the score's input, the fit, is the blocker (item 7, stage B).
+  - B1 still failing at today's code: the fit's bias, not event choice, is what Phase 3 waits on. The levers are
+    item 2's turn model, item 8, or a track that stays on the pass (item 3).
+  - B1 met: hypotheses replace the speed and distance gates.
+- **Stage B A1/A3** — decision: whether stage B's hypotheses ship for event choice.
+  - A1 met: Z with hypotheses picks the eagle cam's true pair, which counts for adopting them, though B1 alone still
+    blocks that.
+  - Not met: they don't ship for event choice.
+  - Inside the null's noise: the N run below decides it.
+- **Item 1's timing sweep** — decision: whether the (16 s, 4 s) emission setting still holds at today's code, after
+  the changes since `51f59ce`.
+  - Holds: it stays the development setting that a default change would cite.
+  - Doesn't hold: item 1's setting reopens.
+- **N = 250,000 null (stage B, `--null-n`)** — decision: whether A1 can be decided at all by the null's size.
+  - It is read only if A1 is inside the null's noise and needs N ≤ 250,000, under the record's rule; otherwise it is
+    a number nobody acts on, and it isn't read.
+  - Decided: that is A1's result.
+  - Still inside the noise: the record says the test can't decide, and a lower-variance scale estimate becomes the
+    later method change.
+- **Event pairs by raw score** — decision: none of its own. Stage A's earlier run already compared Z with the raw
+  score, so it isn't launched.
 
 **Inputs** (from each driver's `--inputs`):
 - **Pairs jobs.** The three cases, plus each case's `detected.json` in
@@ -293,3 +336,10 @@ Stage B's A1/A3 must run the first run's hypotheses (`45d0bd8`), not the retune'
 - B1/B2's `event_hypotheses` call, kept as it was at `45d0bd8`.
 
 The other jobs launch from `dev`.
+
+## SDE-E
+
+- **Box sizing per job, from `runs fleet --util`.** Each job's box is sized from its measured CPU use: a job under
+  60 % over its run (after its first 5 minutes) moves to the next smaller size, or its driver is changed to use the
+  cores (more units at once, or a wider `--shards`). `--history` gives today's jobs over their whole runs; `--watch 10`
+  keeps an hour of snapshots in a run folder, which tells a bursty job from an over-provisioned one.

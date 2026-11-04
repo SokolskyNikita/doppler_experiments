@@ -359,7 +359,7 @@ def run_unit(uid, pl, bands, d: Path, jobs):
     return {"segments": len(idx), "candidates": len(cands), "set_A": sets.count("A"), "set_B": sets.count("B")}
 
 
-def inputs(stage, pl, bands_run):
+def inputs(stage, pl, bands_run=None):
     allp = passes()
     paths = {AUDIT + "/passes.csv", AUDIT + "/sites.json", COHERENCE, "raw/aux/opensky/doc8643AircraftTypes.csv"}
     if stage == "prep":
@@ -368,9 +368,11 @@ def inputs(stage, pl, bands_run):
         paths |= set(SPANS.values()) | {str(next(pass_dir(p).glob("*.kml")).relative_to(DATA)) for p in allp.values()}
         paths |= {str((pass_dir(p) / "audio.wav").relative_to(DATA)) for p in allp.values()}
         paths |= {f"derived/traces/{p['day']}/livermore_margin12.npz" for p in allp.values()}
-        if bands_run:
-            paths.add(str(Path(bands_run).resolve().relative_to(DATA.resolve()) / "bands.json"))
-    return sorted(paths)
+    # run folders go to `runs launch --input-run` (RUN_INPUTS, plus the prep run's bands.json), not --input
+    return sorted(x for x in paths if not x.startswith("runs/"))
+
+
+RUN_INPUTS = [AUDIT + "/passes.csv", AUDIT + "/sites.json", COHERENCE]
 
 
 def merge_prep(run, folders):

@@ -138,10 +138,12 @@ def main(argv=None):
     lo.add_argument("--traces", nargs="+", metavar="NPZ", help="flight data, one file per day (default: none unless --fetch)")
     lo.add_argument("--fetch", action="store_true", help="stream the day(s) from adsb.lol with fetch-day (network, about 4 GB a day)")
     lo.add_argument("--days", type=int, choices=(0, 1), default=0, help="also use the next UTC day (with --fetch, fetch it)")
-    lo.add_argument("--pair-rule", choices=("top2", "comparable", "both"), default="top2",
-                    help="top2: detect's two best events (default); comparable: every pair of the top five searched with "
-                         "comparable scores (about ten times slower); both: top2's result with comparable reported beside it")
-    lo.add_argument("--silence", action="store_true", help="turn on the silence filter (off by default in locate, S4)")
+    lo.add_argument("--pair-rule", choices=("top2", "comparable", "both"), default="comparable",
+                    help="comparable: every pair of detect's top five searched with comparable scores (default; about "
+                         "ten times top2's time); top2: detect's two best events; both: comparable's result with top2's "
+                         "reported beside it")
+    lo.add_argument("--no-silence", action="store_true",
+                    help="turn off the silence filter (on by default in locate, at 6 km)")
     lo.add_argument("--band", nargs=2, type=float, default=(60.0, 300.0), metavar=("FLO", "FHI"))
     lo.add_argument("--spacing", type=float, default=200.0)
     lo.add_argument("--no-dem", action="store_true")
@@ -316,7 +318,7 @@ def _locate(a, c_kw):
             traces.append(str(path))
     box = "_".join(f"{x:g}" for x in a.bbox)
     cfg = loc.LocateConfig(band_hz=tuple(a.band), spacing_m=a.spacing, max_range_m=a.max_range,
-                           silence_d_m=6000.0 if a.silence else None, pair_rule=a.pair_rule, dem=not a.no_dem,
+                           silence_d_m=None if a.no_silence else loc.DEFAULT_SILENCE_D_M, pair_rule=a.pair_rule, dem=not a.no_dem,
                            c=c_kw.get("c"), temperature_c=a.temperature, workers=a.jobs, envelope=a.assume_envelope,
                            cpa_cache=str(cache_root() / "cpa" / "locate" / f"{a.date}-days{a.days}-{box}-{a.spacing:g}m.npz"))
     os.makedirs(Path(cfg.cpa_cache).parent, exist_ok=True)

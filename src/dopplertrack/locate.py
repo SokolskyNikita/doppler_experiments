@@ -12,6 +12,11 @@ The pair rules:
   the development recordings is measured (docs/experiments/2026-11-04-bench-baselines.md).
 - "comparable": every pair of the top TOP_K usable events, each searched with run_search(comparable=True), the pair
   whose top candidate has the highest comparable score winning. Up to ten searches, so about ten times top2's time.
+
+The defaults, comparable with the silence filter on at 6 km, follow Tier 2 on the development set
+(docs/experiments/2026-11-04-locate.md): it found Oyster Bay where top2 and the filter off found no seed case, and
+lost none. The filter rests on one recording and is judged again on the next positive. `--pair-rule both` refines the
+default rule's answer and reports top2's beside it.
 """
 from __future__ import annotations
 
@@ -27,6 +32,7 @@ import numpy as np
 from .result import CONVENTIONS_V1, KIND, SCHEMA_VERSION, file_entry, unavailable
 
 TOP_K = 5
+DEFAULT_SILENCE_D_M = 6000.0  # the silence filter's distance; on by default in locate (S4, changed 2026-11-04)
 USABLE_VALID_SHARE = 0.5      # a recording more than half gaps is not searched (S6)
 DAY_SLACK_S = 600.0           # flight data counts as covering a day if it reaches within this of each end
 RULES = ("top2", "comparable")
@@ -42,8 +48,8 @@ class LocateConfig:
     tol_s: float = 6.0
     v_tol: float = 0.35
     d_tol: tuple[float, float] = (0.4, 2.5)
-    silence_d_m: float | None = None          # off by default in locate (S4)
-    pair_rule: str = "top2"                   # "top2", "comparable", or "both" (top2's result, comparable reported)
+    silence_d_m: float | None = DEFAULT_SILENCE_D_M   # None turns the silence filter off
+    pair_rule: str = "comparable"             # "top2", "comparable", or "both" (comparable's result, top2 reported)
     refine_spacing_m: float = 50.0
     refine_half_m: float = 600.0
     dem: bool = True
@@ -289,7 +295,7 @@ def locate(spec_path, date: str, bbox, trace_paths, cfg: LocateConfig | None = N
         summary.append(f"rule {rule}: events d{idx[0]}+d{idx[1]}, "
                        + (f"top {bp.icao1.iloc[0]}/{bp.icao2.iloc[0]} {bp.score.iloc[0]:.2f}" if len(bp) else "no candidate")
                        + (f", margin {margin:.1f} %" if margin is not None else "") + f", {wall:.0f} s")
-    chosen = "top2" if cfg.pair_rule == "both" else cfg.pair_rule
+    chosen = "comparable" if cfg.pair_rule == "both" else cfg.pair_rule
     next(r for r in rec["pair_rules"] if r["rule"] == chosen)["chosen"] = True
     ev1, ev2, res, segs, triples, bp = runs[chosen]
     funnel = res.attrs.get("funnel", {})
@@ -360,7 +366,7 @@ def locate(spec_path, date: str, bbox, trace_paths, cfg: LocateConfig | None = N
     codes = ["winner_only_refined"]
     if cfg.silence_d_m is None:
         codes.append("silence_filter_off")
-        reasons.append("the silence filter was off (S4)")
+        reasons.append("the silence filter was turned off")
     return finish("ambiguous", codes, reasons)
 
 

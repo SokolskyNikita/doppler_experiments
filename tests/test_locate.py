@@ -106,13 +106,14 @@ def test_a_clock_past_utc_midnight_with_one_day(monkeypatch, spec, tmp_path):
 def test_a_found_answer_is_ambiguous_with_its_reasons_and_both_rules_report(monkeypatch, spec, tmp_path):
     _detections(monkeypatch, [_event(1000, 5.0), _event(2000, 4.0), _event(3000, 3.0)])
     _search_returning(monkeypatch, DAY0 + 72000.0)
-    out = locate.locate(spec, DAY, BOX, [_traces(tmp_path)], locate.LocateConfig(dem=False, pair_rule="both"),
-                        out_dir=tmp_path / "out")
+    out = locate.locate(spec, DAY, BOX, [_traces(tmp_path)],
+                        locate.LocateConfig(dem=False, pair_rule="both", silence_d_m=None), out_dir=tmp_path / "out")
     validate(out.record)
     v = out.record["verdict"]
     assert v["outcome"] == "ambiguous" and v["reason_codes"] == ["winner_only_refined", "silence_filter_off"]
     rules = {r["rule"]: r for r in out.record["pair_rules"]}
-    assert rules["top2"]["chosen"] and not rules["comparable"]["chosen"] and rules["top2"]["events"] == [1, 2]
+    # both: the default rule's answer is refined, top2's reported beside it
+    assert rules["comparable"]["chosen"] and not rules["top2"]["chosen"] and rules["top2"]["events"] == [1, 2]
     assert out.record["refined"]["lat"] == pytest.approx(40.021)
     assert (tmp_path / "out" / "funnel_triples.npz").exists()
     assert any("rule comparable" in line and " s" in line for line in out.summary)       # its time is printed
@@ -146,3 +147,15 @@ def test_the_cpa_table_folder_is_made_on_a_fresh_cache(monkeypatch, spec, tmp_pa
     table = tmp_path / "fresh-cache" / "cpa" / "bench" / "x.npz"
     _run(spec, [_traces(tmp_path)], tmp_path, cpa_cache=str(table))
     assert table.parent.is_dir()
+
+
+def test_the_defaults_are_comparable_with_the_silence_filter_on(monkeypatch, spec, tmp_path):
+    _detections(monkeypatch, [_event(1000, 5.0), _event(2000, 4.0), _event(3000, 3.0)])
+    _search_returning(monkeypatch, DAY0 + 72000.0)
+    calls = []
+    search = pipeline.run_search
+    monkeypatch.setattr(pipeline, "run_search", lambda *a, **k: calls.append(k) or search(*a, **k))
+    out = locate.locate(spec, DAY, BOX, [_traces(tmp_path)], locate.LocateConfig(dem=False), out_dir=tmp_path / "out")
+    assert [r["rule"] for r in out.record["pair_rules"]] == ["comparable"]
+    assert len(calls) == 3 and all(k["comparable"] and k["silence_d_m"] == 6000.0 for k in calls)  # 3 events: 3 pairs
+    assert out.record["verdict"]["reason_codes"] == ["winner_only_refined"]

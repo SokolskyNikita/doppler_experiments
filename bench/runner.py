@@ -742,7 +742,8 @@ def new_run(topic: str) -> Path:
 def execute_case_locate(case: dict, case_dir: Path, log=print, code: dict | None = None,
                         overrides: dict | None = None) -> dict:
     """The case through dopplertrack locate: its spectrogram, flight-data date, box and trace files, and nothing of
-    its fits. Overrides: pair_rule (top2, comparable, both) and silence_d_m (default None, the filter off)."""
+    its fits. Overrides: pair_rule (default locate's, comparable) and silence_d_m (default the case's; null turns the
+    filter off)."""
     from dopplertrack import locate as loc
     assert "labels" not in case, "the runner must be given the blind case"
     overrides = dict(overrides or {})
@@ -751,8 +752,8 @@ def execute_case_locate(case: dict, case_dir: Path, log=print, code: dict | None
     s = case["search"]
     paths, envelope, cpa_cache = locate_flight_data(case, str(cpa_cache_path(case, weather)))
     cfg = loc.LocateConfig(spacing_m=s["spacing_m"], max_range_m=s["max_range_m"], tol_s=s["tol_s"], v_tol=s["v_tol"],
-                           d_tol=tuple(s["d_tol"]), silence_d_m=overrides.get("silence_d_m"),
-                           pair_rule=overrides.get("pair_rule", "top2"), dem=s["dem"], c=sound_speed(case, weather)[0].get("c"),
+                           d_tol=tuple(s["d_tol"]), silence_d_m=overrides.get("silence_d_m", s["silence_d_m"]),
+                           pair_rule=overrides.get("pair_rule", loc.LocateConfig.pair_rule), dem=s["dem"], c=sound_speed(case, weather)[0].get("c"),
                            temperature_c=sound_speed(case, weather)[1]["temperature_c"],
                            refine_spacing_m=case["refine"]["spacing_m"], refine_half_m=case["refine"]["half_m"],
                            cpa_cache=cpa_cache, envelope=envelope,

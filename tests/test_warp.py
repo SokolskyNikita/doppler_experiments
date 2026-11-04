@@ -100,3 +100,19 @@ def test_off_state_and_drift():
     strict = W.tone_score(S2, f, 190, 210, harmonics=1, theta=5.0, birth=5.0, families=1)
     drift = W.tone_score(S2, f, 190, 210, harmonics=1, theta=5.0, birth=5.0, families=1, drift_step_hz=0.5)
     assert drift.score > strict.score and drift.on > 0.9
+
+
+def test_harmonics_beyond_the_grid_earn_nothing():
+    """Energy only in the grid's last bin (500 Hz): a 200 Hz fundamental's third harmonic (600 Hz) lies
+    beyond the grid and must not borrow it, and its first two harmonics are all that count."""
+    f = np.arange(0.0, 500.0 + 1e-9, 0.5)
+    S = np.zeros((4, len(f)))
+    S[:, -1] = 30.0
+    E = W.pooled(S, f, np.array([200.0]), harmonics=3)
+    assert np.all(E == 0.0)
+    S[:, 400] = 12.0                                                      # 200 Hz: h = 1 alone is seen
+    E = W.pooled(S, f, np.array([200.0]), harmonics=3)
+    w = W.harmonic_weights(3)
+    assert np.allclose(E, w[0] * 12.0 / (w[0] + w[1]))                    # normalised over h = 1, 2 only
+    exc = np.zeros(S.shape, bool); exc[:, 799:802] = True                 # 400 Hz excluded: h = 2 unobserved
+    assert np.allclose(W.pooled(S, f, np.array([200.0]), harmonics=3, exclude=exc), 12.0)

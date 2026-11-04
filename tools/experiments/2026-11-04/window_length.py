@@ -213,7 +213,9 @@ DEV = [   # (name, source, (t_start, t_end), (f_lo, f_hi), harmonics, traces, tr
      (26.702359, -81.847766), "a2baea", 20247.5, "2024-12-28T14:21:08.49Z"),
     ("eagle ev2 (README)", "raw/audio/youtube/swfl_2024-12-28.webm", (20457.024, 20697.024), (60, 300), 1, "derived/swfl/traces_swfl.npz",
      (26.702359, -81.847766), "a336e4", 20585.3, "2024-12-28T14:21:08.49Z"),
-    ("ob-e03 (blind, clear)", "raw/audio/youtube/oyster_bay.webm", (105, 200), (0.85 * 65, 1.15 * 130), 1, "derived/oyster_bay/traces_ny.npz",
+    # corrected after the first run: N360NY is associated with the 345 -> 255 Hz line (the label's association
+    # line 1), not the 130 -> 65 Hz one the first run fitted (bench/labels/oyster_bay-0000-1200.json)
+    ("ob-e03 (blind, clear)", "raw/audio/youtube/oyster_bay.webm", (105, 200), (0.85 * 255, 1.15 * 345), 1, "derived/oyster_bay/traces_ny.npz",
      (40.876466, -73.524951), "a40d8f", 130.5, "2026-09-08T20:17:30.34Z"),
     ("sw-e01 (blind, overlapping)", "raw/audio/youtube/swfl_2024-12-28.webm", (3600, 3775), (0.85 * 105, 1.15 * 165), 1, "derived/swfl/traces_swfl.npz",
      (26.702359, -81.847766), "a625e2", 3701.4, "2024-12-28T14:21:08.49Z"),
@@ -286,8 +288,25 @@ def summarise(run, liv, devs):
     (run / "window_summary.txt").write_text(txt + "\n")
 
 
+def correct_ob_e03(run):
+    """Re-fit ob-e03 on its associated line and splice it into window_dev.json, keeping the first run's file."""
+    path = run / "window_dev.json"
+    old = json.loads(path.read_text())
+    (run / "window_dev_before_ob-e03_correction.json").write_text(json.dumps(old, indent=1))
+    ev = next(e for e in DEV if e[0].startswith("ob-e03"))
+    new = dev_one(ev)
+    out = [new if r["event"].startswith("ob-e03") else r for r in old]
+    path.write_text(json.dumps(out, indent=1, default=float))
+    return out
+
+
 if __name__ == "__main__":
     run = Path(sys.argv[1]); what = sys.argv[2] if len(sys.argv) > 2 else "all"
+    if what == "correct-ob-e03":
+        devs = correct_ob_e03(run)
+        liv = json.loads((run / "window_livermore.json").read_text())
+        summarise(run, liv, devs)
+        sys.exit(0)
     liv = livermore(run) if what in ("livermore", "all") else (json.loads((run / "window_livermore.json").read_text())
                                                               if (run / "window_livermore.json").exists() else None)
     devs = dev(run) if what in ("dev", "all") else (json.loads((run / "window_dev.json").read_text())

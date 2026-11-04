@@ -16,7 +16,8 @@ Scorers:
   2   least squares of ridge() tracks to the trajectory's Doppler factor, f0 in closed form
       (f0 = sum D f / sum D^2) for harmonic orders 1-3 within the f0 range; score = -(rms rel. residual)
   3   the warp: 4 kHz output grid, sinc 32 taps after a low-pass at 1.48 kHz, 2.048 s Hann blocks at
-      0.512 s, across-frequency background +-10 Hz, 3 harmonics pooled, off state, two families;
+      0.512 s, across-frequency background +-10 Hz, 3 harmonics pooled over those inside the scoring grid
+      (40-700 Hz, or 40-450 Hz on the band-limited pass), off state, two families;
       strict (one f0 per event, judged) and bounded drift (reported)
 Outcomes: the reference's rank, z = (s_ref - s_best_wrong) / MAD(candidates' scores) and the raw
 difference, the wrong-box count (box winners reaching the reference's score), the refined error around
@@ -87,13 +88,14 @@ class Case:
         if band_limited:
             x = W.bandpass(x, SR, 40.0, 450.0).astype(np.float32)
         self.x = x
+        self.f_top = 450.0 if band_limited else 700.0      # the scoring grid's top: harmonics above it are unobserved
         self.xf = W.lowpass(x, SR, SR / (2 * MAX_RATE))
         self.fits = [EventFit(**json.load(open(REPO / "docs/results" / e["fit"]))) for e in EVENTS]
         sp = audio.compute_spectrogram(x, SR)
         self.win_a = [EventWindow.from_fit(sp, f, e["harmonics"]) for f, e in zip(self.fits, EVENTS)]
         # (1b): un-whitened dB, background across frequency per frame
         _, _, Z = ss.stft(x, SR, nperseg=8192, noverlap=8192 - 1000, window="hann", boundary=None, padded=False)
-        fz = np.fft.rfftfreq(8192, 1 / SR); band = (fz >= 40) & (fz <= 700)
+        fz = np.fft.rfftfreq(8192, 1 / SR); band = (fz >= 40) & (fz <= self.f_top)
         db = (10 * np.log10(np.abs(Z[band]) ** 2 + 1e-20)).T                     # (T, F)
         bg = W.across_frequency(db, fz[1] - fz[0], BG_HZ).T.astype(np.float32)
         spb = Spectrogram((8192 / 2 + np.arange(Z.shape[1]) * 1000) / SR, fz[band], bg)
@@ -179,7 +181,7 @@ def warp_event(case, seg, obs, T, e):
     except ValueError:
         return None
     cen, f, db = W.block_db(w.y, SR, BLOCK, HOP)
-    band = (f >= 40) & (f <= 700)
+    band = (f >= 40) & (f <= case.f_top)
     if len(cen) == 0:
         return None
     return W.across_frequency(db[:, band], f[1] - f[0], BG_HZ), f[band]

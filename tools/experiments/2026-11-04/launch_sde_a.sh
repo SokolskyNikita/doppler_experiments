@@ -30,14 +30,15 @@ BRANCH=claude/sde-stageb-pairs-45d0bd8
 NULL_N_CAP=250000                         # the PM's cap on the follow-up's N
 SHARDS_B=${SHARDS_B:-10} SHARDS_N=${SHARDS_N:-30} SHARDS_A=${SHARDS_A:-5} SHARDS_B12=${SHARDS_B12:-3}
 SHARDS_SWEEP=${SHARDS_SWEEP:-15}
-# 4xlarge (16 vCPU) with two searches of 8 workers each: on 8xlarge, 16 workers per search left half the cores idle
-# (the fleet's CPU monitor, 2026-11-04: 45-51 % for the pairs jobs, 22-37 % for the sweep's shards)
-SIZE_B=${SIZE_B:-4xlarge} SIZE_N=${SIZE_N:-4xlarge} SIZE_A=${SIZE_A:-4xlarge} SIZE_B12=${SIZE_B12:-4xlarge}
+# the pairs jobs: one search per 8xlarge (64 GB), since two to a box ran out of memory; their CPUs then idle about
+# half the time (the fleet's CPU monitor, 2026-11-04), which memory, not CPU, decides. Stage B's d4 + d3 pairs exceed
+# 128 GB alone. B1/B2 and the sweep: 4xlarge (the sweep's 8xlarge shards were 22-37 % busy).
+SIZE_B=${SIZE_B:-8xlarge} SIZE_N=${SIZE_N:-8xlarge} SIZE_A=${SIZE_A:-8xlarge} SIZE_B12=${SIZE_B12:-4xlarge}
 SIZE_SWEEP=${SIZE_SWEEP:-4xlarge}
 # added to every launch: runs tries spot in us-west-2, us-west-1 and us-east-2 in turn, and on demand only with this;
 # RUNS_FLAGS="--fallback-on-demand --only-shard K" relaunches the shard K a launch reported missing
 RUNS_FLAGS=${RUNS_FLAGS---fallback-on-demand}
-WPS_B=${WPS_B:-8} WPS_N=${WPS_N:-8} WPS_A=${WPS_A:-8}
+WPS_B=${WPS_B:-32} WPS_N=${WPS_N:-32} WPS_A=${WPS_A:-32}
 # each pairs job's own settings; a merge must repeat them exactly (they are part of its units' parameters)
 ARGS_B="--hypotheses --workers-per-search $WPS_B"
 ARGS_N="--hypotheses --workers-per-search $WPS_N --null-n $NULL_N_CAP"

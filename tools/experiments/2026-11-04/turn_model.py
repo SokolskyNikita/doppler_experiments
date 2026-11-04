@@ -346,6 +346,9 @@ def fit_q(t, f, start, w_fixed=None):
             continue
         if best is None or r.cost < best.cost:
             best = r
+    if best is None:                    # every start failed: a result, recorded, not a crash
+        nan = float("nan")
+        return dict(tau=nan, R=nan, Q=nan, w=nan, rss=nan, n=int(len(tt)), rmin=nan, error="no start converged")
     tau, R, Q, w = unpack(best.x)
     rr = res(best.x)
     h = heard_q(tau, R, Q, w)

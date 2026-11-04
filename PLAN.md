@@ -52,7 +52,7 @@ Source: **C** = Claude's review, **A** = Astra's, **C+A** = both, **A2** = Astra
 | # | Gap | Source | Evidence |
 |---|---|---|---|
 | 4 | Each event fit is a single estimate used as hard gates: ±35 % speed, 0.4–2.5× distance, ±6 s on the time between the two events, and a ±5 % sweep of each fitted f0 when scoring. Ideal-curve fits of a real pass are off by more than that, and a bad fit removes the true answer with no warning. Oyster Bay's event 2 fits with f0 5 % (pre-f890572 objective), 10 % (current) and 11 % (`detect`) above what its trajectory needs, and the time between the events 5.0, 9.0 and 10.1 s short. A straight pass at the true speed and distance fits that window worse than any of the three fits, so the bias is the model's, not one objective's. The committed fit got through by 1 s, at the edge of the f0 sweep. At the eagle-cam nest the committed events fail ±6 s too; the top candidate 917 m away is where the geometry makes up the difference | C | issue #1; `pipeline.py:86`; `score.py:65` |
-| 5 | `fetch-day` crashes on split archives | C | fixed locally |
+| 5 | `fetch-day` crashes on split archives | C | fixed in PR #2 |
 | 6 | Edge of region: the download keeps flights that enter the box, but the search uses flights up to 12 km outside it, so flights passing just outside are missing | A, checked | `adsb.py:152` vs `pipeline.py:95` |
 | 7 | `detect` always returns its top N, even on silence; there is no "no flyovers found" outcome | A, checked | `tracks.py:194`, no score floor |
 | 8 | Malformed traces are skipped silently, with no report of coverage or missing data | A, checked | `fetch.py:88`, `adsb.py:129` |
@@ -212,7 +212,7 @@ Sizes assume Claude writes most of the code and you review: S is a day or less, 
 
 The first milestone: trustworthy numbers on a few cases before adding more.
 
-1. **Cache correctness** (S, first). Key the CPA cache on content hashes of the grid (coordinates and elevations) and of the segments (times and positions), plus `max_range`, sound speed and a format and algorithm version, and apply the same rule to every cache the benchmark adds. Tests: a run with changed flight positions or timestamps but the same array sizes, and a DEM run after a `--no-dem` run of the same box, must each miss the cache. It's a plain bug fix, so it also goes upstream. It changes `pipeline.py`, as the `fix/issue-1` work does, so it starts after that lands.
+1. **Cache correctness** (S, first). Key the CPA cache on content hashes of the grid (coordinates and elevations) and of the segments (times and positions), plus `max_range`, sound speed and a format and algorithm version, and apply the same rule to every cache the benchmark adds. Tests: a run with changed flight positions or timestamps but the same array sizes, and a DEM run after a `--no-dem` run of the same box, must each miss the cache. It's a plain bug fix, so it also goes upstream. PR #2 didn't touch `pipeline.py`, so it can start now, as a topic branch from upstream `main` (5.5).
 2. **Result format v1**, as in 5.4.
 3. **One manifest, one runner, the four seed cases** from 5.1, with provenance, expected outcomes and checked labels.
 4. **Both baselines** at a16b700, and `bench compare`.
@@ -238,6 +238,16 @@ Hypotheses, each tested in tier 1 against confirmed events:
 | ±12 s, ±12 % | 1st of 485, 17.8 %, 39,144 | 2nd of 505, −6.7 %, 38,531 | 2nd of 660, −0.5 %, 101,673 |
 
 With the committed Oyster Bay fits, ±12 s / ±12 % changes nothing at the top: 1st of 358, the same 4.0 % margin, with 81,339 candidates instead of 40,889. On the eagle cam, the ±12 s gate lets in points where a wrong pair 9 km from the nest outscores the true one. The wider f0 sweep changed no score at the points both runs share. Scoring cost rises about 2.3× per candidate at ±12 %. The code for both knobs (`--tol` help, `--f0-tol`) is saved as `data/patches/gate-tolerances.patch`.
+
+- Re-fitting `detect`'s flyovers in a narrower window doesn't fix both recordings either. Each event was re-fitted with no hand choices: the window came from `detect`'s own fit (±55 s around its CPA, as wide as the README's hand windows, or ±2·d/v), the band was 0.85 f_post to 1.15 f_pre, and the gates stayed at their defaults. Development measurements:
+
+| Re-fit | Oyster Bay, `detect`'s top two | Eagle cam, README's two events |
+|---|---|---|
+| none (`detect`'s 240 s windows) | filtered out at the true location | 1st of 607, 917 m, 2.5 % |
+| ±55 s, brightness objective | 1st of 465, 123 m, 6.0 %, 48,237 candidates | 70th of 604; a wrong pair 14 km away wins by 20 % |
+| ±2·d/v, brightness objective | 1st of 403, 123 m, 7.7 %, 48,036 | true pair filtered out everywhere |
+
+With the contrast objective, the re-fits fail at the true location on both recordings. On the eagle cam, the ±55 s event-1 window raises the wrong pair's event-1 score from 6.8 to 10.4, but the true pair's only from 6.2 to 7.1. The 240 s window's flat tails were what told those two pairs apart. Narrowing the window removes the dilution that hurt Oyster Bay, but also the evidence that protected the eagle cam, so no fixed width suits both. A next hypothesis is to set each event's width from where its ridge is visible in the spectrogram. Scripts and outputs: `data/rewin/` (`rewindow.py` re-fits and scores the true location, `swfl_truth.py` shows which filter each fit trips at the nest, `summarise.py` ranks a search's results).
 
 **Done when** the true flights pass the search filters on every positive development case using `detect` output with no hand-picked windows, and Oyster Bay reproduces from raw audio.
 
@@ -333,7 +343,7 @@ Takeaways:
 
 ## 9. Risks
 
-- **Upstream moves fast.** Rebase often and keep changes modular.
+- **Upstream moves fast.** Merge upstream into `dev` often (5.5), and keep changes modular.
 - **Ground truth stays scarce.** Slicing and augmentation stretch two recordings a long way for development, but slices of one recording share its site, microphone and day, so they aren't independent evidence. Both recordings are in busy US airspace; add at least one quiet-airspace case before trusting the calibration.
 - **Tuning to the benchmark.** Development cases get tuned on, so their numbers will flatter the method. Only the evaluation group counts for claims.
 - **Labels from ADS-B.** Unchecked passes would reward detecting aircraft that aren't in the audio, so only confirmed events are tuned on.

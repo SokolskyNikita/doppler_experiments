@@ -12,9 +12,11 @@ reference (the runner's triples sidecar), and its rank once retained.
 
 usage, from the repo root:
   event_pairs_z.py RUN_DIR DETECTED_RUN CASE [CASE ...]   prepare, run, rank, reveal, evaluate
+  EVENT_PAIRS_HYPOTHESES=1 event_pairs_z.py ...           the same with stage B's hypotheses (run_search(hypotheses=True))
   event_pairs_z.py one RUN_DIR VARIANT CODE               (internal) one variant"""
 import itertools
 import json
+import os
 import subprocess
 import sys
 import time
@@ -67,7 +69,8 @@ def one(run: Path, vid: str):
     out.mkdir(parents=True, exist_ok=True)
     with open(out / "run.log", "w") as fh:
         record = runner.execute_case(case, out, log=lambda m: print(m, file=fh, flush=True), code=CODE,
-                                     overrides={"workers": WORKERS, "comparable": True})
+                                     overrides={"workers": WORKERS, "comparable": True,
+                                               **({"hypotheses": True} if os.environ.get("EVENT_PAIRS_HYPOTHESES") == "1" else {})})
     sha = write_record(out / "result.json", record)
     (out / runner.HASH_FILE).write_text(f"{sha}  result.json\n")
 

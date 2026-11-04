@@ -47,7 +47,8 @@ class LocateConfig:
     refine_spacing_m: float = 50.0
     refine_half_m: float = 600.0
     dem: bool = True
-    c: float | None = None                    # the speed of sound; None is the pipeline's 15 C default
+    c: float | None = None                    # the speed of sound for the fits; None is the pipeline's 15 C default
+    temperature_c: float | None = None        # the ground temperature: each flight then gets c from its own height
     workers: int | None = None
     cpa_cache: str | None = None
     envelope: list[list[float]] | None = None  # a declared coverage box per trace file, for files without metadata
@@ -98,13 +99,20 @@ def _envelopes(metas, cfg: LocateConfig):
     return [m.get("coverage_bbox") for m in metas]
 
 
+def _air(cfg: LocateConfig) -> dict:
+    """The speed-of-sound keywords of run_search and refine: c for the fits, and with a ground temperature each
+    flight's own c from its height (PLAN 2: per emission point)."""
+    kw = {} if cfg.c is None else {"c": cfg.c}
+    return kw if cfg.temperature_c is None else {**kw, "temperature_c": cfg.temperature_c}
+
+
 def _best_per_pair(res):
     return res.sort_values("score", ascending=False, kind="stable").drop_duplicates(["icao1", "icao2"]).reset_index(drop=True)
 
 
 def _search(sp, ev1, ev2, traces, grid, cfg: LocateConfig, meta, bbox, comparable=False, triples=None):
     from . import pipeline
-    c_kw = {} if cfg.c is None else {"c": cfg.c}
+    c_kw = _air(cfg)
     return pipeline.run_search(sp, ev1, ev2, traces, grid, harmonics=(1, 1), tol_s=cfg.tol_s, v_tol=cfg.v_tol,
                                d_tol=tuple(cfg.d_tol), silence_d_m=cfg.silence_d_m, max_range_m=cfg.max_range_m,
                                progress=False, cpa_cache=cfg.cpa_cache, trace_metadata=meta, search_bbox=tuple(bbox),
@@ -122,7 +130,8 @@ def _usable_extras(sp, row, extras, segs, cfg: LocateConfig, elevation):
     t0_map0 = float(row["_t_cpa1"]) - float(row.t_heard1)        # audio = unix + t0_map0, as refine maps it
     keep, dropped = [], []
     for ev in extras:
-        k, _ = pick_flight(sp, ev, segs, obs0, t0_map0, float(row["shift"]), 1, cfg.c, max_range_m=cfg.max_range_m)
+        k, _ = pick_flight(sp, ev, segs, obs0, t0_map0, float(row["shift"]), 1, cfg.c, max_range_m=cfg.max_range_m,
+                           temperature_c=cfg.temperature_c)
         (keep if k >= 0 else dropped).append(ev)
     return keep, dropped
 
@@ -333,7 +342,7 @@ def locate(spec_path, date: str, bbox, trace_paths, cfg: LocateConfig | None = N
     row["lat0"], row["lon0"], row["_t_cpa1"] = grid.lat0, grid.lon0, ev1.t_cpa
     others = [e for e in usable if e is not ev1 and e is not ev2]
     keep, dropped = _usable_extras(sp, row, others, segs, cfg, elevation)
-    c_kw = {} if cfg.c is None else {"c": cfg.c}
+    c_kw = _air(cfg)
     fine = pipeline.refine(sp, ev1, ev2, segs, row, spacing_m=cfg.refine_spacing_m, half_m=cfg.refine_half_m,
                            harmonics=(1, 1), elevation=elevation, extra=keep, extra_harmonics=[1] * len(keep),
                            max_range_m=cfg.max_range_m, workers=cfg.workers, **c_kw)

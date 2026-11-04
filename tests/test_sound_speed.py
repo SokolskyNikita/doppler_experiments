@@ -47,8 +47,7 @@ def inputs(tmp_path):
 
 @pytest.mark.parametrize("command", ["search", "refine", "search-single", "detect", "fit"])
 @pytest.mark.parametrize("flags, c", [([], None), (["--temperature", "15"], doppler.speed_of_sound(15.0)),
-                                      (["--temperature", "30"], doppler.speed_of_sound(30.0)),
-                                      (["--temperature", "15", "--aircraft-height", "2000"], doppler.speed_of_sound(8.5))])
+                                      (["--temperature", "30"], doppler.speed_of_sound(30.0))])
 def test_the_cli_passes_c_only_when_a_temperature_is_given(tmp_path, monkeypatch, inputs, command, flags, c):
     spec, files, traces, results = inputs
     seen = []
@@ -75,15 +74,12 @@ def test_the_cli_passes_c_only_when_a_temperature_is_given(tmp_path, monkeypatch
     cli.main(args + flags)
     (kw,) = seen
     if c is None:
-        assert "c" not in kw            # the default path is today's, untouched
+        assert "c" not in kw and "temperature_c" not in kw        # the default path is today's, untouched
     else:
         assert kw["c"] == pytest.approx(c)
-
-
-def test_aircraft_height_needs_a_temperature(inputs, capsys):
-    spec = inputs[0]
-    with pytest.raises(SystemExit):
-        cli.main(["fit", str(spec), "--window", "70", "130", "--band", "90", "160", "--aircraft-height", "1000"])
+        # the geometry gets each flight's own sound speed from the ground temperature; fits get the ground's c
+        geometry = command in ("search", "refine", "search-single")
+        assert (kw.get("temperature_c") == float(flags[1])) if geometry else "temperature_c" not in kw
 
 
 def test_a_changed_speed_of_sound_changes_the_cpa_fingerprint():

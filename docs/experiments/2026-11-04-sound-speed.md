@@ -56,3 +56,29 @@ stopped rather than tie up the shared machine for an hour. Its partial folders (
 
 `src/dopplertrack/atmosphere.py`, `src/dopplertrack/cli.py`, `bench/runner.py`, `bench/tier1.py`, `bench/cases.py`,
 `bench/cases.json`, `tests/test_sound_speed.py`.
+
+## Per-flight effective sound speed (follow-up, SDE-2)
+
+One aircraft height per case can't serve flights at 1.1 km and 5.5 km in the same recording, and a c error passes in
+full into speed and range. So, whenever a ground temperature is given, every propagation through the air now uses
+each emission point's own sound speed:
+- `atmosphere.point_sound_speed(ground_c, height_m)` is `speed_of_sound(ground − 3.25 °C per km of height)`, the
+  height being the emission point's above the grid point or microphone. The mid-height value stands in for the
+  straight path's harmonic mean, which it follows to about 0.2 % under a standard lapse; winter inversions are the
+  exception.
+- It is used in the CPA table's heard times (`t_emit + r / c` per CPA) and in every modelled curve
+  (`modelled_curve`, through `locked_score`, `single_score`, `pick_flight`, `refine`'s fine points and the comparable
+  score's null). `curve_from_trajectory` takes one c per emission sample.
+- Fits keep the ground temperature's c, since they have no height.
+- `run_search`, `refine` and `run_single_search` take `temperature_c`. The CLI's `--temperature` passes it to
+  `search`, `refine` and `search-single`, and `--aircraft-height` is gone: the per-flight rule replaces the per-case
+  height, which the runner's `weather.aircraft_height_m` can drop.
+- **The CPA fingerprint includes the temperature when one is given.** Without one, the fingerprint, the table and
+  every other path are byte-identical to before.
+- **The size.** At 5.5 km the air halfway up is 17.9 °C cooler than at the ground, 3.2 % in c. At 1.1 km it is
+  3.6 °C, 0.6 %.
+- **The test.** A flight passing 5 km overhead at a ground temperature of 25 °C is heard 0.41 s later than at the
+  ground's c, which is 5000 / c(8.75 °C) − 5000 / c(25 °C), in both the CPA table and the modelled curve
+  (`tests/test_point_sound_speed.py`).
+- **The detection cache.** `doppler.py` keys it, so this change makes existing cached detections stale once. The
+  detections themselves don't change.

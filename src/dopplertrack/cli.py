@@ -10,7 +10,6 @@ from . import pipeline
 from .adsb import join_days
 from .audio import FFmpegNotFoundError, Spectrogram
 from .coverage import DEFAULT_MAX_RANGE_M, report_coverage
-from .atmosphere import mid_height_temperature
 from .doppler import speed_of_sound
 from .parallel import JOBS_ENV
 from .score import SF_FLAT_RATIO
@@ -150,10 +149,9 @@ def main(argv=None):
                     help="the box a trace file without extraction metadata was cut to, one per --traces file, in order")
     for parser in (f, d, r, rf, g, lo):
         parser.add_argument("--temperature", type=float, metavar="C",
-                            help="air temperature at the ground in degrees C, for the speed of sound (default: the 15 C value)")
-        parser.add_argument("--aircraft-height", type=float, metavar="METRES",
-                            help="with --temperature: the aircraft's typical height above the ground, to use the temperature "
-                                 "halfway up the path (ground - 3.25 C per km)")
+                            help="air temperature at the ground in degrees C, for the speed of sound (default: the 15 C value); "
+                                 "search, refine and search-single then give each flight the speed at its own mid-height "
+                                 "temperature (ground - 3.25 C per km)")
     for parser in (d, r, rf, g, lo):
         parser.add_argument("--jobs", type=_jobs, metavar="N",
                             help=f"worker processes (default: ${JOBS_ENV}, else the performance-core count); "
@@ -165,15 +163,14 @@ def main(argv=None):
     a = ap.parse_args(argv)
     if hasattr(a, "max_range") and (not np.isfinite(a.max_range) or a.max_range <= 0):
         ap.error("--max-range must be finite and positive")
-    # the speed of sound is passed only when a temperature is given, so the default path is today's, unchanged
-    c_kw = {}
-    if getattr(a, "aircraft_height", None) is not None and a.temperature is None:
-        ap.error("--aircraft-height needs --temperature")
+    # the speed of sound is passed only when a temperature is given, so the default path is today's, unchanged:
+    # the ground temperature's c for the fits, and for the geometry each flight's own, from its height
+    c_kw: dict = {}
     if getattr(a, "temperature", None) is not None:
-        t = a.temperature if a.aircraft_height is None else mid_height_temperature(a.temperature, a.aircraft_height)
-        if not np.isfinite(t) or t <= -273.15:
+        if not np.isfinite(a.temperature) or a.temperature <= -273.15:
             ap.error("--temperature must be finite and above absolute zero")
-        c_kw = {"c": speed_of_sound(t)}
+        c_kw = {"c": speed_of_sound(a.temperature)}
+    geo_kw = dict(c_kw, temperature_c=a.temperature) if c_kw else {}
     if a.cmd in ("search", "refine"):
         try:
             ev1, ev2 = load_events(a.events, a.pick)
@@ -241,7 +238,7 @@ def main(argv=None):
                                         search_bbox=tuple(a.bbox) if a.bbox else (a.point[0], a.point[0], a.point[1], a.point[1]),
                                         workers=a.jobs, time_convention=a.convention, sf_tol_s=a.sf_tol,
                                         sf_smooth_s=a.sf_smooth, sf_window_s=a.sf_window, sf_flat_ratio=a.sf_flat_ratio,
-                                        clock_anchor=a.anchor, **c_kw)
+                                        clock_anchor=a.anchor, **geo_kw)
         for name, t in res.attrs.get("stages", {}).items():
             pipeline.log(f"stage {name}: {t['wall_s']:.1f} s wall, {t['cpu_s']:.1f} s CPU")
         pipeline.log("funnel: " + ", ".join(f"{k} {v}" for k, v in res.attrs.get("funnel", {}).items()))
@@ -264,7 +261,7 @@ def main(argv=None):
         print(f"refining rank {a.rank}: {row.icao1}/{row.icao2} at {row.lat:.5f}, {row.lon:.5f} (score {row.score:.2f})")
         fine = pipeline.refine(sp, ev1, ev2, segs, row, spacing_m=a.spacing, half_m=a.half, harmonics=tuple(a.harmonics),
                                elevation=elev, extra=extra, extra_harmonics=xh, max_range_m=a.max_range,
-                               workers=a.jobs, **c_kw)
+                               workers=a.jobs, **geo_kw)
         fine.to_csv(a.out, index=False)
         b = fine.iloc[0]
         print(f"peak score {b.score:.2f} at {b.lat:.6f}, {b.lon:.6f}" + (f"; extra flights {fine.attrs['extra_icao']}" if extra else ""))
@@ -284,7 +281,7 @@ def main(argv=None):
         grid = Grid.make(*a.bbox, a.spacing, elev)
         res, segs = pipeline.run_single_search(sp, ev, traces, grid, t_unix, tol_s=a.tol, harmonics=a.harmonics,
                                                max_range_m=a.max_range, trace_metadata=trace_meta,
-                                               search_bbox=tuple(a.bbox), workers=a.jobs, **c_kw)
+                                               search_bbox=tuple(a.bbox), workers=a.jobs, **geo_kw)
         res["lat0"] = grid.lat0; res["lon0"] = grid.lon0
         res.to_csv(a.out, index=False)
         print(res.head(20).to_string())
@@ -320,7 +317,7 @@ def _locate(a, c_kw):
     box = "_".join(f"{x:g}" for x in a.bbox)
     cfg = loc.LocateConfig(band_hz=tuple(a.band), spacing_m=a.spacing, max_range_m=a.max_range,
                            silence_d_m=6000.0 if a.silence else None, pair_rule=a.pair_rule, dem=not a.no_dem,
-                           c=c_kw.get("c"), workers=a.jobs, envelope=a.assume_envelope,
+                           c=c_kw.get("c"), temperature_c=a.temperature, workers=a.jobs, envelope=a.assume_envelope,
                            cpa_cache=str(cache_root() / "cpa" / "locate" / f"{a.date}-days{a.days}-{box}-{a.spacing:g}m.npz"))
     os.makedirs(Path(cfg.cpa_cache).parent, exist_ok=True)
     result = loc.locate(spec, a.date, a.bbox, traces, cfg, out_dir=out, log=pipeline.log)

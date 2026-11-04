@@ -180,6 +180,9 @@ def main(argv=None):
                                         max_range_m=a.max_range, trace_metadata=load_trace_metadata(a.traces),
                                         search_bbox=tuple(a.bbox) if a.bbox else (a.point[0], a.point[0], a.point[1], a.point[1]),
                                         workers=a.jobs)
+        for name, t in res.attrs.get("stages", {}).items():
+            pipeline.log(f"stage {name}: {t['wall_s']:.1f} s wall, {t['cpu_s']:.1f} s CPU")
+        pipeline.log("funnel: " + ", ".join(f"{k} {v}" for k, v in res.attrs.get("funnel", {}).items()))
         res["lat0"] = grid.lat0; res["lon0"] = grid.lon0
         res.to_csv(a.out, index=False)
         print(res.head(20).to_string())

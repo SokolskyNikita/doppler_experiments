@@ -428,7 +428,17 @@ def unit_boot(key):
                 rmin=r["rmin"], R=r["R"], Q=r["Q"], w_dps=float(np.degrees(r["w"])), rss=r["rss"], straight_rss=st["rss"])
 
 
-UNITS = {"synth": unit_synth, "fit": unit_fit, "profile": unit_profile, "boot": unit_boot}
+def unit_flag(key):
+    """The weave flag's fit: the identifiable form on the published ridge D, beside the straight fit on D."""
+    pid = key
+    p = P()[pid]
+    st = straight(p["t"], p["fD"])
+    r = fit_q(p["t"], p["fD"], st)
+    return dict(unit=f"flag:{pid}", **base(p), w_D_dps=float(np.degrees(r["w"])), Q_D=r["Q"], rmin_D=r["rmin"],
+                straight_R_D=st["R"], straight_err_R_D=st["R"] - p["ref"]["R"], straight_err_R_D_pct=100 * (st["R"] / p["ref"]["R"] - 1))
+
+
+UNITS = {"synth": unit_synth, "fit": unit_fit, "profile": unit_profile, "boot": unit_boot, "flag": unit_flag}
 SYNTH = [(w, ph, s) for w in (0.0, 1.0, 3.0) for ph in (20.0, 60.0) for s in (1, -1) if not (w == 0 and s == -1)]
 
 
@@ -439,8 +449,8 @@ def unit_keys(stage, reps):
     ids = sorted(P())
     if stage == "fit":
         return [(f"fit-{i}-{c}", (i, c)) for i in ids for c in ("A", "D")]
-    if stage == "profile":
-        return [(f"profile-{i}", i) for i in ids]
+    if stage in ("profile", "flag"):
+        return [(f"{stage}-{i}", i) for i in ids]
     return [(f"boot-{i}-{r:03d}", (i, r)) for i in ids for r in range(reps)]
 
 

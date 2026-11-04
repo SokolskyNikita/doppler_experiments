@@ -331,4 +331,17 @@ Never judged on the residual: RSS ratios are reported only. Curve D (the publish
 - **Item 2's conclusion.** Three kinematic additions have now been tried (drift, acceleration, turn), and none cuts the model error. Each makes R worse. The per-pass model error isn't reducible by a heavier single-pass model on this data.
 - **What the turn model does give.** Its fitted rate tracks how much a pass weaves (r = 0.72). That makes it a candidate flag for passes whose R to distrust, rather than a correction.
 
+## The weave flag: a pass-quality gate (criterion written before the run)
+
+**Question.** Can the turn model's fitted rate, which tracks how much a pass weaves, flag the passes whose slant range not to trust? This is a gate on which events to trust, feeding Phase 2 item 7 and Phase 3's choice of events. It isn't an item 2 fix: a heavier pass model still doesn't reduce one pass's model error.
+
+**Setup.** On the published ridge D, the realistic input, fit each of the 40 Livermore passes in the identifiable form, r² = R² + Q·u²·sinc²(ωu/2π). Flag a pass when its fitted ω exceeds 0.5°/s, a threshold fixed now. The slant range judged is the straight fit's on D: the flag chooses passes, and doesn't change their fit.
+
+**Criterion, fixed before running.** The gate enters if, on D:
+- the retained passes' median |R − R*| is at most 161 m (30 % below all 40 passes' 230 m);
+- at least 24 of the 40 passes are retained;
+- the flagged passes' median |R − R*| is above the retained passes'.
+
+One counted retune of the threshold is allowed.
+
 **Scripts (stage 1):** `tools/experiments/2026-11-04/straight_pass_ls.py`, `model_error.py`, `model_error_summary.py`, `crb.py`. **Outputs:** `runs/2026-11-04-model-error-2/` (`fits.csv`, `perturbations.csv`, `halves.csv`, `noise.csv`, `summary.json`) and `runs/2026-11-04-crb-2/` (`crb.csv`, `crb_summary.json`; `runs/2026-11-04-crb/` used the invalid truncated covariance and is superseded). Weather: `raw/aux/metar/KLVK_*`, `RAOB_KOAK_*`.

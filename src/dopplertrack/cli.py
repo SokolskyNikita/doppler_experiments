@@ -45,8 +45,10 @@ def main(argv=None):
     ap = argparse.ArgumentParser(prog="dopplertrack")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
-    s = sub.add_parser("spectrogram", help="audio/video file -> whitened low-band spectrogram (.npz)")
-    s.add_argument("audio"); s.add_argument("out"); s.add_argument("--hop", type=float, default=0.25)
+    s = sub.add_parser("spectrogram", help="audio/video file, or a folder of AudioMoth WAVs -> whitened low-band spectrogram (.npz)")
+    s.add_argument("audio", help="one file, or a folder of AudioMoth YYYYMMDD_HHMMSS.WAV files (UTC names), placed on one "
+                                 "timeline with the holes between files marked invalid")
+    s.add_argument("out"); s.add_argument("--hop", type=float, default=0.25)
     s.add_argument("--fmin", type=float, default=40); s.add_argument("--fmax", type=float, default=450)
 
     f = sub.add_parser("fit", help="fit an ideal Doppler curve inside a time/frequency window")
@@ -122,11 +124,20 @@ def main(argv=None):
     if a.cmd == "detect" and (a.top < 1 or not np.isfinite(a.min_score)):
         ap.error("--top must be positive and --min-score must be finite")
     if a.cmd == "spectrogram":
+        from pathlib import Path
+        from .audio import spectrogram_from_audiomoth
         try:
-            sp = pipeline.make_spectrogram(a.audio, a.out, hop_s=a.hop, fmin=a.fmin, fmax=a.fmax)
+            if Path(a.audio).is_dir():
+                sp = spectrogram_from_audiomoth(a.audio, hop_s=a.hop, fmin=a.fmin, fmax=a.fmax)
+                sp.save(a.out)
+            else:
+                sp = pipeline.make_spectrogram(a.audio, a.out, hop_s=a.hop, fmin=a.fmin, fmax=a.fmax)
         except FFmpegNotFoundError as exc:
             ap.exit(2, f"dopplertrack: {exc}\n")
-        print(f"wrote {a.out}: {sp.S.shape[0]} bins x {sp.S.shape[1]} frames")
+        except ValueError as exc:
+            ap.error(str(exc))
+        gaps = f", {int((~sp.valid).sum())} invalid (in gaps)" if not sp.valid.all() else ""
+        print(f"wrote {a.out}: {sp.S.shape[0]} bins x {sp.S.shape[1]} frames{gaps}")
     elif a.cmd == "fit":
         sp = Spectrogram.load(a.spec)
         ef = pipeline.fit_event(sp, a.window[0], a.window[1], a.band[0], a.band[1], harmonics=a.harmonics,

@@ -2,7 +2,7 @@
 
 <!-- index
 question: What does the owner's indoor phone recorder hear of the propeller traffic around it, and what does locate make of a 2.3 h session?
-outcome: Tonal check hears 2 of the 11 passes the owner's ear heard; with the silence filter off, locate's top 4 km node is the site's (no verdict); box series and broadband check pending
+outcome: Indoors the phone carries passes within about 1 km, as harmonic lines (tonal 2, broadband 3 of the ear's 11); with the silence filter off, locate's top 4 km node is the site's (no verdict); box series pending
 -->
 
 ## Question
@@ -145,6 +145,68 @@ the tonal check, out of the passes in that bin.
 The per-flight table (flight, time, range, height, z) stays in the private run folder: with public ADS-B it would place
 the site.
 
+### Broadband
+
+Run 8 (`private/runs/2026-11-04-seattle-home-pilot-8/broadband/`, at the PM's fix of b8802ee's JSON writing, 361 s,
+$0.03). Run 6 had failed at its last step.
+
+**Baseline:** the 40–450 Hz z ≥ 3 marks 10 % of 200 random times, with a median z of −0.15. The traffic here is dense
+enough that a tenth of all moments look like a pass.
+
+| | Passes | Broadband marked | Tonal heard | Median z | Median rise |
+|---|---|---|---|---|---|
+| Ear-audible propeller passes | 11 | 3 | 2 | 1.03 | 0.8 dB |
+| Ear-inaudible propeller passes | 12 | 0 | 0 | −0.14 | −0.2 dB |
+
+By engine class and ground range, broadband-marked and tonal-heard out of passes:
+
+| Ground range | Piston | Unknown | Turboprop | Jet |
+|---|---|---|---|---|
+| 0–1 km | 2 and 1 of 3 | – | 0 and 1 of 1 | 2 of 9 |
+| 1–2 km | 0 and 0 of 2 | – | – | 6 of 56 |
+| 2–3.5 km | 1 and 0 of 3 | 0 and 0 of 2 | 0 and 0 of 5 | 0 of 9 |
+| 3.5–6 km | 0 and 0 of 6 | 0 and 0 of 1 | – | 0 of 5 |
+
+The tonal check scores propeller passes only, so the jets have broadband counts alone.
+
+**The three marked passes the ear heard:**
+- Two are within 1 km. One is a pass the tonal check heard: z 3.2, a 5.2 dB rise. The other it missed: z 4.9, a 5.4 dB
+  rise in every sub-band.
+- The third, at 2–3.5 km, rises 8.7 dB in 40–100 Hz alone, with 100–450 Hz flat and a tonal z of −0.3. That reads as
+  something low-frequency near the house, not the aircraft.
+- At the null's 10 %, about one of the eleven would be marked by chance.
+
+**Jets:** 8 of 79 marked, the null's share.
+
+**The pictures** (`pass-1.png` to `pass-6.png`, private) show the near passes as harmonic lines, not as a roar:
+- The tonal check's heard piston (0.5 km) has a full stack of Doppler-shifted harmonics from 100 to 450 Hz.
+- The piston it missed at 0.8 km has clear lines too, with the predicted curve on one of them. It failed the check's
+  strict rule (above every one of 200 null draws) at z 4.1.
+- Beyond 1 km the lines are faint or absent, at 1.4 and 1.8 km.
+- Sharp broadband transients, door or knock-like, appear in four of the six windows. Two fall inside the missed 0.8
+  km pass's ±15 s, so its broadband mark may be partly theirs.
+
+**What it settles:**
+- The gap to the ear is not a missing harmonic line that a broadband detector would catch. Where the recording
+  carries a pass, within about 1 km, it carries lines. Beyond 1 km, the band power in 40–450 Hz rises by a median
+  of 0.8 dB over the surrounding minutes of traffic, too little for either statistic.
+- Indoors, behind the walls, the phone's floor sets the range.
+
+**Two things the check can't separate:**
+- **The band.** The recorder keeps 40–450 Hz, and a listener's 1–3.5 km may rest on sound above 450 Hz. Whether the
+  owner judged audibility live or from the 1 kHz recording decides which.
+- **The window and the transients.** The ±15 s window averages over an 8–12 s audible pass, and household
+  transients add to both the pass and its background.
+
+**For the next session:**
+- **Placement:** a window or outdoor placement, to lower the floor.
+- **Band:** a wider stored band, which the phone already samples at 48 kHz. Even 4 kHz would let the band question be
+  answered.
+- **Stereo:** stereo capture, for the coherence cue between the two mics, which household self-noise and single-mic
+  transients can't fake.
+- **Algorithm:** on the algorithmic side, the collective find, which sums evidence over many weak passes instead of
+  needing two strong ones.
+
 ### Locate
 
 **Run 4: the pipeline refused, and nothing was searched.** Run 4 (`private/runs/2026-11-04-seattle-home-pilot-4/locate/`, 541 s for the box, $0.05): `locate` detected 10
@@ -276,9 +338,14 @@ So far, from runs 4, 5 and 7:
 - Run 7, with the filter off: the top candidate is the site's own grid node, with the clock 0.31 s from the stated
   start. The refine stayed there. The site was a node by construction, so the box series reruns 4 km with the site
   off the grid.
+- Run 8, the broadband check: it marks 3 of the 11 ear-audible passes against a null of 10 %, two of them within 1 km,
+  and none of the 12 beyond the ear's range.
+  - Where the indoor phone carries a pass, it carries harmonic lines. Beyond about 1 km it carries little in 40–450 Hz
+    of either kind.
+  - The gap to the ear is sensitivity: the placement, and possibly the stored band. It is not the harmonic-line
+    assumption.
 
-The box series (4, 8 and 12 km, then 20 km once the day's archive is out) looks for the limit. The broadband check
-adds what the indoor recording carries.
+The box series (4, 8 and 12 km, then 20 km once the day's archive is out) looks for the limit.
 
 ## Files
 

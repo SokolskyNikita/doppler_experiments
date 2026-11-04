@@ -544,42 +544,74 @@ def new_run(topic: str) -> Path:
     return Path(out)
 
 
-def run_bench(case_ids: list[str], tier: str = "t2", run_dir: Path | None = None, log=print,
-              revision: str | None = None, profile: str = "saved-fit") -> Path:
-    """Run cases into a new run folder (or `run_dir`) and collect their scoreboard entries in results.json.
-    revision: None runs this checkout in-process; any other commit-ish is exported, verified and run
-    through its own CLI (bench/revisions.py)."""
+def _executor(revision: str | None, profile: str, log, code: dict | None = None):
     import functools
     if profile not in PROFILES:
         raise ValueError(f"profile must be one of {sorted(PROFILES)}")
-    # the code revision is read once, before anything runs, so an edit during a long run can't relabel it
     if revision is None:
-        code = code_revision()
-        execute = functools.partial(execute_case, profile=profile)
-    else:
-        from .revisions import ensure_revision
-        rev = ensure_revision(revision, log=log)
-        code = rev.provenance()
-        execute = functools.partial(execute_case_at, rev=rev, profile=profile)
+        return code or code_revision(), functools.partial(execute_case, profile=profile)
+    from .revisions import ensure_revision
+    rev = ensure_revision(revision, log=log)
+    return rev.provenance(), functools.partial(execute_case_at, rev=rev, profile=profile)
+
+
+def run_one(cid: str, run_dir: Path, execute, code: dict, log=print) -> dict:
+    """One case into run_dir/<cid>/, with its log beside it; the scoreboard entry also goes to entry.json."""
+    case_dir = run_dir / cid
+    case_dir.mkdir(parents=True, exist_ok=True)
+    with open(case_dir / "run.log", "w") as fh:
+        def case_log(msg, fh=fh):
+            print(msg, file=fh, flush=True)
+            log(msg)
+        w0 = time.perf_counter()
+        entry = bench_case(cid, case_dir, execute=execute, log=case_log, code=code)
+        log(f"{cid}: {entry['status']} in {time.perf_counter() - w0:.0f} s")
+    tmp = case_dir / ".entry.json.tmp"
+    tmp.write_text(json.dumps(entry, indent=1, sort_keys=True) + "\n")
+    os.replace(tmp, case_dir / "entry.json")
+    return entry
+
+
+def run_bench(case_ids: list[str], tier: str = "t2", run_dir: Path | None = None, log=print,
+              revision: str | None = None, profile: str = "saved-fit", parallel: int = 1) -> Path:
+    """Run cases into a new run folder (or `run_dir`) and collect their scoreboard entries in results.json.
+    revision: None runs this checkout in-process; any other commit-ish is exported, verified and run
+    through its own CLI (bench/revisions.py). parallel > 1 runs that many cases at once, each in its own
+    process (`bench run-case`), so stage logs and timings never mix."""
+    # the code revision is read once, before anything runs, so an edit during a long run can't relabel it
+    code, execute = _executor(revision, profile, log)
     commit, dirty = code["git_commit"], code["git_dirty"]
     if run_dir is None:
         run_dir = new_run(f"bench-{(commit if isinstance(commit, str) else 'nogit')[:7]}-{profile}-{tier}")
     info_path = run_dir / "run.json"
     info = json.loads(info_path.read_text()) if info_path.exists() else {}
-    info.update(command=sys.argv, cases=case_ids, tier=tier, profile=profile, code=code)
+    info.update(command=sys.argv, cases=case_ids, tier=tier, profile=profile, code=code, parallel=parallel)
     info_path.write_text(json.dumps(info, indent=1) + "\n")
-    entries = []
-    for cid in case_ids:
-        case_dir = run_dir / cid
-        case_dir.mkdir(parents=True, exist_ok=True)
-        with open(case_dir / "run.log", "w") as fh:
-            def case_log(msg, fh=fh):
-                print(msg, file=fh, flush=True)
-                log(msg)
-            w0 = time.perf_counter()
-            entry = bench_case(cid, case_dir, execute=execute, log=case_log, code=code)
-            log(f"{cid}: {entry['status']} in {time.perf_counter() - w0:.0f} s")
-        entries.append(entry)
+    if parallel <= 1:
+        entries = [run_one(cid, run_dir, execute, code, log) for cid in case_ids]
+    else:
+        pending, running, entries = list(case_ids), {}, {}
+        while pending or running:
+            while pending and len(running) < parallel:
+                cid = pending.pop(0)
+                (run_dir / cid).mkdir(parents=True, exist_ok=True)
+                cmd = [sys.executable, "-m", "bench", "run-case", "--run-dir", str(run_dir), "--profile", profile,
+                       "--code-json", json.dumps(code), cid] + (["--revision", revision] if revision else [])
+                out = open(run_dir / cid / "process.log", "w")
+                running[cid] = (subprocess.Popen(cmd, cwd=REPO, stdout=out, stderr=subprocess.STDOUT), out)
+                log(f"{cid}: started")
+            for cid, (proc, out) in list(running.items()):
+                if proc.poll() is not None:
+                    out.close()
+                    del running[cid]
+                    try:
+                        entries[cid] = json.loads((run_dir / cid / "entry.json").read_text())
+                    except OSError:
+                        entries[cid] = {"case": cid, "status": "error",
+                                        "reason": f"bench run-case exited with {proc.returncode}; see process.log"}
+                    log(f"{cid}: {entries[cid]['status']}")
+            time.sleep(2)
+        entries = [entries[c] for c in case_ids]
     doc = {"schema": 1, "tier": tier, "profile": profile, "code": code, "git_commit": commit, "git_dirty": dirty,
            "created": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"), "cases": entries}
     (run_dir / "results.json").write_text(json.dumps(doc, indent=1, sort_keys=True) + "\n")

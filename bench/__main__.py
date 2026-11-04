@@ -23,6 +23,11 @@ def main(argv=None):
                    "(default: this checkout, in-process)")
     r.add_argument("--profile", choices=sorted(runner.PROFILES), default="saved-fit",
                    help="saved-fit: the case's committed fits; raw-audio: detect's top two by score, earlier first")
+    r.add_argument("--parallel", type=int, default=1, help="cases to run at once, each in its own process (default: 1)")
+    rc = sub.add_parser("run-case", help="(used by run --parallel) one case into an existing run folder")
+    rc.add_argument("case"); rc.add_argument("--run-dir", type=Path, required=True)
+    rc.add_argument("--revision"); rc.add_argument("--profile", choices=sorted(runner.PROFILES), default="saved-fit")
+    rc.add_argument("--code-json", required=True, help="the code revision the parent read when the run started")
     c = sub.add_parser("compare", help="print the difference between two benchmark runs")
     c.add_argument("a", type=Path); c.add_argument("b", type=Path)
     a = ap.parse_args(argv)
@@ -42,8 +47,12 @@ def main(argv=None):
         print("every derived file matches its recorded hash")
     elif a.cmd == "run":
         run_dir = runner.run_bench(a.case or cases.case_ids(), tier=a.tier, run_dir=a.run_dir,
-                                   revision=a.revision, profile=a.profile)
+                                   revision=a.revision, profile=a.profile, parallel=a.parallel)
         print(run_dir)
+    elif a.cmd == "run-case":
+        import json
+        code, execute = runner._executor(a.revision, a.profile, print, code=json.loads(a.code_json))
+        runner.run_one(a.case, a.run_dir, execute, code)
     elif a.cmd == "compare":
         print(runner.compare_runs(a.a, a.b))
 

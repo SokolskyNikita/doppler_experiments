@@ -1,0 +1,270 @@
+{
+ "format": 1,
+ "recording": {
+  "id": "ESID_740_2024-04-07",
+  "source": "raw/audio/eclipse/ESID_740/ESID_740_2024_04_07.zip",
+  "sha256": "0d7bba2ef829e8fc30ed1db45def9deb961ad6e773066b655742450e1b9ab3bc",
+  "t0_utc": "2024-04-07T00:00:00Z",
+  "case": null
+ },
+ "span": [
+  61200,
+  62400
+ ],
+ "sheets": "runs/2026-11-04-blind-labels/esid740",
+ "windows": [
+  {
+   "id": "e740-e01",
+   "class": "uncertain",
+   "start": 61200,
+   "end": 61318,
+   "lines": [
+    [
+     400,
+     330
+    ],
+    [
+     280,
+     315
+    ]
+   ],
+   "harmonics": 2,
+   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "blind": true,
+   "date": "2026-11-04",
+   "notes": "slow, smooth tones drifting down then up; distant source or engine"
+  },
+  {
+   "id": "e740-a01",
+   "class": "absent",
+   "start": 61318,
+   "end": 61380,
+   "lines": [],
+   "harmonics": 0,
+   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "blind": true,
+   "date": "2026-11-04",
+   "notes": ""
+  },
+  {
+   "id": "e740-e02",
+   "class": "uncertain",
+   "start": 61380,
+   "end": 61438,
+   "lines": [
+    [
+     250,
+     200
+    ],
+    [
+     150,
+     250
+    ],
+    [
+     150,
+     210
+    ]
+   ],
+   "harmonics": 2,
+   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "blind": true,
+   "date": "2026-11-04",
+   "notes": "falls then rises in a V near 213 s with several lines; a ground vehicle more likely than a flyover"
+  },
+  {
+   "id": "e740-a02",
+   "class": "absent",
+   "start": 61438,
+   "end": 61580,
+   "lines": [],
+   "harmonics": 0,
+   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "blind": true,
+   "date": "2026-11-04",
+   "notes": ""
+  },
+  {
+   "id": "e740-e03",
+   "class": "uncertain",
+   "start": 61580,
+   "end": 61676,
+   "lines": [
+    [
+     100,
+     130
+    ],
+    [
+     125,
+     118
+    ]
+   ],
+   "harmonics": 2,
+   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "blind": true,
+   "date": "2026-11-04",
+   "notes": "rising 100 to 130 Hz at 385-395 s, then a nearly flat line"
+  },
+  {
+   "id": "e740-a03",
+   "class": "absent",
+   "start": 61676,
+   "end": 61955,
+   "lines": [],
+   "harmonics": 0,
+   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "blind": true,
+   "date": "2026-11-04",
+   "notes": ""
+  },
+  {
+   "id": "e740-e04",
+   "class": "uncertain",
+   "start": 61955,
+   "end": 62032,
+   "lines": [
+    [
+     175,
+     140
+    ],
+    [
+     150,
+     175
+    ]
+   ],
+   "harmonics": 2,
+   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "blind": true,
+   "date": "2026-11-04",
+   "notes": "falls then rises; flat lines at 100 and 130 Hz"
+  },
+  {
+   "id": "e740-a04",
+   "class": "absent",
+   "start": 62032,
+   "end": 62158,
+   "lines": [],
+   "harmonics": 0,
+   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "blind": true,
+   "date": "2026-11-04",
+   "notes": ""
+  },
+  {
+   "id": "e740-e05",
+   "class": "uncertain",
+   "start": 62158,
+   "end": 62278,
+   "lines": [
+    [
+     250,
+     80
+    ],
+    [
+     100,
+     80
+    ]
+   ],
+   "harmonics": 2,
+   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "blind": true,
+   "date": "2026-11-04",
+   "notes": "loud steep fall 250 to 80 Hz at 960-972 s, then low falling lines 1030-1075 s"
+  },
+  {
+   "id": "e740-a05",
+   "class": "absent",
+   "start": 62278,
+   "end": 62285,
+   "lines": [],
+   "harmonics": 0,
+   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "blind": true,
+   "date": "2026-11-04",
+   "notes": ""
+  },
+  {
+   "id": "e740-e06",
+   "class": "clear",
+   "start": 62285,
+   "end": 62312,
+   "lines": [
+    [
+     300,
+     230
+    ],
+    [
+     160,
+     115
+    ]
+   ],
+   "harmonics": 2,
+   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "blind": true,
+   "date": "2026-11-04",
+   "notes": "falling lines steepest near 1095-1100 s"
+  },
+  {
+   "id": "e740-a06",
+   "class": "absent",
+   "start": 62312,
+   "end": 62400,
+   "lines": [],
+   "harmonics": 0,
+   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "blind": true,
+   "date": "2026-11-04",
+   "notes": ""
+  }
+ ],
+ "associations": [
+  {
+   "window": "e740-e01",
+   "flight": "unmatched",
+   "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
+   "blind": false,
+   "date": "2026-11-04",
+   "notes": "no pass within 12 km between 17:00 and 17:20 UTC"
+  },
+  {
+   "window": "e740-e02",
+   "flight": "unmatched",
+   "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
+   "blind": false,
+   "date": "2026-11-04",
+   "notes": "no pass within 12 km between 17:00 and 17:20 UTC"
+  },
+  {
+   "window": "e740-e03",
+   "flight": "unmatched",
+   "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
+   "blind": false,
+   "date": "2026-11-04",
+   "notes": "no pass within 12 km between 17:00 and 17:20 UTC"
+  },
+  {
+   "window": "e740-e04",
+   "flight": "unmatched",
+   "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
+   "blind": false,
+   "date": "2026-11-04",
+   "notes": "no pass within 12 km between 17:00 and 17:20 UTC"
+  },
+  {
+   "window": "e740-e05",
+   "flight": "unmatched",
+   "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
+   "blind": false,
+   "date": "2026-11-04",
+   "notes": "no pass within 12 km between 17:00 and 17:20 UTC"
+  },
+  {
+   "window": "e740-e06",
+   "flight": "unmatched",
+   "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
+   "blind": false,
+   "date": "2026-11-04",
+   "notes": "no pass within 12 km between 17:00 and 17:20 UTC"
+  }
+ ],
+ "overlays": "runs/2026-11-04-blind-labels/esid740_overlay"
+}

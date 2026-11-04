@@ -1,0 +1,478 @@
+{
+ "format": 1,
+ "recording": {
+  "id": "oyster_bay",
+  "source": "raw/audio/youtube/oyster_bay.webm",
+  "sha256": "6884324b4fb9babbc89b10de71f283dd338766a15d2fbd1aeedb52216276692d",
+  "t0_utc": "2026-09-08T20:17:30.34Z",
+  "case": null,
+  "t0_note": "from the known-point fit's clock (runs/2026-11-03-issue-1); used for layer 2 only"
+ },
+ "span": [
+  0,
+  1200
+ ],
+ "sheets": "runs/2026-11-04-blind-labels/oyster_bay",
+ "windows": [
+  {
+   "id": "ob-e01",
+   "class": "uncertain",
+   "start": 0,
+   "end": 35,
+   "lines": [
+    [
+     265,
+     285
+    ],
+    [
+     125,
+     105
+    ]
+   ],
+   "harmonics": 2,
+   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "blind": true,
+   "date": "2026-11-04",
+   "notes": "starts with the recording; faint lines, no curve shape"
+  },
+  {
+   "id": "ob-a01",
+   "class": "absent",
+   "start": 35,
+   "end": 55,
+   "lines": [],
+   "harmonics": 0,
+   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "blind": true,
+   "date": "2026-11-04",
+   "notes": ""
+  },
+  {
+   "id": "ob-e02",
+   "class": "uncertain",
+   "start": 55,
+   "end": 120,
+   "lines": [
+    [
+     140,
+     210
+    ],
+    [
+     310,
+     440
+    ],
+    [
+     200,
+     258
+    ],
+    [
+     250,
+     312
+    ]
+   ],
+   "harmonics": 2,
+   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "blind": true,
+   "date": "2026-11-04",
+   "notes": "rising curves that flatten, not Doppler-shaped: an accelerating engine (boat?) more likely than a flyover. Bird or horn blobs at 320-440 Hz, 42-58 s"
+  },
+  {
+   "id": "ob-e03",
+   "class": "clear",
+   "start": 105,
+   "end": 200,
+   "lines": [
+    [
+     130,
+     65
+    ],
+    [
+     345,
+     255
+    ]
+   ],
+   "harmonics": 1,
+   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "blind": true,
+   "date": "2026-11-04",
+   "notes": "long falling line 130 to 65 Hz, flat after 185 s; the 345-255 Hz line falls over 120-165 s and may be another source"
+  },
+  {
+   "id": "ob-e04",
+   "class": "uncertain",
+   "start": 160,
+   "end": 212,
+   "lines": [
+    [
+     150,
+     205
+    ],
+    [
+     300,
+     440
+    ]
+   ],
+   "harmonics": 2,
+   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "blind": true,
+   "date": "2026-11-04",
+   "notes": "rising again, like ob-e02"
+  },
+  {
+   "id": "ob-a02",
+   "class": "absent",
+   "start": 212,
+   "end": 245,
+   "lines": [],
+   "harmonics": 0,
+   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "blind": true,
+   "date": "2026-11-04",
+   "notes": ""
+  },
+  {
+   "id": "ob-e05",
+   "class": "clear",
+   "start": 245,
+   "end": 300,
+   "lines": [
+    [
+     235,
+     165
+    ],
+    [
+     205,
+     140
+    ]
+   ],
+   "harmonics": 2,
+   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "blind": true,
+   "date": "2026-11-04",
+   "notes": "several parallel falling lines"
+  },
+  {
+   "id": "ob-a03",
+   "class": "absent",
+   "start": 300,
+   "end": 330,
+   "lines": [],
+   "harmonics": 0,
+   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "blind": true,
+   "date": "2026-11-04",
+   "notes": ""
+  },
+  {
+   "id": "ob-e06",
+   "class": "uncertain",
+   "start": 330,
+   "end": 368,
+   "lines": [
+    [
+     250,
+     100
+    ]
+   ],
+   "harmonics": 1,
+   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "blind": true,
+   "date": "2026-11-04",
+   "notes": "steep falling streaks at the strip edge"
+  },
+  {
+   "id": "ob-a04",
+   "class": "absent",
+   "start": 368,
+   "end": 395,
+   "lines": [],
+   "harmonics": 0,
+   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "blind": true,
+   "date": "2026-11-04",
+   "notes": ""
+  },
+  {
+   "id": "ob-e07",
+   "class": "uncertain",
+   "start": 395,
+   "end": 472,
+   "lines": [
+    [
+     250,
+     150
+    ]
+   ],
+   "harmonics": 1,
+   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "blind": true,
+   "date": "2026-11-04",
+   "notes": "parallel falling streaks, low contrast"
+  },
+  {
+   "id": "ob-a05",
+   "class": "absent",
+   "start": 472,
+   "end": 476,
+   "lines": [],
+   "harmonics": 0,
+   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "blind": true,
+   "date": "2026-11-04",
+   "notes": ""
+  },
+  {
+   "id": "ob-e08",
+   "class": "clear",
+   "start": 476,
+   "end": 560,
+   "lines": [
+    [
+     235,
+     172
+    ],
+    [
+     262,
+     240
+    ],
+    [
+     405,
+     385
+    ]
+   ],
+   "harmonics": 1,
+   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "blind": true,
+   "date": "2026-11-04",
+   "notes": "strong wobbling tone falls 235 to 172 Hz over 480-497 s, then flat; broadband burst at 476-480 s"
+  },
+  {
+   "id": "ob-a06",
+   "class": "absent",
+   "start": 560,
+   "end": 603,
+   "lines": [],
+   "harmonics": 0,
+   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "blind": true,
+   "date": "2026-11-04",
+   "notes": ""
+  },
+  {
+   "id": "ob-e09",
+   "class": "masked",
+   "start": 603,
+   "end": 614,
+   "lines": [],
+   "harmonics": 0,
+   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "blind": true,
+   "date": "2026-11-04",
+   "notes": "loud broadband blob 180-230 Hz; can't tell what is under it"
+  },
+  {
+   "id": "ob-a07",
+   "class": "absent",
+   "start": 614,
+   "end": 632,
+   "lines": [],
+   "harmonics": 0,
+   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "blind": true,
+   "date": "2026-11-04",
+   "notes": ""
+  },
+  {
+   "id": "ob-e10",
+   "class": "clear",
+   "start": 632,
+   "end": 700,
+   "lines": [
+    [
+     300,
+     170
+    ],
+    [
+     250,
+     140
+    ]
+   ],
+   "harmonics": 2,
+   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "blind": true,
+   "date": "2026-11-04",
+   "notes": "many parallel falling lines, steepest about 655-670 s"
+  },
+  {
+   "id": "ob-a08",
+   "class": "absent",
+   "start": 700,
+   "end": 785,
+   "lines": [],
+   "harmonics": 0,
+   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "blind": true,
+   "date": "2026-11-04",
+   "notes": ""
+  },
+  {
+   "id": "ob-e11",
+   "class": "uncertain",
+   "start": 785,
+   "end": 835,
+   "lines": [
+    [
+     350,
+     300
+    ],
+    [
+     150,
+     250
+    ]
+   ],
+   "harmonics": 2,
+   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "blind": true,
+   "date": "2026-11-04",
+   "notes": "falls then rises around 800 s"
+  },
+  {
+   "id": "ob-a09",
+   "class": "absent",
+   "start": 835,
+   "end": 1135,
+   "lines": [],
+   "harmonics": 0,
+   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "blind": true,
+   "date": "2026-11-04",
+   "notes": ""
+  },
+  {
+   "id": "ob-e12",
+   "class": "uncertain",
+   "start": 1135,
+   "end": 1175,
+   "lines": [
+    [
+     330,
+     250
+    ]
+   ],
+   "harmonics": 1,
+   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "blind": true,
+   "date": "2026-11-04",
+   "notes": "steep falling streaks at 250-330 Hz; blobs at 300-440 Hz near 1050-1070 and 1180-1195 s look like birds"
+  },
+  {
+   "id": "ob-a10",
+   "class": "absent",
+   "start": 1175,
+   "end": 1200,
+   "lines": [],
+   "harmonics": 0,
+   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "blind": true,
+   "date": "2026-11-04",
+   "notes": ""
+  }
+ ],
+ "associations": [
+  {
+   "window": "ob-e01",
+   "flight": "unmatched",
+   "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
+   "blind": false,
+   "date": "2026-11-04",
+   "notes": "no pass within 40 s"
+  },
+  {
+   "window": "ob-e02",
+   "flight": "unmatched",
+   "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
+   "blind": false,
+   "date": "2026-11-04",
+   "notes": "N360NY (7.3 km, heard 131 s) predicts a fall over the window; the lines rise"
+  },
+  {
+   "window": "ob-e03",
+   "flight": {
+    "icao": "a40d8f",
+    "registration": "N360NY",
+    "heard_cpa_s": 130.5,
+    "slant_m": 7252
+   },
+   "confidence": "probable",
+   "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
+   "blind": false,
+   "date": "2026-11-04",
+   "notes": "at f0 293 Hz the modelled curve follows the 345 to 255 Hz line over 120-155 s; the steep 130 to 65 Hz line falls further than the model's 1.75 ratio"
+  },
+  {
+   "window": "ob-e04",
+   "flight": "unmatched",
+   "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
+   "blind": false,
+   "date": "2026-11-04",
+   "notes": "rising lines; N360NY's curve is flat by then"
+  },
+  {
+   "window": "ob-e05",
+   "flight": "unmatched",
+   "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
+   "blind": false,
+   "date": "2026-11-04",
+   "notes": "no pass within 40 s"
+  },
+  {
+   "window": "ob-e06",
+   "flight": "unmatched",
+   "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
+   "blind": false,
+   "date": "2026-11-04",
+   "notes": "no pass within 40 s"
+  },
+  {
+   "window": "ob-e07",
+   "flight": "unmatched",
+   "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
+   "blind": false,
+   "date": "2026-11-04",
+   "notes": "no pass within 40 s"
+  },
+  {
+   "window": "ob-e08",
+   "flight": "unmatched",
+   "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
+   "blind": false,
+   "date": "2026-11-04",
+   "notes": "no pass within 40 s; a strong event"
+  },
+  {
+   "window": "ob-e10",
+   "flight": "unmatched",
+   "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
+   "blind": false,
+   "date": "2026-11-04",
+   "notes": "only N2152Z, 11.8 km, heard 603 s, whose curve is flat over the window; the lines fall 43 %"
+  },
+  {
+   "window": "ob-e11",
+   "flight": "unmatched",
+   "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
+   "blind": false,
+   "date": "2026-11-04",
+   "notes": "C-GZQU (8.8 km, heard 814 s) could fit a falling streak near 800-820 s, but not the rising lines; N501EX (8.4 km, heard 782 s) is flat; left unmatched"
+  },
+  {
+   "window": "ob-e12",
+   "flight": "unmatched",
+   "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
+   "blind": false,
+   "date": "2026-11-04",
+   "notes": "N829RP (4.1 km, heard 1117 s) shows no visible curve; the streaks at 1160-1170 s don't follow it"
+  }
+ ],
+ "overlays": "runs/2026-11-04-blind-labels/oyster_bay_overlay"
+}

@@ -19,7 +19,8 @@ ROOT = Path(os.environ.get("DOPPLERTRACK_DATA", Path.home() / "data" / "dopplert
 OUT = Path(__file__).resolve().parents[2] / "bench" / "manifest.json"
 
 SOURCES = [   # (path prefix, source, licence)
-    ("raw/adsb/", "adsb.lol globe_history day archive, planes-readsb-prod-0 (github.com/adsblol)", None),
+    ("raw/adsb/", "adsb.lol globe_history day archive, planes-readsb-prod-0 (github.com/adsblol)",
+     "https://opendatacommons.org/licenses/odbl/1-0/"),
     ("raw/audio/youtube/oyster_bay", "https://youtu.be/4CxVxuMVkMc (colsto)", None),
     ("raw/audio/youtube/swfl_", "https://youtu.be/zs2o5Rhlp5w (SWFL Eagle Cam #3)", None),
     ("raw/audio/eclipse/sites.csv", "Eclipse Soundscapes site list compiled from Zenodo", None),

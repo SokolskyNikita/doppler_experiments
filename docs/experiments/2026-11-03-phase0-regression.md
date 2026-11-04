@@ -1,5 +1,10 @@
 # Phase 0 regression check
 
+<!-- index
+question: Do Phase 0's data and trajectory masks preserve the Oyster Bay checks?
+outcome: 2 passed, 1 expected failure; the detector-fit bias remains Phase 2 work
+-->
+
 ## Question
 
 Do the Phase 0 data and trajectory-coverage fixes preserve the known Oyster Bay fit and detection

@@ -1,5 +1,10 @@
 # Window length
 
+<!-- index
+question: Does a shorter STFT window, or a short-near-CPA composite, give the same or smaller f0, speed and distance errors from `fit_event`?
+outcome: No variant meets the criterion (corrected: 0.512 s first read as kept, on a mis-fitted ob-e03). 0.512 s lowers Livermore's brightness v and d medians, but no paired test separates it and the development events are mixed; the gain is resolution, not effective sample count
+-->
+
 ## Question
 
 PLAN Phase 2 item 5. The 2.048 s STFT window smears a pass's steepest part by g·T. Does a shorter

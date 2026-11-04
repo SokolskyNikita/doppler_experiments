@@ -1,5 +1,10 @@
 # A sound-speed input (2026-11-04)
 
+<!-- index
+question: Can the pipeline take a measured temperature without changing anything when none is given?
+outcome: Yes: `--temperature` on five commands and a null-by-default `weather` block per case; with no temperature the pipeline gets no c, so every default path is unchanged
+-->
+
 ## Question
 
 PLAN Phase 2 item 2's engineering outcome: the pipeline fixes the speed of sound at its 15 °C value in every caller,

@@ -1,5 +1,10 @@
 # Propeller traffic during the Eclipse and A2O recordings (2026-11-04)
 
+<!-- index
+question: Which Eclipse and A2O recordings have prop passes within 6 and 12 km during their actual hours?
+outcome: ESID 375, 740 and 710 have 3–10 within 6 km and 937 none in 25 h; A2O Townsville 10–12, Aroona 1, Duval 0. Townsville's published point is 1.77 km from its file-name GPS fix, beyond MANIFEST's obfuscation bound
+-->
+
 **Question.** Which of the Eclipse Soundscapes and A2O recordings have propeller passes close enough to use (PLAN 5.6 asks for at least two within about 6 km), counted over the hours each recording actually covers rather than the whole UTC day?
 
 **Setup.** No change to the package.

@@ -1,5 +1,10 @@
 # Least-squares fit of a frequency track
 
+<!-- index
+question: Does a least-squares fit of a frequency track give smaller f0, speed, distance and timing errors than today's fits (item 4)?
+outcome: Not met; deferred until a track meets item 3's criterion: it beats both objectives on speed and slant range, not on f0 or timing
+-->
+
 ## Question and criterion
 
 PLAN Phase 2, item 4 (E1, E3). Does fitting the straight-pass model to a frequency track by least

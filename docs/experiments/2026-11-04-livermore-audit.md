@@ -1,5 +1,10 @@
 # Livermore corpus: provenance audit (2026-11-04)
 
+<!-- index
+question: Can the Livermore microphone and start times be recovered, and do ridge, WAV and ADS-B agree in time?
+outcome: Yes: the author's recorder point to under 1 m, WAVs are the ridge ±5.00 s, and the ridge clock matches ADS-B to about 1 s per pass with no common offset beyond 0.5 s
+-->
+
 **Question.** The Livermore corpus (Pathak 2026, [Zenodo 23424278](https://zenodo.org/records/23424278), CC BY 4.0) is meant to be Phase 2's main real data for fits and tracks ([PLAN](../../PLAN.md) 5.6, Phase 2 item 2). It doesn't publish the microphone position or the WAVs' start times. Can both be recovered, and do the published frequency tracks, the WAVs and the ADS-B tracks agree in time?
 
 **Setup.** No change to the package. `tools/data/site_traffic.py` gained optional elevation and recording-window columns in the same commit; its output columns changed with it: the hard-coded `title`, `time_setting` and `zips` became pass-through extras, so `derived/eclipse/site_traffic_2024-04-07.csv` has the old header. All 40 passes, from the four zips unpacked into `$DOPPLERTRACK_DATA/derived/livermore/`. Each pass has `audio.wav` (48 kHz mono, no metadata chunk), `frequency_vs_time_used.csv` (the author's ridge of one harmonic, UTC, about one point per 0.19 s), a KML track (positions only, EGM96 MSL), and a row of `final_results_40_cases.csv` with L (the horizontal distance from the recorder to the track at closest approach) and H (the track's height above the recorder there). The author's extraction tool (`frequency_extraction_tool.html`) reads the recording's start time from the phone's file name, so the ridge clock is the phone clock, to the second.

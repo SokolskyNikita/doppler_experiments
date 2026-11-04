@@ -288,7 +288,8 @@ JOB_EBS_USD_PER_HOUR = 0.063
 def start_box(ec2, out: dict, job: str, size: str, on_demand: bool) -> tuple[list[str], str]:
     resp = ec2.create_fleet(**fleet_request(out, job, size, on_demand))
     ids = [i for inst in resp.get("Instances", []) for i in inst.get("InstanceIds", [])]
-    return ids, "; ".join(f"{e.get('ErrorCode')}: {e.get('ErrorMessage')}" for e in resp.get("Errors", []))
+    codes = sorted({e.get("ErrorCode") for e in resp.get("Errors", [])})     # one per code, not per type and AZ
+    return ids, ", ".join(c for c in codes if c)
 
 
 def hourly_price(itype: str, az: str, market: str, region: str = REGION) -> float:

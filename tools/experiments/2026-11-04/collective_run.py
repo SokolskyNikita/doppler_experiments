@@ -4,7 +4,12 @@ locate's detection (60-300 Hz, harmonics 1, top 10, 240 s windows) on the case's
 collective.Window (bounds, coarse tone, coarse heard CPA only), then collective.collective_find over the case's box with
 its flight data, 15 C, the weather off. The result is written before any label is read; the merge judges the criteria.
 
-usage: uv run python tools/experiments/2026-11-04/collective_run.py [RUN] [--shard K/N] [--resume DIR ...] [--merge] [--inputs]
+With --null, the units are A's other-day draws instead (verdict_null_days.json): "<case>--null--<day>" runs the same
+find, at +-10 % f0, with the case's box swapped to that day's cut of the same box, and writes null_draws.npz for
+collective_null.py (day, max_S = the winner's Z, second_S = the best mode 2 km or more from it, lat, lon, n_matched,
+clock_audio_minus_utc_s).
+
+usage: uv run python tools/experiments/2026-11-04/collective_run.py [RUN] [--null] [--shard K/N] [--resume DIR ...] [--merge] [--inputs]
 """
 import argparse
 import datetime
@@ -24,9 +29,17 @@ POSITIVES = ["oyster-bay", "oyster-bay-hp150-aac32k", "eagle-cam-clip-18000s", "
 NEGATIVES = ["oyster-bay-moved-wsw150", "oyster-bay-moved-north150", "oyster-bay-sources-removed", "xenocanto-xc990819"]
 UNITS = [f"{c}--f0-10" for c in POSITIVES + NEGATIVES] + [f"{c}--f0-5" for c in POSITIVES]
 DETECT = dict(f_lo=60.0, f_hi=300.0, harmonics=1, top=10, window_s=240.0)
+NULL_GROUPS = json.loads((HERE / "verdict_null_days.json").read_text())["groups"]
+NULL_UNITS = [f"{c}--null--{day}" for g in NULL_GROUPS for c in g["cases"] for day in g["days"]]
 
 
-def run_unit(cid, span, out_dir):
+def null_traces(cid, day):
+    """The case's box file on another day: derived/traces/<day>/<the same box stem>.npz."""
+    own = cases.blind_case(cid)["flight_data"]["traces"]
+    return f"derived/traces/{day}/{Path(own).name}"
+
+
+def run_unit(cid, span, out_dir, day=None):
     from dopplertrack.adsb import join_days
     from dopplertrack.audio import Spectrogram
     from dopplertrack.cache import cached_detections
@@ -38,16 +51,29 @@ def run_unit(cid, span, out_dir):
     found = cached_detections(sp, detect_events, **DETECT)
     usable = sorted([e for e in found if not getattr(e, "weak", None) and np.isfinite(e.f0)], key=lambda e: -e.score)[:10]
     wins = [Window.from_detection(e) for e in usable]
-    traces, _ = join_days(runner.trace_paths(case))
+    traces, _ = join_days([runner.resolve(null_traces(cid, day))] if day else runner.trace_paths(case))
     elevation = Terrain().elevation if case["search"]["dem"] else None
-    cache = f"cpa/collective/{Path(case['search']['cpa_cache']).stem}_2km.npz"
+    cache = (f"cpa/collective/null/{day}/{Path(null_traces(cid, day)).stem}_2km.npz" if day else
+             f"cpa/collective/{Path(case['search']['cpa_cache']).stem}_2km.npz")
     path = runner.resolve(cache); path.parent.mkdir(parents=True, exist_ok=True)
     log_lines = []
     out = collective_find(sp, wins, traces, tuple(case["search"]["bbox"]), max_range_m=case["search"]["max_range_m"],
                           elevation=elevation, f0_span=span, cpa_cache=str(path), log=log_lines.append)
     out["log"] = log_lines
-    out["case"] = {"id": cid, "version": case["version"]}
+    out["case"] = {"id": cid, "version": case["version"], "null_day": day}
     return out
+
+
+def save_draw(r, day, path):
+    """collective_null.py's FIELDS for one other-day map: NaN where the map has no winner or no second mode."""
+    from dopplertrack.geo import haversine_m
+    w = r.get("winner") or {}
+    nan = float("nan")
+    second = max([m["Z"] for m in r.get("modes") or []
+                  if w and haversine_m(m["lat"], m["lon"], w["lat"], w["lon"]) >= 2000.0], default=nan)
+    np.savez(path, day=np.array(day), max_S=float(w.get("Z", nan)), second_S=float(second), lat=float(w.get("lat", nan)),
+             lon=float(w.get("lon", nan)), n_matched=int(w.get("n_matched", 0)),
+             clock_audio_minus_utc_s=float(w.get("clock_audio_minus_unix", nan)))
 
 
 def judge(cid, r):
@@ -83,27 +109,43 @@ def judge(cid, r):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     shards.add_args(ap)
+    ap.add_argument("--null", action="store_true", help="A's other-day draws (verdict_null_days.json) instead of the cases")
     a = ap.parse_args()
+    unit_ids = NULL_UNITS if a.null else UNITS
     if a.inputs:
         from bench import inputs as bench_inputs
-        doc = bench_inputs.run_inputs(POSITIVES + NEGATIVES, "locate")
-        shards.print_inputs(doc["cases"], doc["inputs"], [], tuple(doc["cache_kinds"]))
+        doc = bench_inputs.run_inputs(sorted({u.split("--")[0] for u in unit_ids}), "locate")
+        days = sorted({null_traces(*u.split("--null--")) for u in NULL_UNITS}) if a.null else []
+        shards.print_inputs(doc["cases"], doc["inputs"] + days, [], tuple(doc["cache_kinds"]))
         return
-    params = dict(units=UNITS, detect=DETECT, k=10, c="15 C", weather=False,
+    params = dict(units=unit_ids, detect=DETECT, k=10, c="15 C", weather=False,
                   collective=dict(coarse_m=2000, fine_m=200, keep_top=5, cluster_s=20, agree_s=6, null_n=1000))
-    run = shards.open_run(a.run, "collective-find", {"script": "tools/experiments/2026-11-04/collective_run.py", "params": params})
-    units = shards.Units(run, UNITS, params, a.shard, a.resume)
+    if a.null:
+        params.update(f0_span=0.10, null_days="tools/experiments/2026-11-04/verdict_null_days.json")
+    run = shards.open_run(a.run, "collective-null" if a.null else "collective-find",
+                          {"script": "tools/experiments/2026-11-04/collective_run.py", "params": params})
+    units = shards.Units(run, unit_ids, params, a.shard, a.resume)
     if not a.merge:
         for uid in units.todo():
-            cid, span = uid.split("--"); span = int(span.split("-")[1]) / 100
             d = units.dir(uid); d.mkdir(parents=True, exist_ok=True)
-            r = run_unit(cid, span, d)
+            if a.null:
+                cid, day = uid.split("--null--")
+                r = run_unit(cid, 0.10, d, day)
+                save_draw(r, day, d / "null_draws.npz")
+            else:
+                cid, span = uid.split("--"); span = int(span.split("-")[1]) / 100
+                r = run_unit(cid, span, d)
             (d / "result.json").write_text(json.dumps(r, indent=1, default=float) + "\n")     # before any label is read
             units.finish(uid, {"Z": (r.get("winner") or {}).get("Z"), "walls": r.get("walls")})
             print(uid, json.dumps({"winner": r.get("winner") and {k: r["winner"][k] for k in ("lat", "lon", "Z", "n_matched")},
                                    "walls": r.get("walls"), "counts": r.get("counts")}, default=float), flush=True)
         if a.shard != (1, 1) or units.todo():
             return
+    if a.null:          # collective_null.py reads the draws and judges; the merge only lists them
+        rows = {u: dict(np.load(d / "null_draws.npz")) for u, d in units.all().items()}
+        (run / "null_draws.json").write_text(json.dumps({u: {k: v.item() for k, v in r.items()} for u, r in rows.items()},
+                                                        indent=1, default=float) + "\n")
+        return
     out = {}
     for uid, d in units.all().items():
         r = json.loads((d / "result.json").read_text())

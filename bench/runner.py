@@ -133,6 +133,18 @@ def pick_detected(detected: list[dict]) -> list[dict]:
     return sorted(top, key=lambda d: d["t_cpa"])
 
 
+def trace_paths(case: dict) -> list[Path]:
+    """A case's flight data: one trace file, or consecutive days of one box."""
+    t = case["flight_data"]["traces"]
+    return [resolve(p) for p in ([t] if isinstance(t, str) else t)]
+
+
+def day_boxes(case: dict) -> list[list[float]]:
+    """The box each trace file was cut to: one box for every day, or one per day."""
+    b = case["flight_data"]["extraction_box"]
+    return [list(x) for x in b] if isinstance(b[0], list) else [list(b)] * len(trace_paths(case))
+
+
 def search_harmonics(case: dict, profile: str) -> list[int]:
     return list(case["search"]["harmonics"]) if profile == "saved-fit" else list(PROFILES[profile]["harmonics"])
 
@@ -189,11 +201,12 @@ class Draft:
             "cpa_records", "before_silence_filter", "after_silence_filter", "flight_pairs_before_silence_filter",
             "flight_pairs_after_silence_filter", "scored", "unevaluated_budget")}
         self.funnel.update({k: unavailable(PER_GATE) for k in ("after_speed_gate", "after_distance_gate", "after_time_gate")})
-        envelope, need = tuple(case["flight_data"]["extraction_box"]), padded_bbox(tuple(s["bbox"]), s["max_range_m"])
-        self.flight = {"traces": case["flight_data"]["traces"], "declared_extraction_box": list(envelope),
+        need = padded_bbox(tuple(s["bbox"]), s["max_range_m"])
+        boxes = day_boxes(case)
+        self.flight = {"traces": case["flight_data"]["traces"], "declared_extraction_box": boxes if len(boxes) > 1 else boxes[0],
                        "search_box_plus_range": [round(x, 6) for x in need],
-                       "declared_box_covers_search_range": bool(envelope[0] <= need[0] and envelope[1] >= need[1]
-                                                                and envelope[2] <= need[2] and envelope[3] >= need[3]),
+                       "declared_box_covers_search_range": all(e[0] <= need[0] and e[1] >= need[1] and e[2] <= need[2]
+                                                               and e[3] >= need[3] for e in boxes),
                        "extraction_note": case["flight_data"].get("extraction_note", "")}
         self.limits = {"altitude_sources": unavailable("the flight data was not loaded"),
                        "candidate_gaps": unavailable("the search did not run"),
@@ -214,11 +227,13 @@ class Draft:
                 "utc": unavailable("the search did not run")})
 
     def load_flight_data(self):
-        """Read the case's traces with this revision's loader, for the data report only."""
-        from dopplertrack.adsb import load_trace_metadata, load_traces
-        tpath = resolve(self.case["flight_data"]["traces"])
-        traces, meta = load_traces(tpath), load_trace_metadata(tpath)
-        self.inputs.append(file_entry("traces", tpath))
+        """Read the case's traces, one file or consecutive days joined across midnight (adsb.join_days)."""
+        from dopplertrack.adsb import join_days
+        paths = trace_paths(self.case)
+        traces, meta = join_days(paths)
+        self.inputs += [file_entry("traces", p) for p in paths]
+        if len(paths) > 1:
+            self.flight["seams"] = meta.get("seams", [])
         legacy = "legacy trace file: malformed traces skipped at extraction were not counted"
         self.flight.update(traces_loaded=len(traces),
                            metadata=meta or unavailable("legacy trace file without extraction metadata (pre-Phase 0)"),
@@ -486,7 +501,9 @@ def execute_case_at(case: dict, case_dir: Path, rev, log=print, code: dict | Non
             evfiles[-1].write_text(json.dumps(f, indent=1) + "\n")
         with stage("flight_data"):
             draft.load_flight_data()
-        tpath = resolve(case["flight_data"]["traces"])
+        if len(trace_paths(case)) != 1:
+            raise ValueError(f"{rev.short}'s CLI takes one trace file; this case joins {len(trace_paths(case))} days")
+        tpath = trace_paths(case)[0]
         cpa = rev.root / "cpa" / f"{case['id']}-v{case['version']}.npz"
         cpa.parent.mkdir(parents=True, exist_ok=True)
         box = [str(x) for x in s["bbox"]]

@@ -206,13 +206,19 @@ def case_labels(case_id: str, version: int, path=CASES) -> dict:
     raise KeyError(f"no case {case_id!r} version {version}")
 
 
+def latest_case(case_id: str, path=CASES) -> dict:
+    """The latest version of a case as written, runnable or not: for building and checking its files."""
+    return copy.deepcopy(_latest(load_cases(path), case_id))
+
+
 def case_ids(path=CASES, runnable_only: bool = True) -> list[str]:
     cases = load_cases(path)["cases"]
     return sorted({c["id"] for c in cases if is_runnable(c) or not runnable_only})
 
 
 def _expand(argv: list[str], out: Path) -> list[str]:
-    subs = {"data": str(data_root()), "cache": str(cache_root()), "repo": str(REPO), "out": str(out)}
+    subs = {"data": str(data_root()), "cache": str(cache_root()), "repo": str(REPO), "out": str(out),
+            "out_dir": str(out)}
     cmd = [a.format(**subs) for a in argv]
     if cmd[0] == "dopplertrack":
         cmd = [sys.executable, "-m", "dopplertrack.cli", *cmd[1:]]
@@ -226,23 +232,32 @@ def build(case: dict, log=print, check_only: bool = False) -> list[str]:
     hash. Each file is written under a temporary name in its folder and renamed into place when the
     recipe succeeds, so another session never reads it half-written. Returns the hash mismatches."""
     mismatches = []
-    for d in case["derived"]:
+    for d in case.get("derived", []):
         target = resolve(d["path"])
         if not target.exists():
             if check_only:
                 mismatches.append(f"{d['path']}: missing")
                 continue
             target.parent.mkdir(parents=True, exist_ok=True)
-            tmp = target.with_name(f".{target.stem}.{os.getpid()}.{threading.get_ident()}.tmp{target.suffix}")
+            # a recipe writes {out}, a temporary file, or into {out_dir}, a temporary folder in which it
+            # must leave a file of the target's name (tools that write a folder of outputs)
+            in_dir = any("{out_dir}" in a for argv in d["recipe"] for a in argv)
+            tmp = target.with_name(f".{target.stem}.{os.getpid()}.{threading.get_ident()}.tmp" + ("" if in_dir else target.suffix))
+            if in_dir:
+                tmp.mkdir()
             try:
                 for argv in d["recipe"]:
                     cmd = _expand(argv, tmp)
                     log(f"building {d['path']}: {' '.join(cmd)}")
                     subprocess.run(cmd, check=True)
-                os.replace(tmp, target)
-            except BaseException:
-                tmp.unlink(missing_ok=True)
-                raise
+                os.replace(tmp / target.name if in_dir else tmp, target)
+            finally:
+                if in_dir:
+                    for f in tmp.iterdir():
+                        f.unlink()
+                    tmp.rmdir()
+                else:
+                    tmp.unlink(missing_ok=True)
         sha = sha256_file(target)
         if sha != d["sha256"]:
             mismatches.append(f"{d['path']}: SHA-256 {sha} differs from the manifest's {d['sha256']}")

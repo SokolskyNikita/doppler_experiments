@@ -44,8 +44,9 @@ def main(argv=None):
         print(f"{len(doc['cases'])} cases valid")
     elif a.cmd == "build":
         bad = []
-        for cid in a.case or cases.case_ids():
-            bad += cases.build(cases.blind_case(cid), check_only=a.check)
+        # checking covers every case; building, only the runnable ones unless named
+        for cid in a.case or cases.case_ids(runnable_only=not a.check):
+            bad += cases.build(cases.latest_case(cid), check_only=a.check)
         if bad:
             sys.exit("\n".join(bad))
         print("every derived file matches its recorded hash")

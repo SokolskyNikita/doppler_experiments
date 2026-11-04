@@ -138,3 +138,11 @@ def test_a_ground_temperature_reaches_the_search_and_the_refinement(monkeypatch,
     monkeypatch.setattr(pipeline, "refine", spy("refine", pipeline.refine))
     _run(spec, [_traces(tmp_path)], tmp_path, c=346.5, temperature_c=25.6)
     assert all(seen[k]["temperature_c"] == 25.6 and seen[k]["c"] == 346.5 for k in ("search", "refine"))
+
+
+def test_the_cpa_table_folder_is_made_on_a_fresh_cache(monkeypatch, spec, tmp_path):
+    _detections(monkeypatch, [_event(1000, 5.0), _event(2000, 4.0)])
+    _search_returning(monkeypatch, DAY0 + 72000.0)
+    table = tmp_path / "fresh-cache" / "cpa" / "bench" / "x.npz"
+    _run(spec, [_traces(tmp_path)], tmp_path, cpa_cache=str(table))
+    assert table.parent.is_dir()

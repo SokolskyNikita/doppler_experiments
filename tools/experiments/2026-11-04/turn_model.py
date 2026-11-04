@@ -417,14 +417,15 @@ def seed(pid, rep):
 
 
 def unit_boot(key):
+    """One replicate of one pass in the identifiable form: A plus a moving-block replicate of the sub-5 s residuals."""
     pid, rep = key
     p = P()[pid]
     e = me.block_noise(p["fast"], len(p["t"]), p["dt"], np.random.default_rng(seed(pid, rep)))
     f = p["fA"] + e
     st = straight(p["t"], f)
-    r = fit(p["t"], f, st)
+    r = fit_q(p["t"], f, st)
     return dict(unit=f"boot:{pid}:{rep}", id=pid, rep=rep, seed=seed(pid, rep), straight_R=st["R"], straight_v=st["v"],
-                rmin=r["rmin"], R=r["R"], v=r["v"], sw_dps=r["sw_dps"], phi_deg=float(np.degrees(r["phi"])), s=r["s"], rss=r["rss"])
+                rmin=r["rmin"], R=r["R"], Q=r["Q"], w_dps=float(np.degrees(r["w"])), rss=r["rss"], straight_rss=st["rss"])
 
 
 UNITS = {"synth": unit_synth, "fit": unit_fit, "profile": unit_profile, "boot": unit_boot}
@@ -492,12 +493,11 @@ def merge(run, stage, units):
             b.setdefault(r["id"], []).append(r)
         out = []
         for pid, rs in sorted(b.items()):
-            m = np.array([[x["rmin"], x["v"], x["sw_dps"], x["phi_deg"]] for x in rs])
+            m = np.array([[x["rmin"], x["Q"], x["w_dps"], x["straight_R"]] for x in rs])
             sd = m.std(axis=0, ddof=1)
             cc = np.corrcoef(m.T) if np.all(sd > 0) else np.full((4, 4), np.nan)
-            out.append(dict(id=pid, n=len(rs), sd_rmin=sd[0], sd_v=sd[1], sd_sw_dps=sd[2], sd_phi_deg=sd[3],
-                            corr_sw_R=cc[2, 0], corr_sw_v=cc[2, 1], corr_phi_R=cc[3, 0], corr_phi_v=cc[3, 1],
-                            branch_flips=int(np.sum([x["s"] != rs[0]["s"] for x in rs]))))
+            out.append(dict(id=pid, n=len(rs), sd_rmin=sd[0], sd_Q=sd[1], sd_w_dps=sd[2], sd_straight_R=sd[3],
+                            corr_w_R=cc[2, 0], corr_w_Q=cc[2, 1], corr_Q_R=cc[1, 0]))
         write_csv(run / "boot_summary.csv", out)
 
 

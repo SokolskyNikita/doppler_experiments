@@ -16,15 +16,14 @@ pulled folder.
 
 | Job | Command (from the repo root) | Units | Merged output |
 |---|---|---|---|
-| Turn model, bootstrap (`turn-model-boot`) | `tools/experiments/2026-11-04/turn_model.py boot --replicates 200` | 40 passes × 200 replicates = 8,000 | `boot.csv`, `boot_summary.csv` (per pass: SDs of R, the turn rate and its partner parameter, their correlations with R and v) |
+| Turn model, bootstrap (`turn-model-boot`) | `tools/experiments/2026-11-04/turn_model.py boot --replicates 200` | 40 passes × 200 replicates = 8,000 | `boot.csv`, `boot_summary.csv` (per pass: SDs of R, Q and the turn rate, and their correlations) |
 | Alaska, all crossings (`model-error-alaska`) | `tools/experiments/2026-11-04/model_error_alaska.py --band narrow --band-factors 0.70 1.50` | 789 crossings (one per FR24-matched crossing) | `alaska.csv`; then `model_error_alaska_summary.py` on it |
 
 **Turn model, bootstrap.**
 - **One unit** is one replicate of one pass: curve A plus a moving-block replicate (2 s blocks) of that pass's sub-5 s
   residuals, refitted.
 - **Seeds.** Each replicate's seed is sha256("pass:replicate"), so a unit gives the same numbers on any box and in any shard.
-- **Status.** It waits on the model's revised parametrization (see the record's turn-model section): the curve depends only on
-  R, the turn rate and one combination K of speed, offset and sign. The unit layout and inputs don't change.
+- **Form.** It fits the identifiable form, r² = R² + Q·u²·sinc²(ωu/2π), so its SDs and correlations are of R, Q and the turn rate. The turn model didn't enter (see the record), so this job is the trade-off diagnosis only: how strongly the turn rate trades with R.
 - **Inputs** (`turn_model.py boot --inputs`):
   - `raw/audio/livermore/zenodo-23424278/final_results_40_cases.csv`;
   - `runs/2026-11-04-livermore-audit/passes.csv` and `sites.json`;
@@ -48,4 +47,4 @@ pulled folder.
 
 **Checked here.**
 - The Alaska driver ran 2 crossings as two shards plus a merge (`runs/2026-11-04-alaska-shards-smoke/`).
-- The turn model's synth stage ran as units (`runs/2026-11-04-turn-model-synth/`).
+- The turn model's synth, fit and profile stages ran here as units (`runs/2026-11-04-turn-model-{synth,fit,profile}/`). Two boot units ran as shard 1/20 of a one-replicate job (`runs/2026-11-04-turn-model-boot-smoke/`).

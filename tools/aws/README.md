@@ -86,13 +86,14 @@ excludes, and refuses to run while a recorder session (`2026MMDD-` then ha-pilot
 subtest, coexist or latency) sits under `derived/traces/`, unless `private/seed-allow.txt` names it: the recorder's
 output belongs under `private/`.
 
-**The owner's allow list.** The default is refuse. `$DOPPLERTRACK_DATA/private/fleet-allow.txt` lists, one per
-line, the private paths and case ids the owner has cleared for the fleet; only exactly those pass (a folder entry
-covers what is inside it, a case id covers that case's own files). `runs launch` ships the cleared files from the
-Mac and marks the job private: on the box its cache lives under `private/cache/` and no cache entry comes back to
-the shared cache, and `runs pull` brings its run folder to `$DOPPLERTRACK_DATA/private/runs/`. `runs seed` prints
-the cleared entries as "allowed by the owner" and uploads them. The exact home location still never goes into git,
-docs or records (the site-relative frame).
+**The owner's allow list.** The default is refuse. `$DOPPLERTRACK_DATA/private/fleet-allow.txt` lists the private
+files the owner has approved for the fleet, each by name and one exact path per line, added only after that
+approval; a case id there only permits that case's launch, and each of its files still needs its own line. A folder
+is never cleared (a listed one is refused, and nothing inside it passes unless listed itself). `runs launch` prints
+each allowed file, ships it from the Mac and marks the job private: on the box its run folder is
+`private/runs/<job>`, its cache `private/cache/`, and no cache entry comes back to the shared cache; `runs pull`
+brings the run folder to `$DOPPLERTRACK_DATA/private/runs/`. `runs seed` prints each allowed file and uploads only
+those. The exact home location still never goes into git, docs or records (the site-relative frame).
 
 ## Sizing
 

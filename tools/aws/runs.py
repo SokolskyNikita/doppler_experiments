@@ -92,20 +92,24 @@ def is_private(rel: str) -> bool:
 
 
 def fleet_allow() -> set[str]:
-    """What the owner has cleared for the fleet: private/fleet-allow.txt, one data-root path or case id per line.
-    A missing file clears nothing; the default stays refuse."""
+    """What the owner has cleared for the fleet, each approved by name: private/fleet-allow.txt, one exact file
+    path (relative to the data root) or case id per line. A missing file clears nothing; the default stays refuse."""
     return {e.strip("/") for e in listed("fleet-allow.txt")}
 
 
 def owner_allowed(rel: str) -> bool:
-    """rel is an entry of fleet-allow.txt, or inside a folder that is one."""
+    """rel is listed in fleet-allow.txt exactly, and is a file: a folder, or a path inside a listed one, is never
+    cleared (the owner approves each file by name; PM, 2026-11-04)."""
     rel = rel.strip("/")
-    return any(rel == e or rel.startswith(e + "/") for e in fleet_allow())
+    return rel in fleet_allow() and not (DATA_ROOT / rel).is_dir()
 
 
-def refuse_private(paths, what: str, cleared=()) -> None:
-    """Exits on a private path unless the owner allowed it, or it is a file of a case they cleared (`cleared`)."""
-    bad = [p for p in paths if is_private(p) and not owner_allowed(p) and p not in cleared]
+def refuse_private(paths, what: str) -> None:
+    """Exits on a private path unless the owner cleared that exact file."""
+    bad = [p for p in paths if is_private(p) and not owner_allowed(p)]
+    if bad and (DATA_ROOT / bad[0].strip("/")).is_dir():
+        sys.exit(f"{what} {bad[0]}: a private folder never goes as a whole; the owner clears each file by name in "
+                 "private/fleet-allow.txt, and each goes as its own --input")
     if bad:
         sys.exit(f"{what} {bad[0]}: private data (the owner's home recordings and what is derived from them) never "
                  "goes to the fleet or the bucket; it is processed on the Mac only")
@@ -292,19 +296,16 @@ def check_run_input(p: str) -> str:
     return "/".join(parts)
 
 
-def seed_run_inputs(s3, bucket: str, inputs: list[str], cleared=()) -> None:
+def seed_run_inputs(s3, bucket: str, inputs: list[str]) -> None:
     """Inputs under runs/ (small reference files from earlier runs) go up from here when the bucket lacks
     them or they changed; data/ inputs come from the seed."""
-    refuse_private(inputs, "input", cleared)
+    refuse_private(inputs, "input")
     for rel in inputs:
         if is_private(rel):          # owner-allowed (refuse_private let it through): goes up from here, like a run
             src = DATA_ROOT / rel
             if not src.exists():
                 sys.exit(f"--input {rel}: not in {DATA_ROOT}")
-            if src.is_dir():
-                aws_cli("s3", "sync", "--only-show-errors", str(src), f"s3://{bucket}/data/{rel}")
-            else:
-                aws_cli("s3", "cp", "--only-show-errors", str(src), f"s3://{bucket}/data/{rel}")
+            aws_cli("s3", "cp", "--only-show-errors", str(src), f"s3://{bucket}/data/{rel}")     # a file, by owner_allowed
             continue
         if rel.startswith("runs/"):
             src = DATA_ROOT / rel
@@ -362,17 +363,16 @@ def launch(a) -> str:
     a.input = a.input + [check_run_input(p) for p in getattr(a, "input_run", None) or []]
     inputs = case_inputs(a.case) + [p for p in a.input if p not in case_inputs(a.case)]
     inputs = list(dict.fromkeys(inputs))
-    cleared = case_inputs([c for c in a.case if c in fleet_allow()])      # a cleared case's own files
-    refuse_private(inputs, "input", cleared)
+    refuse_private(inputs, "input")      # a cleared case's files each need their own line too
     private_job = getattr(a, "private", False) or any(is_private(i) for i in inputs) or \
         any(cid in fleet_allow() for cid in a.case)
     if private_job:
-        print("allowed by the owner (private/fleet-allow.txt): " + ", ".join(
-            [i for i in inputs if is_private(i)] + [c for c in a.case if c in fleet_allow()]), flush=True)
+        for entry in [i for i in inputs if is_private(i)] + [c for c in a.case if c in fleet_allow()]:
+            print(f"allowed by the owner (private/fleet-allow.txt): {entry}", flush=True)
     for p in inputs:
         if is_run_path(p):
             check_run_input(p)
-    seed_run_inputs(s3, bucket, inputs, cleared)
+    seed_run_inputs(s3, bucket, inputs)
     caches = list(dict.fromkeys(a.cache or (["terrarium"] if a.case else [])))
     with tempfile.TemporaryDirectory() as tmp:
         code, code_from = code_for(a, prior, Path(tmp) / "code")
@@ -780,14 +780,16 @@ def seed(a) -> None:
     print("uploading: " + ", ".join(f"data/{x}/" for x in SEED_DATA) + ", " + ", ".join(f"cache/{k}/" for k in CACHE_KINDS))
     print("excluded: " + ", ".join(private_prefixes()) + ", any */private/*, derived/traces/ except YYYY-MM-DD day traces",
           flush=True)
-    allowed = sorted(e for e in fleet_allow() if (DATA_ROOT / e).exists())
-    print("allowed by the owner (private/fleet-allow.txt): " + (", ".join(allowed) or "nothing"), flush=True)
+    allowed = sorted(e for e in fleet_allow() if (DATA_ROOT / e).is_file())
+    skipped = sorted(e for e in fleet_allow() if (DATA_ROOT / e).is_dir())
     for e in allowed:
-        src = DATA_ROOT / e
-        if src.is_dir():
-            aws_cli("s3", "sync", "--only-show-errors", *dry, str(src), f"s3://{bucket}/data/{e}")
-        else:
-            aws_cli("s3", "cp", "--only-show-errors", *dry, str(src), f"s3://{bucket}/data/{e}")
+        print(f"allowed by the owner (private/fleet-allow.txt): {e}", flush=True)
+    if not allowed:
+        print("allowed by the owner (private/fleet-allow.txt): nothing", flush=True)
+    for e in skipped:
+        print(f"not uploaded: {e} is a folder; the owner clears files one by one", flush=True)
+    for e in allowed:
+        aws_cli("s3", "cp", "--only-show-errors", *dry, str(DATA_ROOT / e), f"s3://{bucket}/data/{e}")
     for sub in SEED_DATA:
         aws_cli("s3", "sync", "--only-show-errors", "--exclude", ".DS_Store", *seed_excludes(sub), *dry, str(DATA_ROOT / sub),
                 f"s3://{bucket}/data/{sub}")

@@ -182,3 +182,43 @@ Twelve units on 12 spot 8xlarge boxes, the unit shards relaunched after spot int
 - **The true cell isn't pruned; it doesn't score.** Its coarse Z is 7.36, rank 1,698 of 3,852, about the map's median and far below the margin (11.41). Even with ±25 % of tone freedom, the coarse stage doesn't see the true pair at the true cell.
 - **One kept cell, rank 13, is 2.0 km from the truth,** next to the true cell. The fine stage over the 20 kept cells will show whether the fine grid there reaches the truth.
 - **Its top cell's winner** is 14.1 km from the truth, at Z 14.80 with 3 windows matched.
+
+**The split: Oyster Bay's true cell in the fine stage** (`runs/2026-11-04-collective-truth/`, [collective_truth.py](../../tools/experiments/2026-11-04/collective_truth.py), 75a8e02). This is a diagnostic that reads the labels: the fine stage on the true coarse cell (1.0 km from the reference) and on the reference point, with the run's own whole-box fine nulls.
+- **The fine grid sees the true point; the coarse grid doesn't.**
+  - In the true cell the fine stage reaches Z 17.54.
+  - With the clock free it gives 16.21 at the reference point, 3.8 s from the reference clock.
+  - Both beat the whole coarse map's maximum (14.80) and the top kept cell's fine winner (14.80). The same cell's coarse Z was 7.36.
+  - So the coarse span's maximum (shift ±14 s at 2 s, f0 at 2 %, 60 samples) steps over a narrow peak. That is the coarse sampler's fault, Axelrad's warning, not the pruning's.
+- **Per window at the reference clock,** every CPA row at the reference point scored without the vote:
+
+| Window (heard CPA, coarse tone) | Best flight, f0, z | a1dfeb's z | ace391's z |
+|---|---|---|---|
+| 2,156 s, 112.9 Hz | a1dfeb, 112.9 Hz, 9.67 | 9.67 | −5.99 |
+| 3,068 s, 140.1 Hz | a1dfeb, 104.9 Hz, 2.22 | 2.22 | 1.97 |
+| 790 s, 92.3 Hz | a63e21, 94.6 Hz, 2.43 | −5.13 | −5.13 |
+| 210 s, 72.5 Hz | a0ddc4, 85.0 Hz, 0.82 | −2.80 | −2.80 |
+| 3,400 s, 73.1 Hz | a1cecb, 84.9 Hz, 2.91 | −4.07 | −0.48 |
+| 1,409 s, 83.3 Hz | aa61d2, 84.2 Hz, 4.62 | −7.65 | −7.65 |
+| 693 s, 105.8 Hz | a63e21, 92.9 Hz, 2.15 | −4.61 | −4.61 |
+| 359 s, 105.7 Hz | a0ddc4, 84.4 Hz, 1.10 | −4.99 | −4.99 |
+| 3,189 s, 68.1 Hz | a1cecb, 83.6 Hz, 0.43 | −2.99 | −0.70 |
+| 502 s, 178.8 Hz | a1cecb, 173.5 Hz, 1.30 | −11.50 | −11.50 |
+
+- **ace391's window is the second, smaller fault.** Its window (3,068 s) gives ace391 only z 1.97, below a1dfeb's tail at 2.22 in the same window. The find test found ace391's line there at score 12.93 under brightness, so the window, or its ±25 % null, must be checked against that.
+  - a1dfeb carries the true point at z 9.67.
+  - Other flights explain several windows at the true point too: aa61d2 at 4.62 in the 1,409 s window, for one.
+
+**The second design's coarse stage on the eight cases** (`runs/2026-11-04-collective-coarse-v2-merge/`, 91fb1c1). This is each case's cell-0 fine winner; the other kept cells are the fine stage's.
+
+| Case | True cell's coarse rank (of cells with Z > 0) | Within the margin | Kept | Cell 0's winner from the truth | True flights in cell 0 |
+|---|---|---|---|---|---|
+| eagle-cam-clip-18000s | **2** of 4,073 (Z 9.98 against the maximum 10.87) | yes | 9 | **0.5 km**, clock 2.5 s off | both (a2baea z 6.05, a336e4 z 2.20) |
+| eagle-cam-midnight | 396 of 4,194 | no | 20 | 3.7 km | – |
+| oyster-bay | 1,698 of 3,852 | no | 20 | 14.1 km | neither |
+| oyster-bay-hp150-aac32k | 1,371 of 3,850 | no | 20 | 57.7 km | a1dfeb only (z 8.64) |
+| oyster-bay-sources-removed (−) | 3,473 of 3,852 | no | 20 | (the same 14.1 km point as oyster-bay) | – |
+| xenocanto-xc990819 (−) | 71 of 3,716 | no | 19 | – | – |
+| north150, wsw150 (−) | the true point is outside the box | – | 19, 20 | – | – |
+
+- **Against the expectation.** I expected the ±25 % sweep to lower the eagle cam's true z (to about 3.5 and 1.3). It raised them instead, to 6.05 and 2.20, against 4.95 and 1.80 at ±10 %. The eagle cam's true cell ranks second, so the coarse sampler isn't what loses Oyster Bay there.
+- **The fine stage runs on every kept cell.** Oyster Bay's 19 other cells run as `2026-11-04-collective-fine-v2-s*of19` (75a8e02), the other cases' 120 as `…-s*of20` (80599d3). The merge takes each case's best cell over both stages.

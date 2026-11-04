@@ -6,7 +6,8 @@
         a spectrogram .npz (dopplertrack spectrogram output);
         an audio file (decoded from T0 with ffmpeg);
         ZIP:GLOB, a zip of AudioMoth files named YYYYMMDD_HHMMSS.wav (Eclipse Soundscapes), with --t0-utc
-        giving the UTC of recording second 0. Files are placed by their names; gaps between them stay grey.
+        giving the UTC of recording second 0. Files are placed by their names; files that abut (within 0.5 s)
+        are joined before the STFT, and holes between the rest stay grey.
       Writes sheet.json beside the images: the source, its SHA-256, the span and the drawing parameters.
   label_sheet.py overlay SOURCE LABELS TRACES OUT_DIR --site LAT LON ELEV --t0-utc ISO [same options]
       Layer 2, after the blind pass: the same sheets with every ADS-B pass within --range m drawn as the curve
@@ -95,7 +96,7 @@ def load(source: str, span, band, t0_utc: str | None) -> tuple[Spectrogram, dict
         if t0_utc is None:
             sys.exit("a zip source needs --t0-utc")
         z = zipfile.ZipFile(zpath)
-        rows, freqs = [], None
+        rows, runs, freqs = [], [], None
         for info in sorted(z.infolist(), key=lambda i: i.filename):
             name = Path(info.filename).name
             m = re.match(r"(\d{8}_\d{6})\.wav$", name, re.I)
@@ -109,6 +110,11 @@ def load(source: str, span, band, t0_utc: str | None) -> tuple[Spectrogram, dict
             x = np.frombuffer(raw, np.float32)
             if start + len(x) / SR < span[0]:
                 continue
+            if runs and abs(start - (runs[-1][0] + len(runs[-1][1]) / SR)) < 0.5:
+                runs[-1] = (runs[-1][0], np.concatenate([runs[-1][1], x]))     # abutting files: one run
+            else:
+                runs.append((start, x))
+        for start, x in runs:
             t, freqs, L = db_frames(x, start, band)
             rows.append((t, L))
         S = np.full((len(freqs), len(grid)), np.nan, np.float32)

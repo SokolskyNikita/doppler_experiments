@@ -19,7 +19,7 @@ Each sheet covers 10 min in 2 min strips. Clips were chosen by fixed rules befor
 |---|---|---|
 | Oyster Bay (development) | 0–1200 s | the recording's first 20 min |
 | Eagle cam (development) | 3600–4800 s | the second hour's first 20 min |
-| ESID 740, 2024-04-07 | 17:00–17:20 UTC (local noon) | the Eclipse site decision 2 proposes for calibration, not evaluation. Read straight from the zip; the 5 s gap each minute shows grey |
+| ESID 740, 2024-04-07 | 17:00–17:20 UTC (local noon) | the Eclipse site decision 2 proposes for calibration, not evaluation. Read straight from the zip. The grey band at each minute on its sheets is the STFT losing about 1 s at each file's edges: the files are 60 s and abut (SDE-C's header check), not 55 s with 5 s gaps as MANIFEST then said. The tool now joins abutting files |
 
 I labelled all three clips by looking at the sheets, as the PM asked. These are first-pass labels for the user to spot-check, not checked ones. Each window records its class, start and end, the lines seen (entry and exit frequency) and the number of harmonics, plus who labelled it and whether it was blind. Windows tile the span, so "absent" is explicit. Layer 2 used the clocks from the known-point fits (Oyster Bay 2026-09-08 20:17:30.3 UTC, eagle cam 2024-12-28 14:21:08.5 UTC, good to about a second) and the AudioMoth file names for ESID 740.
 

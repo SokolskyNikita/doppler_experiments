@@ -142,6 +142,49 @@ decision: which slant-range bound PLAN items 2 and 4 quote, and whether "provisi
 | measure | one geometry × amplitude per box (`--shards 9`), three seeds each | `cov_measure.py "$RUN" measure [CELL ...]` |
 | bound | — | `cov_measure.py "$RUN" bound`, over the collected units, with job 3's Livermore inputs |
 
+## SDE-C handoff (2026-11-04, end of day)
+
+The branch is `claude/sde-c-warp`; everything below is committed in its tip. The records are in `docs/experiments/`.
+Boxes are launched with `tools/aws/runs launch` and pulled with `tools/aws/runs pull JOB`. Collecting means copying
+the units with `python3 tools/experiments/2026-11-04/copy_new.py SRC_RUN DST_RUN <dir>`, never `cp -n`.
+
+**Item 6, the detector** ([record so far](../../../docs/experiments/2026-11-04-detector-threshold.md), proposal
+`docs/proposals/2026-11-04-detector-threshold.md`):
+
+1. **Running:** the S₂ retune on 2026-11-04-detector-roc-s2-s7of9, -s8of9 and -s9of9 (settings S2B0, S2B1, S2B2,
+   one per box), about 4× slower than the others. When they're done:
+   - pull all three;
+   - copy their `detector_roc/` into a new run folder beside the six finished settings (S₀: detector-roc-s{1,2,3}of6;
+     S₁: detector-roc-s1-s{4,5,6}of6), or into 2026-11-04-detector-roc-collect;
+   - run `detector_roc.py RUN gate` on a box, with `--input-run runs/<that folder>`.
+
+   The gate prints each setting's thresholds, the unit-spread prediction and detection by amplitude; it passes S₂
+   only if every threshold is within ×1.5 of the prediction and detection is no lower than S₀ in the same band.
+2. **Then Tier 1,** with `--shards 11` on 4xlarge boxes, for every setting past the gate plus S₀/B0, S₀/B1 and the
+   300–900 Hz half. **Not written yet:** it needs a driver that
+   - builds the 40–1000 Hz spectrograms for B1 and B2 on the box from the recipes (as `whiten_frequency.py build`
+     does);
+   - patches `bench.tier1`'s detect band and, for S₂, rescoring;
+   - sets `DOPPLERTRACK_CACHE` to a scratch folder (linking `terrarium/`), so no detection reaches the shared cache
+     before the decision.
+3. **Judge on item 6's criterion:**
+   - ≤ 1 false alarm per countable hour on the pooled background;
+   - Tier 1's 2 matched windows kept;
+   - every development event's window in its span's top 10;
+   - the record states that S₀ can't meet it (the flyovers score 4.28 and 2.46 against a 1/h threshold near 6).
+
+**Seattle gallery** (the owner's, private): `$DOPPLERTRACK_DATA/private/runs/2026-11-04-seattle-gallery/`, holding
+`index.html`, `seattle_gallery.py` and `run.json`. Nothing of it is in git. Rebuild on the Mac only, from the repo
+root, with the command in its `run.json`:
+`DOPPLERTRACK_JOBS=2 uv run --frozen python <that folder>/seattle_gallery.py <that folder> <raw session>
+<private rec.npz> <private traces> <site.json>`.
+After a rebuild, rerun the privacy check: no ICAO, registration or site coordinate in the page text.
+
+**Half-built:** item 6's Tier 1 driver (above). The frame-covariance and window records are done.
+
+**Next step:** finish item 6 (gate S₂, Tier 1, the record's outcome), then propose the next drawing-board step on
+the detector's statistic if S₂ also fails.
+
 ## SDE-B
 
 # SDE-B's benchmark jobs for the fleet (2026-11-04)
@@ -396,6 +439,58 @@ Stage B's A1/A3 must run the first run's hypotheses (`45d0bd8`), not the retune'
 - B1/B2's `event_hypotheses` call, kept as it was at `45d0bd8`.
 
 The other jobs launch from `dev`.
+
+### Handoff (2026-11-04, end of day)
+
+**On the fleet:** nothing of SDE-A's is running. Every job above is merged and recorded:
+[comparable-score](../../../docs/experiments/2026-11-04-comparable-score.md),
+[hypotheses](../../../docs/experiments/2026-11-04-hypotheses.md),
+[timing-convention](../../../docs/experiments/2026-11-04-timing-convention.md),
+[parallel-cpa](../../../docs/experiments/2026-11-04-parallel-cpa.md),
+[verdict-null](../../../docs/experiments/2026-11-04-verdict-null.md) and
+[coherent-duration](../../../docs/experiments/2026-11-04-coherent-duration.md).
+
+**Waiting on another session's jobs:** SDE-D's collective-find null, jobs `2026-11-04-collective-null-s<k>of24`.
+- **The draws:** SDE-D's, at `661c10f`, one unit "`<case>--null--<day>`" per case and day. The cases are oyster-bay,
+  oyster-bay-moved-wsw150, oyster-bay-moved-north150 and eagle-cam-clip-18000s × 50 days
+  (`verdict_null_days.json`), plus xenocanto-xc990819 × 45 (`verdict_null_days-essex.json`; five days have no
+  adsb.lol release).
+- **The own days:** SDE-D's, at `40454ae`, the same search. SDE-D sends them as `OWN.json` (case → max_S, second_S,
+  lat, lon, clock_audio_minus_utc_s).
+- **To judge:**
+  1. `runs pull` each shard.
+  2. Run `uv run python tools/experiments/2026-11-04/collective_null.py OUT_RUN OWN.json 40454ae 661c10f <shard
+     run folders>`, with OUT_RUN made by `tools/data/new_run.py collective-null-judge`.
+  - It writes each case's schema v3 `verdict.null` block and verdict, hashed in `verdicts.json` before labels are
+    read, and then `reveal.json`.
+  - oyster-bay-sources-removed takes oyster-bay's draws (`ALIASES`).
+- **The criterion, fixed before any draw:**
+  - The estimator is a Gumbel at P_FA = 0.01, unless its KS exceeds 1.36/√n; then the empirical 1 % point.
+  - "Located" iff the own day's max_S > γ and its second_S ≤ γ.
+  - The positives (oyster-bay, eagle-cam-clip-18000s) must be located within 2 km of the reference.
+  - The negatives (wsw150, north150, sources-removed, xc990819) must not be.
+- **Where the result goes:** SDE-D's collective-find record, as its null section. The verdict decides whether
+  anything the pipeline makes can be called "located" against a realistic null: the saved-fit arm here found that
+  per-pair Z can't.
+
+**Half-built, waiting:** [the coherent-duration successor](../../../docs/proposals/2026-11-04-coherent-duration-2.md),
+which the PM approved to run after the collective verdict.
+- **First step:** write the white-noise Monte Carlo that sets gate 1's target. Its specification is in the proposal:
+  the same detectors, pitch grid and empirical 1/200 threshold, and P_D = 0.8. It doesn't exist yet. Hash it before
+  the synthetic gate runs.
+- **Then:** rerun the gates with `coherent_duration.py --stage gates`, with `LEVELS` extended to +12 dB and the judge's
+  gate-1 target read from the Monte Carlo. Reuse the bands in `runs/2026-11-04-coherent-duration-bands/`.
+- **If both gates pass:** the test, `--stage test`. The Livermore traffic for set A is in
+  `derived/traces/<day>/livermore_margin12.npz`.
+
+**Data made today:**
+- 200 + 199 null-day cuts, 45 Essex days and 6 Livermore days, all in `derived/traces/`, the bucket and the data root's
+  MANIFEST.
+- `raw/aux/opensky/doc8643AircraftTypes.csv`, because boxes can't reach OpenSky.
+
+**The next step I'd take:** judge SDE-D's draws the moment they land. If the collective Z locates the positives
+against the null, write `locate`'s v3 verdict from it (SDE-B owns the schema). If it doesn't, Phase 3's locator has
+no statistic yet that beats other days' traffic, and that is the drawing-board finding to report.
 
 ## SDE-E
 

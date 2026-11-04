@@ -1,4 +1,4 @@
-"""uv run python -m bench {validate,build,run,merge,inputs,tier1,report,compare}"""
+"""uv run python -m bench {validate,build,run,merge,inputs,tier1,report,prepare,compare}"""
 from __future__ import annotations
 
 import argparse
@@ -66,6 +66,11 @@ def main(argv=None):
     rp.add_argument("run_dir", type=Path)
     rp.add_argument("--out", type=Path, help="the folder for the pages (default: a new runs/<date>-report-<RUN>/)")
     rp.add_argument("case", nargs="*", help="case ids (default: every case folder with a result.json)")
+    pp = sub.add_parser("prepare", help="build a case's CPA table ahead of any search (blocked sets too; no label, "
+                        "audio or event is read); a JSON line per case, also in --out")
+    pp.add_argument("case", nargs="+")
+    pp.add_argument("--weather", action="store_true", help="the table for runs that apply the case's station temperature")
+    pp.add_argument("--out", type=Path, help="write the cases' summaries here as JSON")
     c = sub.add_parser("compare", help="print the difference between two benchmark runs")
     c.add_argument("a", type=Path); c.add_argument("b", type=Path)
     a = ap.parse_args(argv)
@@ -122,6 +127,12 @@ def main(argv=None):
     elif a.cmd == "report":
         from .report import report_run
         print(report_run(a.run_dir, a.case or None, out_dir=a.out))
+    elif a.cmd == "prepare":
+        import json
+        from .prepare import prepare_case
+        done = [prepare_case(c, use_weather=a.weather) for c in a.case]
+        if a.out:
+            a.out.write_text(json.dumps(done, indent=1) + "\n")
     elif a.cmd == "compare":
         print(runner.compare_runs(a.a, a.b))
 

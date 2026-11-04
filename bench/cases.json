@@ -1481,6 +1481,224 @@
    "version_note": "v4 moves every profile to the margin-padded cut (PM, 2026-11-04); the legacy cut of v3 had no margin, so it didn't cover the search box plus the range"
   },
   {
+   "id": "eagle-cam-clip-18000s",
+   "version": 5,
+   "group": "eagle-cam",
+   "set": "development",
+   "expected_outcome": "located",
+   "description": "SWFL Eagle Cam #3, 1.5 h clip from 18,000 s holding the two search events (detect ranks 5 and 13 at 20,247 and 20,585 s; windows 20,117-20,697 s, so 2,117 s and 2,703 s of margin)",
+   "source": {
+    "identifiers": {
+     "youtube": "zs2o5Rhlp5w",
+     "url": "https://youtu.be/zs2o5Rhlp5w",
+     "nest": "LE-026B"
+    },
+    "acquisition": "yt-dlp download of the archived live stream's Opus track (format 251), see raw/audio/youtube/swfl_2024-12-28.ytdlp.log and .info.json; local only",
+    "raw": [
+     {
+      "path": "raw/audio/youtube/swfl_2024-12-28.webm",
+      "sha256": "58dd4c1259598c85579d1aba1311d18651f70501c2df822104cacb54b4a0ddc0"
+     },
+     {
+      "path": "raw/audio/youtube/swfl_2024-12-28.info.json",
+      "sha256": "532a1ce8d2e1bedbcb6f137616438d5d36a2fda1c06c75bef8724c81165f5e48"
+     },
+     {
+      "path": "raw/audio/youtube/swfl_2024-12-28.ytdlp.log",
+      "sha256": "ba602fa88c1d1a5a169dc4ea7bbe8c61d183479ede5d52b00579e8ce4fd541c8"
+     }
+    ]
+   },
+   "start_time": {
+    "source": "YouTube info.json release_timestamp (1735395676, whole seconds): the live broadcast's start. How the archived VOD's first sample relates to it is undocumented, so the uncertainty is a judgement, not a measurement. The clip starts 18,000 s later",
+    "utc": "2024-12-28T19:21:16Z",
+    "uncertainty_s": 60
+   },
+   "reference_clock_utc": {
+    "audio_zero_utc_unix_s": 1735413673.29,
+    "audio_zero_utc": "2024-12-28T19:21:13.29Z",
+    "basis": "derived from the development search on the full recording: t_heard1 of the committed top candidate (a2baea at 1735415920.772) minus event 1's heard CPA (20,247.487 s) minus its shift (0.0 s), plus the 18,000 s clip offset. Depends on the matched flights; not an independent source"
+   },
+   "audio": {
+    "path": "derived/swfl_clip/swfl_18000s_5400s.wav",
+    "of": "raw/audio/youtube/swfl_2024-12-28.webm",
+    "clip_offset_s": 18000.0,
+    "clip_offset_samples": 864000000,
+    "sample_rate_hz": 48000,
+    "duration_s": 5400.0,
+    "duration_samples": 259200000
+   },
+   "derived": [
+    {
+     "path": "derived/swfl_clip/swfl_18000s_5400s.wav",
+     "sha256": "4375f8af692956eb4aa75cc413ec30e475328aa75c028c4e286daa82dbe41710",
+     "recipe": [
+      [
+       "ffmpeg",
+       "-nostdin",
+       "-v",
+       "error",
+       "-i",
+       "{data}/raw/audio/youtube/swfl_2024-12-28.webm",
+       "-af",
+       "atrim=start_sample=864000000:end_sample=1123200000,asetpts=PTS-STARTPTS",
+       "-c:a",
+       "pcm_s16le",
+       "-f",
+       "wav",
+       "{out}"
+      ]
+     ],
+     "note": "sample-exact cut of the decoded 48 kHz stereo stream (atrim counts samples after decoding, so the offset holds exactly), written as 16-bit WAV"
+    },
+    {
+     "path": "derived/swfl_clip/rec.npz",
+     "sha256": "5306a1795200252b0c84beae87f6d772f243849fe8cbd501e5a53cfe95ee1b70",
+     "recipe": [
+      [
+       "dopplertrack",
+       "spectrogram",
+       "{data}/derived/swfl_clip/swfl_18000s_5400s.wav",
+       "{out}"
+      ]
+     ],
+     "note": "spectrogram of the clip with the CLI defaults; its whitening sees only the clip, so it differs from the full recording's near the clip edges"
+    },
+    {
+     "path": "derived/traces/2024-12-28/swfl_margin12_v2.npz",
+     "sha256": "5da069103c6252e64f9e56b2fa3d82f78cdc1f8d88f3e43c8240f1621c7ad766",
+     "recipe": [
+      [
+       "python",
+       "-I",
+       "{repo}/tools/data/extract_boxes.py",
+       "--max-range",
+       "12000",
+       "{data}/raw/adsb/2024-12-28",
+       "{out_dir}",
+       "swfl_margin12_v2=26.1,27.3,-82.5,-81.2"
+      ]
+     ],
+     "note": "cut 2026-11-04 with extraction metadata and the 12 km margin from the search box (runs/2026-11-04-recut-oyster-essex-v2/)"
+    },
+    {
+     "path": "derived/swfl/rec.npz",
+     "sha256": "d9081beb6f641866010dd26ed6e0380848480008dcfb82b08209ffc6fe7b4888",
+     "recipe": [
+      [
+       "dopplertrack",
+       "spectrogram",
+       "{data}/raw/audio/youtube/swfl_2024-12-28.webm",
+       "{out}"
+      ]
+     ],
+     "note": "spectrogram of the full 12 h stream with the CLI defaults"
+    },
+    {
+     "path": "derived/swfl/detected_top40_15C.json",
+     "sha256": "21b4669523b2a5abbd298515c80149da5404b06c40ee5bd28c1ad4d3a93c66e5",
+     "recipe": [
+      [
+       "dopplertrack",
+       "detect",
+       "{data}/derived/swfl/rec.npz",
+       "--band",
+       "60",
+       "300",
+       "--harmonics",
+       "1",
+       "--top",
+       "40",
+       "--out",
+       "{out}"
+      ]
+     ],
+     "note": "detect on the full recording at 15 C, as the committed events were made (SDE-D's control, docs/experiments/2026-11-04-case-weather.md); made 2026-11-04 on a fleet box, runs/2026-11-04-eagle-cam-detect-full/. Its ranks 5 and 12 are the committed 5 and 13, v within 0.05 % and d within 0.07 %"
+    }
+   ],
+   "spectrogram": "derived/swfl_clip/rec.npz",
+   "flight_data": {
+    "date": "2024-12-28",
+    "pod": "planes-readsb-prod-0",
+    "archive_assets": [
+     {
+      "path": "raw/adsb/2024-12-28/v2024.12.28-planes-readsb-prod-0.tar",
+      "sha256": "dda2169e0075ee00c833b5a49fbc831cb75c71d3f5697a1072a917bda2dee8f4"
+     }
+    ],
+    "traces": "derived/traces/2024-12-28/swfl_margin12_v2.npz",
+    "extraction_box": [
+     25.991476,
+     27.408524,
+     -82.622127,
+     -81.077873
+    ],
+    "extraction_note": "cut with extraction_boxes.py --max-range 12000 from the search box, with extraction metadata: the envelope is measured, and locate and the runner read it from the file"
+   },
+   "search": {
+    "bbox": [
+     26.1,
+     27.3,
+     -82.5,
+     -81.2
+    ],
+    "harmonics": [
+     1,
+     1
+    ],
+    "spacing_m": 200,
+    "tol_s": 6.0,
+    "v_tol": 0.35,
+    "d_tol": [
+     0.4,
+     2.5
+    ],
+    "silence_d_m": 6000.0,
+    "max_range_m": 12000.0,
+    "dem": true,
+    "cpa_cache": "cpa/bench/eagle-cam_200m_dem_26.1C_cut2.npz"
+   },
+   "refine": {
+    "rank": 1,
+    "spacing_m": 50.0,
+    "half_m": 600.0
+   },
+   "events": {
+    "mode": "saved_fits",
+    "files": [
+     "derived/swfl/detected_top40_15C.json"
+    ],
+    "pick": [
+     5,
+     12
+    ],
+    "time_offset_s": -18000.0
+   },
+   "labels": {
+    "reference": {
+     "lat": 26.702359,
+     "lon": -81.847766,
+     "source": "nest LE-026B coordinates"
+    },
+    "true_pair": [
+     "a2baea",
+     "a336e4"
+    ],
+    "checked_by": "upstream README and committed tables (docs/results/swfl_search_best_per_pair.csv). Not a blind label",
+    "blind": false
+   },
+   "built_with": "894b27c",
+   "role": "seed case (PLAN 5.1)",
+   "weather": {
+    "temperature_c": 26.1,
+    "source": "IEM ASOS (METAR T group), raw/aux/metar/KFMY_2024-12-27.csv",
+    "station": "KFMY FORT MYERS/PAGE FLD",
+    "station_distance_km": 13.1,
+    "observed_utc": "2024-12-28T19:53Z"
+   },
+   "version_note": "v5 takes its two events from a file the case can rebuild: detect on the full 12 h recording (ranks 5 and 12), which reproduces the committed docs/results/swfl_detected.json (ranks 5 and 13) to 0.1 %; detect on the clip doesn't"
+  },
+  {
    "id": "oyster-bay-moved-wsw150",
    "version": 1,
    "group": "oyster-bay",
@@ -3642,6 +3860,189 @@
    }
   },
   {
+   "id": "eclipse-esid375",
+   "version": 3,
+   "group": "eclipse-esid375",
+   "set": "evaluation",
+   "expected_outcome": "located",
+   "description": "Eclipse Soundscapes ESID 375: two continuous 12.4 h WAVs with a 2 s hole between them, from 01:39:34 UTC on 2024-04-07, quiet airspace (6 prop passes within 12 km) (gaps: docs/experiments/2026-11-03-gap-aware-spectrogram.md)",
+   "runnable": {
+    "blocked": "evaluation cases run only at milestones (PLAN 5.4 tier E)"
+   },
+   "source": {
+    "identifiers": {
+     "esid": 375,
+     "zenodo": "21708608",
+     "url": "https://zenodo.org/records/21708608"
+    },
+    "acquisition": "Zenodo day zip for 2024-04-07, verified against the record's MD5 (data root MANIFEST.md); CC BY 4.0",
+    "raw": [
+     {
+      "path": "raw/audio/eclipse/ESID_375/ESID_375_2024_04_07.zip",
+      "sha256": "4024edc4f01da14a11cd3dc97c5530bc9164cadf5a9611cab62c8b475a30556a"
+     },
+     {
+      "path": "raw/audio/eclipse/ESID_375/README.md",
+      "sha256": "9a6de81c10c469387051d4648db4197f09cdb35c56623a88c82731c472a41ef3"
+     },
+     {
+      "path": "raw/audio/eclipse/ESID_375/file_list.csv",
+      "sha256": "f5df9fb4fbaa48c117ebd4a4890f134cfed3ac6371adb6928389e3a9e945fe0b"
+     },
+     {
+      "path": "raw/audio/eclipse/ESID_375/total_eclipse_data.csv",
+      "sha256": "07be401ad725b76a16258d6d3265fbdf0fd41bf4ae288b4f728a988f5ec5a002"
+     }
+    ]
+   },
+   "start_time": {
+    "source": "AudioMoth clock set by the AudioMoth time chime (site README and total_eclipse_data.csv); the WAV file name gives the start in UTC to the second. The \u00b110 s is the chime's one second plus an unmeasured drift budget of a few seconds (about 20 ppm over the 2-3 days since the site's first deployment file), rounded up; it is derived from that reasoning, not measured",
+    "utc": "2024-04-07T01:39:34Z",
+    "uncertainty_s": 10,
+    "first_file": "ESID_375_2024_04_07/20240407_013934.WAV"
+   },
+   "flight_data": {
+    "date": "2024-04-07",
+    "pod": "planes-readsb-prod-0",
+    "archive_assets": [
+     {
+      "path": "raw/adsb/2024-04-07/v2024.04.07-planes-readsb-prod-0.tar",
+      "sha256": "7237b5baa243842c38dfedd4aec8b128b04c02a542eaf1a3cc740c2ba38c2e74"
+     },
+     {
+      "path": "raw/adsb/2024-04-08/v2024.04.08-planes-readsb-prod-0.tar.aa",
+      "sha256": "f57a7ee4d6aaed578bfaabb4bf7fb44defbd8a24355348320454d1fc062c75e1"
+     },
+     {
+      "path": "raw/adsb/2024-04-08/v2024.04.08-planes-readsb-prod-0.tar.ab",
+      "sha256": "13cdd36c33803b43248bebf2d18d8912222dd6e6021ebb6ea2079c7cd291b511"
+     }
+    ],
+    "traces": [
+     "derived/traces/2024-04-07/esid375_margin12_v2.npz",
+     "derived/traces/2024-04-08/esid375_margin12.npz"
+    ],
+    "extraction_box": [
+     [
+      40.225,
+      41.342,
+      -85.038,
+      -82.968
+     ],
+     [
+      40.225,
+      41.342,
+      -85.038,
+      -82.968
+     ]
+    ],
+    "extraction_note": "both days cut to the same envelope with tools/data/extract_boxes.py, each carrying its measured extraction metadata; the runner joins them across midnight (adsb.join_days). The legacy 2024-04-07 cut (esid<n>_margin12.npz, no metadata) is no longer used"
+   },
+   "labels": {
+    "reference": {
+     "lat": 40.7831545,
+     "lon": -84.0028968,
+     "source": "Eclipse Soundscapes site coordinates (total_eclipse_data.csv)"
+    },
+    "true_pair": null,
+    "checked_by": "not yet labelled; site coordinates as published",
+    "blind": true
+   },
+   "built_with": "b74da92",
+   "search": {
+    "bbox": [
+     40.335,
+     41.232,
+     -84.893,
+     -83.113
+    ],
+    "note": "padded_bbox(bbox, 12 km) lies inside the 2024-04-08 cut's measured coverage_bbox",
+    "harmonics": [
+     1,
+     1
+    ],
+    "spacing_m": 1000,
+    "tol_s": 6.0,
+    "v_tol": 0.35,
+    "d_tol": [
+     0.4,
+     2.5
+    ],
+    "silence_d_m": 6000.0,
+    "max_range_m": 12000.0,
+    "dem": true,
+    "cpa_cache": "cpa/bench/eclipse-esid375_1000m_dem.npz"
+   },
+   "derived": [
+    {
+     "path": "derived/traces/2024-04-07/esid375_margin12_v2.npz",
+     "sha256": "8a96b6fca9b641a37145ded25e622cb486046dd3f7c15f83010cbaaaa4d4c592",
+     "recipe": [
+      [
+       "python",
+       "-I",
+       "{repo}/tools/data/extract_boxes.py",
+       "{data}/raw/adsb/2024-04-07",
+       "{out_dir}",
+       "esid375_margin12_v2=40.225,41.342,-85.038,-82.968"
+      ]
+     ],
+     "note": "re-cut 2026-11-04 with extraction metadata (runs/2026-11-04-recut-eclipse-2024-04-07/)"
+    },
+    {
+     "path": "derived/traces/2024-04-08/esid375_margin12.npz",
+     "sha256": "8b98ddba19ec0c3bcaffe496f4a70c6a77be00510602735938debba335a8ef79",
+     "recipe": [
+      [
+       "python",
+       "-I",
+       "{repo}/tools/data/extract_boxes.py",
+       "{data}/raw/adsb/2024-04-08",
+       "{out_dir}",
+       "esid375_margin12=40.225,41.342,-85.038,-82.968"
+      ]
+     ],
+     "note": "cut 2026-11-04 by SDE-D with extraction metadata"
+    },
+    {
+     "path": "derived/eclipse/ESID_375/rec_full.npz",
+     "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+     "recipe": [
+      [
+       "python",
+       "-I",
+       "{repo}/tools/data/eclipse_spectrogram.py",
+       "{data}/raw/audio/eclipse/ESID_375/ESID_375_2024_04_07.zip",
+       "{out}"
+      ]
+     ],
+     "note": "the whole day zip's gap-aware spectrogram at the CLI defaults (0.25 s hop, 40-450 Hz), the holes between files marked invalid; built on a fleet box (evaluation prep, 2026-11-04)"
+    }
+   ],
+   "weather": {
+    "temperature_c": 8.9,
+    "source": "IEM ASOS (METAR T group), raw/aux/metar/KAOH_2024-04-06.csv",
+    "station": "KAOH LIMA",
+    "station_distance_km": 8.7,
+    "observed_utc": "2024-04-07T13:53Z",
+    "aircraft_height_m": null
+   },
+   "spectrogram": "derived/eclipse/ESID_375/rec_full.npz",
+   "refine": {
+    "rank": 1,
+    "spacing_m": 50.0,
+    "half_m": 600.0
+   },
+   "events": {
+    "mode": "detect"
+   },
+   "profiles": [
+    "locate",
+    "raw-audio"
+   ],
+   "version_note": "v3 prepares the case for evaluation without reading its labels or searching it (PM, 2026-11-04; decision 2, sets written before any search): the whole recording's spectrogram, the search block at a 1 km grid with its CPA table name (built ahead, 15 C, weather off by default), refine settings, and detect-mode events. Still blocked: evaluation cases run only at milestones"
+  },
+  {
    "id": "eclipse-esid710",
    "version": 1,
    "group": "eclipse-esid710",
@@ -3920,6 +4321,189 @@
     "observed_utc": "2024-04-07T11:54Z",
     "aircraft_height_m": null
    }
+  },
+  {
+   "id": "eclipse-esid710",
+   "version": 3,
+   "group": "eclipse-esid710",
+   "set": "evaluation",
+   "expected_outcome": "located",
+   "description": "Eclipse Soundscapes ESID 710: 1,437 one-minute files that abut except at two missing-file holes, from 00:00:06 UTC on 2024-04-07, moderate traffic near Peoria (19 prop passes within 12 km) (gaps: docs/experiments/2026-11-03-gap-aware-spectrogram.md)",
+   "runnable": {
+    "blocked": "has missing-file holes of about 2.5 min (two per day) and needs the gap-aware spectrogram, on dev since 7a54955; the case entry still has to point its audio at it; evaluation cases run only at milestones (PLAN 5.4 tier E)"
+   },
+   "source": {
+    "identifiers": {
+     "esid": 710,
+     "zenodo": "21722091",
+     "url": "https://zenodo.org/records/21722091"
+    },
+    "acquisition": "Zenodo day zip for 2024-04-07, verified against the record's MD5 (data root MANIFEST.md); CC BY 4.0",
+    "raw": [
+     {
+      "path": "raw/audio/eclipse/ESID_710/ESID_710_2024_04_07.zip",
+      "sha256": "38591fdf510d076fba9f22175cee8186b6669169f00946e0d62f0ec7f7ae5717"
+     },
+     {
+      "path": "raw/audio/eclipse/ESID_710/README.md",
+      "sha256": "c882ddbae6178a7c4155176e6c3c7b27125a62233d9fca1027582ca491aca89d"
+     },
+     {
+      "path": "raw/audio/eclipse/ESID_710/file_list.csv",
+      "sha256": "1ec133e40cedc120d785b8ce12f5bc4fa36c0ccf79328ef71b5c571874acb35a"
+     },
+     {
+      "path": "raw/audio/eclipse/ESID_710/total_eclipse_data.csv",
+      "sha256": "e7dcecea79a8abbf4fbc2f58d969b388aee24d0729cdcec94f664cd3f6a88f05"
+     }
+    ]
+   },
+   "start_time": {
+    "source": "AudioMoth clock set by the AudioMoth time chime (site README and total_eclipse_data.csv); the WAV file name gives the start in UTC to the second. The \u00b110 s is the chime's one second plus an unmeasured drift budget of a few seconds (about 20 ppm over the 2-3 days since the site's first deployment file), rounded up; it is derived from that reasoning, not measured",
+    "utc": "2024-04-07T00:00:06Z",
+    "uncertainty_s": 10,
+    "first_file": "ESID_710_2024_04_07/20240407_000006.wav"
+   },
+   "flight_data": {
+    "date": "2024-04-07",
+    "pod": "planes-readsb-prod-0",
+    "archive_assets": [
+     {
+      "path": "raw/adsb/2024-04-07/v2024.04.07-planes-readsb-prod-0.tar",
+      "sha256": "7237b5baa243842c38dfedd4aec8b128b04c02a542eaf1a3cc740c2ba38c2e74"
+     },
+     {
+      "path": "raw/adsb/2024-04-08/v2024.04.08-planes-readsb-prod-0.tar.aa",
+      "sha256": "f57a7ee4d6aaed578bfaabb4bf7fb44defbd8a24355348320454d1fc062c75e1"
+     },
+     {
+      "path": "raw/adsb/2024-04-08/v2024.04.08-planes-readsb-prod-0.tar.ab",
+      "sha256": "13cdd36c33803b43248bebf2d18d8912222dd6e6021ebb6ea2079c7cd291b511"
+     }
+    ],
+    "traces": [
+     "derived/traces/2024-04-07/esid710_margin12_v2.npz",
+     "derived/traces/2024-04-08/esid710_margin12.npz"
+    ],
+    "extraction_box": [
+     [
+      40.136,
+      41.253,
+      -90.624,
+      -88.557
+     ],
+     [
+      40.136,
+      41.253,
+      -90.624,
+      -88.557
+     ]
+    ],
+    "extraction_note": "both days cut to the same envelope with tools/data/extract_boxes.py, each carrying its measured extraction metadata; the runner joins them across midnight (adsb.join_days). The legacy 2024-04-07 cut (esid<n>_margin12.npz, no metadata) is no longer used"
+   },
+   "labels": {
+    "reference": {
+     "lat": 40.69459,
+     "lon": -89.5904,
+     "source": "Eclipse Soundscapes site coordinates (total_eclipse_data.csv)"
+    },
+    "true_pair": null,
+    "checked_by": "not yet labelled; site coordinates as published",
+    "blind": true
+   },
+   "built_with": "b74da92",
+   "search": {
+    "bbox": [
+     40.246,
+     41.143,
+     -90.479,
+     -88.702
+    ],
+    "note": "padded_bbox(bbox, 12 km) lies inside the 2024-04-08 cut's measured coverage_bbox",
+    "harmonics": [
+     1,
+     1
+    ],
+    "spacing_m": 1000,
+    "tol_s": 6.0,
+    "v_tol": 0.35,
+    "d_tol": [
+     0.4,
+     2.5
+    ],
+    "silence_d_m": 6000.0,
+    "max_range_m": 12000.0,
+    "dem": true,
+    "cpa_cache": "cpa/bench/eclipse-esid710_1000m_dem.npz"
+   },
+   "derived": [
+    {
+     "path": "derived/traces/2024-04-07/esid710_margin12_v2.npz",
+     "sha256": "e812dc0a990acc2c804ebaada8acc538d8d2d0a6b3c63f40f875c3fe1ea6701e",
+     "recipe": [
+      [
+       "python",
+       "-I",
+       "{repo}/tools/data/extract_boxes.py",
+       "{data}/raw/adsb/2024-04-07",
+       "{out_dir}",
+       "esid710_margin12_v2=40.136,41.253,-90.624,-88.557"
+      ]
+     ],
+     "note": "re-cut 2026-11-04 with extraction metadata (runs/2026-11-04-recut-eclipse-2024-04-07/)"
+    },
+    {
+     "path": "derived/traces/2024-04-08/esid710_margin12.npz",
+     "sha256": "f7db197739bf6bb4273d3fea6a42f18536415d3968500a8ed26078eb03c18cae",
+     "recipe": [
+      [
+       "python",
+       "-I",
+       "{repo}/tools/data/extract_boxes.py",
+       "{data}/raw/adsb/2024-04-08",
+       "{out_dir}",
+       "esid710_margin12=40.136,41.253,-90.624,-88.557"
+      ]
+     ],
+     "note": "cut 2026-11-04 by SDE-D with extraction metadata"
+    },
+    {
+     "path": "derived/eclipse/ESID_710/rec_full.npz",
+     "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+     "recipe": [
+      [
+       "python",
+       "-I",
+       "{repo}/tools/data/eclipse_spectrogram.py",
+       "{data}/raw/audio/eclipse/ESID_710/ESID_710_2024_04_07.zip",
+       "{out}"
+      ]
+     ],
+     "note": "the whole day zip's gap-aware spectrogram at the CLI defaults (0.25 s hop, 40-450 Hz), the holes between files marked invalid; built on a fleet box (evaluation prep, 2026-11-04)"
+    }
+   ],
+   "weather": {
+    "temperature_c": 7.2,
+    "source": "IEM ASOS (METAR T group), raw/aux/metar/KPIA_2024-04-06.csv",
+    "station": "KPIA PEORIA",
+    "station_distance_km": 8.4,
+    "observed_utc": "2024-04-07T11:54Z",
+    "aircraft_height_m": null
+   },
+   "spectrogram": "derived/eclipse/ESID_710/rec_full.npz",
+   "refine": {
+    "rank": 1,
+    "spacing_m": 50.0,
+    "half_m": 600.0
+   },
+   "events": {
+    "mode": "detect"
+   },
+   "profiles": [
+    "locate",
+    "raw-audio"
+   ],
+   "version_note": "v3 prepares the case for evaluation without reading its labels or searching it (PM, 2026-11-04; decision 2, sets written before any search): the whole recording's spectrogram, the search block at a 1 km grid with its CPA table name (built ahead, 15 C, weather off by default), refine settings, and detect-mode events. Still blocked: evaluation cases run only at milestones"
   },
   {
    "id": "eclipse-esid740",
@@ -4480,6 +5064,189 @@
     "observed_utc": "2024-04-07T17:53Z",
     "aircraft_height_m": null
    }
+  },
+  {
+   "id": "eclipse-esid937",
+   "version": 3,
+   "group": "eclipse-esid937",
+   "set": "evaluation",
+   "expected_outcome": "not_located",
+   "description": "Eclipse Soundscapes ESID 937: two continuous 12.4 h WAVs with a 2 s hole between them, from 05:40:21 UTC on 2024-04-07, no prop pass within 20 km all day: must abstain (gaps: docs/experiments/2026-11-03-gap-aware-spectrogram.md)",
+   "runnable": {
+    "blocked": "evaluation cases run only at milestones (PLAN 5.4 tier E)"
+   },
+   "source": {
+    "identifiers": {
+     "esid": 937,
+     "zenodo": "21829727",
+     "url": "https://zenodo.org/records/21829727"
+    },
+    "acquisition": "Zenodo day zip for 2024-04-07, verified against the record's MD5 (data root MANIFEST.md); CC BY 4.0",
+    "raw": [
+     {
+      "path": "raw/audio/eclipse/ESID_937/ESID_937_2024_04_07.zip",
+      "sha256": "2fec7e19f246436798cec929475e2bee7de213dd95010ccf26dc8ad8b62ebfcc"
+     },
+     {
+      "path": "raw/audio/eclipse/ESID_937/README.md",
+      "sha256": "47e1c5580f594804d17873bbe36aba3d9448b010eab4988b03a64029b28c1352"
+     },
+     {
+      "path": "raw/audio/eclipse/ESID_937/file_list.csv",
+      "sha256": "1ca7a4968585a1ba9e5685377397bb9f2fa317a88e78e99b688a855c1e0283ad"
+     },
+     {
+      "path": "raw/audio/eclipse/ESID_937/total_eclipse_data.csv",
+      "sha256": "38d51350bb9b45918770ea858dfaf7a15b7b2f19e413b6624540d89a599eab04"
+     }
+    ]
+   },
+   "start_time": {
+    "source": "AudioMoth clock set by the AudioMoth time chime (site README and total_eclipse_data.csv); the WAV file name gives the start in UTC to the second. The \u00b110 s is the chime's one second plus an unmeasured drift budget of a few seconds (about 20 ppm over the 2-3 days since the site's first deployment file), rounded up; it is derived from that reasoning, not measured",
+    "utc": "2024-04-07T05:40:21Z",
+    "uncertainty_s": 10,
+    "first_file": "ESID_937_2024_04_07/20240407_054021.WAV"
+   },
+   "flight_data": {
+    "date": "2024-04-07",
+    "pod": "planes-readsb-prod-0",
+    "archive_assets": [
+     {
+      "path": "raw/adsb/2024-04-07/v2024.04.07-planes-readsb-prod-0.tar",
+      "sha256": "7237b5baa243842c38dfedd4aec8b128b04c02a542eaf1a3cc740c2ba38c2e74"
+     },
+     {
+      "path": "raw/adsb/2024-04-08/v2024.04.08-planes-readsb-prod-0.tar.aa",
+      "sha256": "f57a7ee4d6aaed578bfaabb4bf7fb44defbd8a24355348320454d1fc062c75e1"
+     },
+     {
+      "path": "raw/adsb/2024-04-08/v2024.04.08-planes-readsb-prod-0.tar.ab",
+      "sha256": "13cdd36c33803b43248bebf2d18d8912222dd6e6021ebb6ea2079c7cd291b511"
+     }
+    ],
+    "traces": [
+     "derived/traces/2024-04-07/esid937_margin12_v2.npz",
+     "derived/traces/2024-04-08/esid937_margin12.npz"
+    ],
+    "extraction_box": [
+     [
+      36.413,
+      37.53,
+      -91.188,
+      -89.226
+     ],
+     [
+      36.413,
+      37.53,
+      -91.188,
+      -89.226
+     ]
+    ],
+    "extraction_note": "both days cut to the same envelope with tools/data/extract_boxes.py, each carrying its measured extraction metadata; the runner joins them across midnight (adsb.join_days). The legacy 2024-04-07 cut (esid<n>_margin12.npz, no metadata) is no longer used"
+   },
+   "labels": {
+    "reference": {
+     "lat": 36.97123,
+     "lon": -90.2074,
+     "source": "Eclipse Soundscapes site coordinates (total_eclipse_data.csv)"
+    },
+    "true_pair": null,
+    "checked_by": "not yet labelled; site coordinates as published",
+    "blind": true
+   },
+   "built_with": "b74da92",
+   "search": {
+    "bbox": [
+     36.522,
+     37.421,
+     -91.044,
+     -89.37
+    ],
+    "note": "padded_bbox(bbox, 12 km) lies inside the 2024-04-08 cut's measured coverage_bbox",
+    "harmonics": [
+     1,
+     1
+    ],
+    "spacing_m": 1000,
+    "tol_s": 6.0,
+    "v_tol": 0.35,
+    "d_tol": [
+     0.4,
+     2.5
+    ],
+    "silence_d_m": 6000.0,
+    "max_range_m": 12000.0,
+    "dem": true,
+    "cpa_cache": "cpa/bench/eclipse-esid937_1000m_dem.npz"
+   },
+   "derived": [
+    {
+     "path": "derived/traces/2024-04-07/esid937_margin12_v2.npz",
+     "sha256": "33a7bd672b4d508a42a5a143ce438b080fd4bc5f75cd3efae13e37e8183315ce",
+     "recipe": [
+      [
+       "python",
+       "-I",
+       "{repo}/tools/data/extract_boxes.py",
+       "{data}/raw/adsb/2024-04-07",
+       "{out_dir}",
+       "esid937_margin12_v2=36.413,37.53,-91.188,-89.226"
+      ]
+     ],
+     "note": "re-cut 2026-11-04 with extraction metadata (runs/2026-11-04-recut-eclipse-2024-04-07/)"
+    },
+    {
+     "path": "derived/traces/2024-04-08/esid937_margin12.npz",
+     "sha256": "8f372bc79a9734558f49246fdbf64de3c40c3ab090fcc2afcc9d7f9ca3911f0c",
+     "recipe": [
+      [
+       "python",
+       "-I",
+       "{repo}/tools/data/extract_boxes.py",
+       "{data}/raw/adsb/2024-04-08",
+       "{out_dir}",
+       "esid937_margin12=36.413,37.53,-91.188,-89.226"
+      ]
+     ],
+     "note": "cut 2026-11-04 by SDE-D with extraction metadata"
+    },
+    {
+     "path": "derived/eclipse/ESID_937/rec_full.npz",
+     "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+     "recipe": [
+      [
+       "python",
+       "-I",
+       "{repo}/tools/data/eclipse_spectrogram.py",
+       "{data}/raw/audio/eclipse/ESID_937/ESID_937_2024_04_07.zip",
+       "{out}"
+      ]
+     ],
+     "note": "the whole day zip's gap-aware spectrogram at the CLI defaults (0.25 s hop, 40-450 Hz), the holes between files marked invalid; built on a fleet box (evaluation prep, 2026-11-04)"
+    }
+   ],
+   "weather": {
+    "temperature_c": 20.0,
+    "source": "IEM ASOS (METAR T group), raw/aux/metar/KPOF_2024-04-06.csv",
+    "station": "KPOF POPULAR BLUFF",
+    "station_distance_km": 24.3,
+    "observed_utc": "2024-04-07T17:53Z",
+    "aircraft_height_m": null
+   },
+   "spectrogram": "derived/eclipse/ESID_937/rec_full.npz",
+   "refine": {
+    "rank": 1,
+    "spacing_m": 50.0,
+    "half_m": 600.0
+   },
+   "events": {
+    "mode": "detect"
+   },
+   "profiles": [
+    "locate",
+    "raw-audio"
+   ],
+   "version_note": "v3 prepares the case for evaluation without reading its labels or searching it (PM, 2026-11-04; decision 2, sets written before any search): the whole recording's spectrogram, the search block at a 1 km grid with its CPA table name (built ahead, 15 C, weather off by default), refine settings, and detect-mode events. Still blocked: evaluation cases run only at milestones"
   },
   {
    "id": "xenocanto-xc979185",

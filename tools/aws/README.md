@@ -72,6 +72,17 @@ tools/aws/runs launch oyster-t2 --case oyster-bay --wait -- .venv/bin/python -m 
 Several invocations on one box: a driver that runs them at once with `DOPPLERTRACK_JOBS` split, like
 [aws_sweep.sh](../experiments/2026-11-04/aws_sweep.sh) (6 settings at a time with 10 jobs each).
 
+## Private data
+
+The owner's home recordings (household audio, exact home coordinates, the ADS-B the recorder fetches for a circle
+around the home) and everything derived from them stay on the Mac. In runs.py: `PRIVATE_PREFIXES` (`private/`,
+`incoming/`, `raw/seattle-home/`), any path with a `private` folder in it, every prefix listed one per line in
+`$DOPPLERTRACK_DATA/private/fleet-exclude.txt`, and under `derived/traces/` everything but the date-named day traces
+(`YYYY-MM-DD/`, `YYYY-MM-DD.log`), since the recorder writes its sessions there. `runs launch` refuses those paths
+from `--input`, `--input-run`, `--inputs-from` and a case's files, and any case marked `private: true` or naming a
+`site`; `runs seed` turns them into `--exclude` filters on every sync (day traces kept by `--include`), and
+`fetch-sources` skips them. A new private location goes into fleet-exclude.txt before data lands there.
+
 ## Sizing
 
 Quota is counted in vCPUs per region and market: 256 spot and 256 on-demand in each region until AWS raises it

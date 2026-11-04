@@ -13,6 +13,7 @@ Oyster Bay and the eagle cam shaped the method, so every result on them is devel
 
 | Record | Question | Outcome |
 |---|---|---|
+| [2026-11-03-phase1-prep-regression](2026-11-03-phase1-prep-regression.md) | Do the detector's named records leave `detect`'s output unchanged? | Yes: Oyster Bay's `detect` JSON is byte-identical before and after; 2 passed, 1 expected failure |
 | [2026-11-03-phase0-review-regression](2026-11-03-phase0-review-regression.md) | Do the review fixes preserve CPA geometry while masking unsupported evidence? | 66 offline tests pass; Oyster Bay has 2 passes and 1 expected failure; reception holes preserve CPA proposals and mask curve evidence |
 | [2026-11-03-phase0-regression](2026-11-03-phase0-regression.md) | Do Phase 0's data and trajectory masks preserve the Oyster Bay checks? | 2 passed, 1 expected failure; the detector-fit bias remains Phase 2 work |
 | [2026-11-03-event2-bias](2026-11-03-event2-bias.md) | Why does Oyster Bay's event 2 fail the search gates? | Its f0 fits 5–11 % high and its timing 5–10 s short, under both objectives tested |

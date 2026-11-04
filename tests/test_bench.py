@@ -335,3 +335,89 @@ def test_a_case_runs_only_under_its_profiles():
     case["profiles"] = ["nope"]
     with pytest.raises(cases.CaseError, match="profiles"):
         cases.validate_case(case, cases.manifest_files())
+
+
+CLEAN = {"package_version": "0.2.0", "git_commit": "c" * 40, "git_dirty": False}
+
+
+@pytest.fixture
+def fake_runs(monkeypatch):
+    """run_bench with the case work stubbed: each case writes an entry; a case named in `stop` stops the run once."""
+    ran, stop = [], set()
+
+    def fake_case(cid, case_dir, execute, log, code):
+        if cid in stop:
+            stop.discard(cid)
+            raise KeyboardInterrupt
+        ran.append(cid)
+        return {"case": cid, "status": "scored", "record_sha256": f"sha-{cid}"}
+    monkeypatch.setattr(runner, "bench_case", fake_case)
+    monkeypatch.setattr(runner, "latest_case", lambda cid: {})
+    monkeypatch.setattr(runner, "_executor", lambda *a, **k: (dict(CLEAN), None))
+    return ran, stop
+
+
+def test_a_stopped_run_resumes_with_only_its_unfinished_cases(tmp_path, fake_runs):
+    ran, stop = fake_runs
+    run = tmp_path / "run"
+    run.mkdir()
+    stop.add("b")
+    with pytest.raises(KeyboardInterrupt):
+        runner.run_bench(["a", "b", "c"], run_dir=run, profile="locate")
+    partial = json.loads((run / "results.json").read_text())       # written as each case finished
+    assert [e["case"] for e in partial["cases"]] == ["a"] and not partial["complete"]
+    assert partial["missing"] == ["b", "c"]
+    with pytest.raises(ValueError, match="--resume"):
+        runner.run_bench(["a", "b", "c"], run_dir=run, profile="locate")
+    with pytest.raises(ValueError, match="profile"):
+        runner.run_bench(["a", "b", "c"], run_dir=run, profile="saved-fit", resume=True)
+    runner.run_bench(["a", "b", "c"], run_dir=run, profile="locate", resume=True)
+    assert ran == ["a", "b", "c"]
+    done = json.loads((run / "results.json").read_text())
+    assert done["complete"] and [e["case"] for e in done["cases"]] == ["a", "b", "c"]
+    assert len(json.loads((run / "run.json").read_text())["attempts"]) == 2
+
+
+def test_a_dirty_tree_never_resumes(tmp_path, fake_runs, monkeypatch):
+    run = tmp_path / "run"
+    run.mkdir()
+    monkeypatch.setattr(runner, "_executor", lambda *a, **k: ({**CLEAN, "git_dirty": True}, None))
+    runner.run_bench(["a"], run_dir=run, profile="locate")
+    with pytest.raises(ValueError, match="uncommitted"):
+        runner.run_bench(["a", "b"], run_dir=run, profile="locate", resume=True)
+
+
+def test_shards_split_the_cases_and_merge_into_one_run(tmp_path, fake_runs):
+    assert runner.shard_of(["d", "a", "c", "b", "e"], "1/2") == ["a", "c", "e"]
+    assert runner.shard_of(["d", "a", "c", "b", "e"], "2/2") == ["b", "d"]
+    with pytest.raises(ValueError):
+        runner.shard_of(["a"], "3/2")
+    ids = ["a", "b", "c", "d", "e"]
+    for k in (1, 2):
+        (tmp_path / f"s{k}").mkdir()
+        runner.run_bench(ids, run_dir=tmp_path / f"s{k}", profile="locate", shard=f"{k}/2")
+    (tmp_path / "all").mkdir()
+    doc = runner.merge_runs(tmp_path / "all", [tmp_path / "s1", tmp_path / "s2"])
+    assert doc["complete"] and sorted(e["case"] for e in doc["cases"]) == ids
+    assert (tmp_path / "all" / "c" / "entry.json").exists()
+    other = tmp_path / "other"
+    other.mkdir()
+    (other / "run.json").write_text(json.dumps({**json.loads((tmp_path / "s1" / "run.json").read_text()),
+                                                "code": {**CLEAN, "git_commit": "d" * 40}}))
+    with pytest.raises(ValueError, match="code"):
+        runner.merge_runs(tmp_path / "all2", [tmp_path / "s1", other])
+
+
+def test_inputs_name_each_profiles_flight_data_and_cpa_table():
+    from bench import inputs
+    loc = inputs.run_inputs(["oyster-bay"], "locate")
+    fit = inputs.run_inputs(["oyster-bay"], "saved-fit")
+    paths = lambda doc, kind: {e["path"] for e in doc[kind]}             # noqa: E731
+    v2 = cases.latest_case("oyster-bay")["flight_data"]["locate_traces"]
+    assert v2 in paths(loc, "data") and v2 not in paths(fit, "data")
+    assert any(p.endswith("-locate.npz") for p in paths(loc, "cache"))
+    assert not any(p.endswith("-locate.npz") for p in paths(fit, "cache"))
+    assert "docs/results/oyster_bay_ev1.json" in paths(fit, "repo")
+    t1 = inputs.tier1_inputs()
+    assert {"detections/", "window_fits/"} <= paths(t1, "cache")
+    assert not any(p.startswith("cpa/") for p in paths(t1, "cache"))      # the known point needs no table

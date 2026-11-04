@@ -160,17 +160,22 @@ def trace_paths(case: dict, key: str = "traces") -> list[Path]:
     return [resolve(p) for p in ([t] if isinstance(t, str) else t)]
 
 
+def locate_cpa_cache(case: dict, cpa_cache: str) -> str:
+    """The locate profile's CPA table: the case's own, or with locate_traces a file of its own beside it."""
+    if "locate_traces" not in case["flight_data"]:
+        return cpa_cache
+    c = Path(cpa_cache)
+    return str(c.with_name(f"{c.stem}-locate{c.suffix}"))
+
+
 def locate_flight_data(case: dict, cpa_cache: str) -> tuple[list[Path], list[list[float]] | None, str]:
     """The locate profile's trace files, declared envelopes and CPA cache. A case's flight_data.locate_traces, cut
     with extraction metadata and the search-range margin, replaces its legacy traces for locate alone, so the other
     profiles' baselines stay on the files they were measured with; it gets a CPA cache file of its own so the two
     never rebuild each other's."""
     from dopplertrack.adsb import load_trace_metadata
-    if "locate_traces" in case["flight_data"]:
-        c = Path(cpa_cache)
-        paths, cpa_cache = trace_paths(case, "locate_traces"), str(c.with_name(f"{c.stem}-locate{c.suffix}"))
-    else:
-        paths = trace_paths(case)
+    paths = trace_paths(case, "locate_traces" if "locate_traces" in case["flight_data"] else "traces")
+    cpa_cache = locate_cpa_cache(case, cpa_cache)
     # a file's own measured envelope wins; the case's declared boxes stand in only for legacy files
     measured = all(p.exists() and load_trace_metadata(p).get("coverage_bbox") for p in paths)
     return paths, None if measured else day_boxes(case), cpa_cache
@@ -796,37 +801,93 @@ def run_one(cid: str, run_dir: Path, execute, code: dict, log=print) -> dict:
     return entry
 
 
+def shard_of(case_ids: list[str], shard: str | None) -> list[str]:
+    """Shard "i/n" (1-based) of the cases: every n-th of them in sorted order, so n boxes split one run."""
+    if not shard:
+        return list(case_ids)
+    i, sep, n = shard.partition("/")
+    if not (sep and i.isdigit() and n.isdigit() and 1 <= int(i) <= int(n)):
+        raise ValueError(f"--shard must be i/n with 1 <= i <= n, not {shard!r}")
+    return sorted(case_ids)[int(i) - 1::int(n)]
+
+
+RUN_KEYS = ("tier", "profile", "search_overrides", "code")
+
+
+def check_resumable(info: dict, want: dict, where) -> None:
+    """A stopped run continues, or several runs merge, only from one clean commit with the same settings."""
+    diff = [k for k in RUN_KEYS if info.get(k) != want.get(k)]
+    if diff:
+        raise ValueError(f"{where}: its run.json differs in {diff}, so its cases can't be combined with this run")
+    if want["code"].get("git_dirty") is not False:
+        raise ValueError(f"{where}: the code had uncommitted changes, so a stopped run can't be told apart from an "
+                         "edited one; commit and start a new run")
+
+
+def write_results(run_dir: Path, info: dict, case_ids: list[str], crashed: dict | None = None) -> dict:
+    """results.json from every case of the run that has an entry.json; `complete` says whether all of them have.
+    A case whose process died has no entry, so a resumed run runs it again; `crashed` says why it died."""
+    entries = [json.loads((run_dir / c / "entry.json").read_text()) for c in case_ids
+               if (run_dir / c / "entry.json").exists()]
+    doc = {"schema": 1, "tier": info["tier"], "profile": info["profile"], "search_overrides": info["search_overrides"],
+           "code": info["code"], "git_commit": info["code"]["git_commit"], "git_dirty": info["code"]["git_dirty"],
+           "created": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
+           "complete": len(entries) == len(case_ids),
+           "missing": [c for c in case_ids if not (run_dir / c / "entry.json").exists()], "cases": entries,
+           "crashed": dict(crashed or {})}
+    tmp = run_dir / ".results.json.tmp"
+    tmp.write_text(json.dumps(doc, indent=1, sort_keys=True) + "\n")
+    os.replace(tmp, run_dir / "results.json")
+    return doc
+
+
 def run_bench(case_ids: list[str], tier: str = "t2", run_dir: Path | None = None, log=print,
               revision: str | None = None, profile: str = "saved-fit", parallel: int = 1,
-              overrides: dict | None = None) -> Path:
+              overrides: dict | None = None, shard: str | None = None, resume: bool = False) -> Path:
     """Run cases into a new run folder (or `run_dir`) and collect their scoreboard entries in results.json.
     revision: None runs this checkout in-process; any other commit-ish is exported, verified and run
     through its own CLI (bench/revisions.py). parallel > 1 runs that many cases at once, each in its own
-    process (`bench run-case`), so stage logs and timings never mix."""
+    process (`bench run-case`), so stage logs and timings never mix. shard "i/n" runs only that share of the
+    cases, for n boxes; `merge_runs` puts the shards together. resume continues a stopped run in run_dir: a case
+    with an entry.json is kept, and the rest run. results.json is rewritten as each case finishes."""
     # the code revision is read once, before anything runs, so an edit during a long run can't relabel it
     overrides = dict(overrides or {})
+    case_ids = shard_of(case_ids, shard)
     excluded = [c for c in case_ids if profile not in case_profiles(latest_case(c))]
     if excluded:
         raise ValueError(f"{excluded} don't run under the {profile} profile (their cases' profiles field)")
     code, execute = _executor(revision, profile, log, overrides=overrides)
-    commit, dirty = code["git_commit"], code["git_dirty"]
+    commit = code["git_commit"]
+    if resume and run_dir is None:
+        raise ValueError("resume needs the stopped run's --run-dir")
     if run_dir is None:
         tag = f"-o{overrides_tag(overrides)}" if overrides else ""
-        run_dir = new_run(f"bench-{(commit if isinstance(commit, str) else 'nogit')[:7]}-{profile}-{tier}{tag}")
+        sh = f"-s{shard.replace('/', 'of')}" if shard else ""
+        run_dir = new_run(f"bench-{(commit if isinstance(commit, str) else 'nogit')[:7]}-{profile}-{tier}{tag}{sh}")
     info_path = run_dir / "run.json"
     info = json.loads(info_path.read_text()) if info_path.exists() else {}
-    info.update(command=sys.argv, cases=case_ids, tier=tier, profile=profile, code=code, parallel=parallel,
-                search_overrides=overrides)
-    info_path.write_text(json.dumps(info, indent=1) + "\n")
+    want = {"tier": tier, "profile": profile, "search_overrides": overrides, "code": code}
+    done = [c for c in case_ids if (run_dir / c / "entry.json").exists()]
+    if resume:
+        check_resumable(info, want, run_dir)
+        log(f"resuming {run_dir}: {len(done)} of {len(case_ids)} cases already have entries")
+    elif done:
+        raise ValueError(f"{run_dir} already has entries for {done}; pass --resume to continue it")
+    info.update(command=sys.argv, cases=case_ids, shard=shard, parallel=parallel, **want)
+    info.setdefault("attempts", []).append(datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"))
+    todo = [c for c in case_ids if c not in done]
     if parallel <= 1:
-        entries = [run_one(cid, run_dir, execute, code, log) for cid in case_ids]
+        info_path.write_text(json.dumps(info, indent=1) + "\n")
+        for cid in todo:
+            run_one(cid, run_dir, execute, code, log)
+            write_results(run_dir, info, case_ids)
     else:
         # each case's own pools get an equal share of the cores, so N cases never start N full-size pools
         from dopplertrack.parallel import JOBS_ENV, default_jobs
         child_env = {**os.environ, JOBS_ENV: os.environ.get(JOBS_ENV) or str(max(1, default_jobs() // parallel))}
         info["jobs_per_case"] = int(child_env[JOBS_ENV])
         info_path.write_text(json.dumps(info, indent=1) + "\n")
-        pending, running, entries = list(case_ids), {}, {}
+        pending, running, crashed = list(todo), {}, {}
         while pending or running:
             while pending and len(running) < parallel:
                 cid = pending.pop(0)
@@ -841,20 +902,59 @@ def run_bench(case_ids: list[str], tier: str = "t2", run_dir: Path | None = None
                 if proc.poll() is not None:
                     out.close()
                     del running[cid]
-                    try:
-                        entries[cid] = json.loads((run_dir / cid / "entry.json").read_text())
-                    except OSError:
+                    if (run_dir / cid / "entry.json").exists():
+                        log(f"{cid}: {json.loads((run_dir / cid / 'entry.json').read_text())['status']}")
+                    else:
                         tail = (run_dir / cid / "process.log").read_text().strip().splitlines()[-3:]
-                        entries[cid] = {"case": cid, "status": "error",
-                                        "reason": f"bench run-case exited with {proc.returncode}: " + " | ".join(tail)}
-                    log(f"{cid}: {entries[cid]['status']}")
+                        crashed[cid] = f"bench run-case exited with {proc.returncode}: " + " | ".join(tail)
+                        log(f"{cid}: crashed: {crashed[cid]}")
+                    write_results(run_dir, info, case_ids, crashed)
             time.sleep(2)
-        entries = [entries[c] for c in case_ids]
-    doc = {"schema": 1, "tier": tier, "profile": profile, "search_overrides": overrides, "code": code,
-           "git_commit": commit, "git_dirty": dirty,
-           "created": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"), "cases": entries}
-    (run_dir / "results.json").write_text(json.dumps(doc, indent=1, sort_keys=True) + "\n")
+        write_results(run_dir, info, case_ids, crashed)
+        return run_dir
+    write_results(run_dir, info, case_ids)
     return run_dir
+
+
+def merge_runs(out_dir: Path, sources: list[Path], log=print) -> dict:
+    """Copy the case folders of shard or stopped runs into out_dir (a new run folder, or one of them) and write its
+    results.json over all of them. Every source must be the same clean commit, profile, tier and overrides; a case
+    two sources both finished must have the same record hash, or the merge refuses."""
+    import shutil
+    infos = [(src, json.loads((src / "run.json").read_text())) for src in sources]
+    if infos[0][1].get("tier") == "t1":
+        from .tier1 import merge_tier1
+        merge_tier1(out_dir, sources, log)
+        return {}
+    want = {k: infos[0][1].get(k) for k in RUN_KEYS}
+    for src, info in infos:
+        check_resumable(info, want, src)
+    cases, sha = [], {}
+    for src, info in infos:
+        for cid in info.get("cases", []):
+            if cid not in cases:
+                cases.append(cid)
+            ep = src / cid / "entry.json"
+            if not ep.exists():
+                continue
+            entry = json.loads(ep.read_text())
+            if cid in sha:
+                if sha[cid] != entry.get("record_sha256"):
+                    raise ValueError(f"{cid}: {src} and an earlier source finished it with different records")
+                continue
+            sha[cid] = entry.get("record_sha256")
+            if src.resolve() != out_dir.resolve():
+                if (out_dir / cid).exists():
+                    raise ValueError(f"{out_dir} has an unfinished folder for {cid}; merge into a new run folder")
+                shutil.copytree(src / cid, out_dir / cid)
+    info_path = out_dir / "run.json"
+    info = json.loads(info_path.read_text()) if info_path.exists() else {}
+    info.update(want, cases=cases, merged_from=[str(s) for s in sources])
+    info_path.write_text(json.dumps(info, indent=1) + "\n")
+    doc = write_results(out_dir, info, cases)
+    log(f"merged {len(doc['cases'])} of {len(cases)} cases into {out_dir}" +
+        (f"; missing {doc['missing']}" if doc["missing"] else ""))
+    return doc
 
 
 METRICS = ("true_pair_rank", "true_pair_near_reference", "true_pair_within_refine_reach", "flight_pairs", "margin_pct",

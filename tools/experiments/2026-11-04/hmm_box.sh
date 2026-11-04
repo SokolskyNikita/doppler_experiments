@@ -19,12 +19,14 @@ JOBS=${DOPPLERTRACK_JOBS:-$($PY -c 'from dopplertrack.parallel import default_jo
 
 $PY "$D/hmm_livermore.py" "$RUN" references
 
-pids=""
-for tc in 3 4 5 6 7 8 9; do
-    DOPPLERTRACK_JOBS=12 $PY "$D/hmm_knobs.py" "$RUN" pairs "$W" "$tc" > "$RUN/pairs_${W}_$tc.log" 2>&1 &
-    pids="$pids $!"
-done
-for p in $pids; do wait "$p"; done                                     # set -e stops on the first failed pair
+# Each pairs process holds 12 workers, each with the whole 2 h noise image (about 1.3 GB at its peak), so as many
+# theta_cont run at once as 16 GB each allows: all seven on a 128 GB box, four on a 64 GB one.
+MEM_GB=$(awk '/MemTotal/ {print int($2 / 1048576)}' /proc/meminfo 2>/dev/null || echo 16)
+PAR=$((MEM_GB / 16)); [ "$PAR" -lt 1 ] && PAR=1; [ "$PAR" -gt 7 ] && PAR=7
+export PY D RUN W
+# shellcheck disable=SC2016
+printf '%s\n' 3 4 5 6 7 8 9 | xargs -P "$PAR" -I TC \
+    sh -c 'DOPPLERTRACK_JOBS=12 $PY "$D/hmm_knobs.py" "$RUN" pairs "$W" TC > "$RUN/pairs_${W}_TC.log" 2>&1'
 $PY "$D/hmm_knobs.py" "$RUN" pick "$W" ${COV:+"$COV"}
 
 read -r TC TB <<EOF

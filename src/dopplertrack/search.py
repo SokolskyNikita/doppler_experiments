@@ -273,7 +273,8 @@ def load_cpa_table(path, fingerprint) -> pd.DataFrame | None:
 def pair_candidates(cpa: pd.DataFrame, dt_offset: float, tol_s: float = 6.0,
                     v1=(0, 1e9), d1=(0, 1e9), v2=(0, 1e9), d2=(0, 1e9),
                     silence_d_m: float | None = 6000.0, silence_margin_s: float = 40.0,
-                    funnel: dict | None = None, time_col: str = "t_heard") -> pd.DataFrame:
+                    funnel: dict | None = None, time_col: str = "t_heard",
+                    triples: dict | None = None) -> pd.DataFrame:
     """Grid points that hear an event-1-like CPA then, dt_offset later, an event-2-like CPA.
 
     time_col is the CPA time the gate compares with dt_offset: "t_heard" (heard CPA, the default) or
@@ -286,7 +287,8 @@ def pair_candidates(cpa: pd.DataFrame, dt_offset: float, tol_s: float = 6.0,
 
     funnel, if given, receives the row counts after each step: "cpa_rows", "event1_gates",
     "event2_gates", "time_join" ("emission_gate" when time_col is "t_emit") and "silence" (see
-    pipeline.run_search)."""
+    pipeline.run_search). triples, if given, receives the surviving triples after the time gate and
+    after the silence filter, under the same keys, as {"gidx", "seg1", "seg2"} int32 arrays."""
     if time_col not in ("t_heard", "t_emit"):
         raise ValueError(f"time_col must be t_heard or t_emit, got {time_col!r}")
     funnel = {} if funnel is None else funnel
@@ -299,14 +301,24 @@ def pair_candidates(cpa: pd.DataFrame, dt_offset: float, tol_s: float = 6.0,
     parts = [a.merge(b.assign(key=kb + off), on=["gidx", "key"], suffixes=("1", "2")) for off in (-1, 0, 1)]
     m = pd.concat(parts, ignore_index=True).drop(columns="key")
     m = m[(m.seg1 != m.seg2) & ((m[time_col + "2"] - m[time_col + "1"] - dt_offset).abs() <= tol_s)].copy()
-    funnel["time_join" if time_col == "t_heard" else "emission_gate"] = len(m)
+    gate = "time_join" if time_col == "t_heard" else "emission_gate"
+    funnel[gate] = len(m)
+    if triples is not None:
+        triples[gate] = stage_triples(m)
     if silence_d_m is not None and len(m):
         near = cpa[(cpa.d <= silence_d_m) & cpa.gidx.isin(m.gidx.unique())][["gidx", "seg", "t_heard"]]
         x = m[["gidx", "seg1", "seg2", "t_heard1", "t_heard2"]].reset_index().merge(near, on="gidx")
         bad = x[(x.seg != x.seg1) & (x.seg != x.seg2) & (x.t_heard > x.t_heard1 + silence_margin_s) & (x.t_heard < x.t_heard2 - silence_margin_s)]
         m = m.drop(index=bad["index"].unique())
     funnel["silence"] = len(m)
+    if triples is not None:
+        triples["silence"] = stage_triples(m)
     return m.reset_index(drop=True)
+
+
+def stage_triples(m: pd.DataFrame) -> dict:
+    """The (grid point, segment 1, segment 2) columns of a set of triples, as int32 arrays."""
+    return {k: m[k].to_numpy(np.int32) for k in ("gidx", "seg1", "seg2")}
 
 
 def grid_lla(grid: Grid, gidx):

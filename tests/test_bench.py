@@ -445,3 +445,27 @@ def test_the_box_environment_sets_the_run_folder_and_the_shard(tmp_path, monkeyp
     monkeypatch.setenv("DOPPLERTRACK_SHARDS", "10")
     cli.main(["run", "--profile", "locate", "oyster-bay"])
     assert seen["run_dir"] == tmp_path and seen["shard"] == "2/10"
+
+
+def test_prepare_builds_a_cases_cpa_table_without_its_labels_and_reuses_it(tmp_path, monkeypatch, capsys):
+    import numpy as np
+    from bench import prepare
+    from dopplertrack.adsb import Trace, save_traces
+    t = np.arange(1.0e9, 1.0e9 + 600, 2.0)
+    lon = np.linspace(-74.2, -73.8, len(t))
+    tr = Trace("abc123", None, "C172", None, t, np.full(len(t), 40.5), lon, np.full(len(t), 800.0),
+               np.full(len(t), 60.0), np.zeros(len(t), bool))
+    (tmp_path / "derived").mkdir()
+    save_traces([tr], tmp_path / "derived" / "t.npz", metadata={"coverage_bbox": [40.0, 41.0, -74.5, -73.5]})
+    case = {"id": "x", "version": 1, "labels": "must not be read",
+            "flight_data": {"traces": "derived/t.npz"}, "weather": {"temperature_c": None},
+            "search": {"bbox": [40.45, 40.55, -74.1, -73.9], "spacing_m": 2000, "max_range_m": 12000.0, "dem": False,
+                       "cpa_cache": "cpa/bench/x_2000m.npz"}}
+    monkeypatch.setattr(cases, "latest_case", lambda cid: copy.deepcopy(case))
+    monkeypatch.setattr(runner, "resolve", lambda p: tmp_path / p)
+    seen = []
+    out = prepare.prepare_case("x", log=seen.append)
+    assert (tmp_path / "cpa/bench/x_2000m.npz").exists() and out["cpa_records"] > 0 and out["segments"] == 1
+    capsys.readouterr()
+    again = prepare.prepare_case("x", log=seen.append)
+    assert again["cpa_records"] == out["cpa_records"] and "loaded CPA table" in capsys.readouterr().out

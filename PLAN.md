@@ -586,6 +586,8 @@ Steps:
 
 Tier 1 runs its cases in parallel, and detections are cached by audio and detector version, so changes to fitting or scoring skip detection. A case joins Tier 1 only if Tier 1 stays under 3 min.
 
+**A caveat on saved-fit Tier 2.** Two of the four development events' saved fits aren't the true flights' lines: Oyster Bay event 2 and the eagle cam's event 2 follow another line, 3.4–5.6 Hz rms from the true flight's heard curve, against 0.4–1.0 Hz for the other two ([event-fit](docs/experiments/2026-11-04-event-fit.md)). Their cases still rank the true pair first or second because the search scores each candidate flight's own modelled curve against the spectrogram, so saved-fit Tier 2's ranks are a weaker test of the event fit than they look.
+
 ### 5.5 The result record and the scoreboard
 
 **The result record.** Every run of `locate` or of a benchmark case writes one `result.json` with a schema version. It holds the decisions themselves, so the report and the benchmark never reconstruct them from logs. Version 1 holds what today's pipeline can fill. Later fields arrive with the features that produce them, each with a version bump.

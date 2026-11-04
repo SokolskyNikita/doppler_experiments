@@ -62,7 +62,7 @@ def test_emission_time_delay_shifts_curve_not_just_in_time():
     """Plotting f against emission time (the naive method) differs from plotting
     it against observation time by more than a pure time shift."""
     c = 340.0
-    f0, v, d, t0 = 130.0, 110.0, 3000.0, 500.0
+    f0, v, t0 = 130.0, 110.0, 500.0     # CPA 2000 m north and 2236 m up: 3 km slant
     te = np.arange(0, 1000, 0.5)
     pos = np.stack([v * (te - t0), np.full_like(te, 2000.0), np.full_like(te, 2236.0)], -1)
     tobs, f, r = doppler.curve_from_trajectory(te, pos, np.zeros(3), f0=f0, c=c)

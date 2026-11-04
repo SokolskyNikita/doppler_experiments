@@ -2,23 +2,20 @@
 from __future__ import annotations
 
 import contextlib
-import json
 import os
 import time
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
-from .adsb import AircraftTypes, Trace, load_region, load_traces, save_traces
+from .adsb import AircraftTypes, Trace, load_region, save_traces
 from .audio import Spectrogram, compute_spectrogram, load_audio
 from .coverage import (DEFAULT_MAX_RANGE_M, ScanReport, extraction_metadata, padded_bbox,
                        report_altitude_sources, report_candidate_gaps, report_coverage)
 from .doppler import speed_of_sound
 from .score import EventWindow, locked_score
 from .search import Grid, Segment, build_segments, cpa_fingerprint, cpa_table, pair_candidates, save_cpa_table, load_cpa_table
-from .terrain import Terrain
-from .tracks import EventFit, fit_event
+from .tracks import EventFit
 
 
 def log(msg):

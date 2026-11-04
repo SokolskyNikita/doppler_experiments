@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
 
 import numpy as np
 
@@ -13,7 +12,7 @@ from .audio import FFmpegNotFoundError, Spectrogram
 from .coverage import DEFAULT_MAX_RANGE_M, report_coverage
 from .search import Grid
 from .terrain import Terrain
-from .tracks import EventFit
+from .tracks import EventFit, fit_event
 
 
 def load_events(files, picks=None):
@@ -140,8 +139,8 @@ def main(argv=None):
         print(f"wrote {a.out}: {sp.S.shape[0]} bins x {sp.S.shape[1]} frames{gaps}")
     elif a.cmd == "fit":
         sp = Spectrogram.load(a.spec)
-        ef = pipeline.fit_event(sp, a.window[0], a.window[1], a.band[0], a.band[1], harmonics=a.harmonics,
-                                objective=a.objective)
+        ef = fit_event(sp, a.window[0], a.window[1], a.band[0], a.band[1], harmonics=a.harmonics,
+                       objective=a.objective)
         js = json.dumps(ef.to_dict(), indent=1)
         print(js)
         if a.out:

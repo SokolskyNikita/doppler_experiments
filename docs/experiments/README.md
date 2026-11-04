@@ -13,6 +13,7 @@ Oyster Bay and the eagle cam shaped the method, so every result on them is devel
 
 | Record | Question | Outcome |
 |---|---|---|
+| [2026-11-04-adsbfetch](2026-11-04-adsbfetch.md) | Is the user's adsbfetch CLI (free tar1090 mirrors) a better flight-data source than our adsb.lol tars? | Not as a replacement: denser tracks at CPA (gap ~10 s against ~20 s, 2–3× points), Oyster Bay unchanged, but the eagle cam flips to a wrong pair 14 km off on the mirrors' trajectories. 13 bugs found, 11 fixed |
 | [2026-11-04-event-pairs](2026-11-04-event-pairs.md) | Does the search's own score pick the right two events from detect's top five? | No: on the eagle cam the true pair ranks 5th of 10, behind pairs with the loudest detection, so event choice needs item 7's joint hypotheses |
 | [2026-11-04-trace-join](2026-11-04-trace-join.md) | Can flight data be joined across UTC midnight without changing one-day cases? | Yes: ESID 375 joins 5 of its 7 midnight seams and 937 its one; one-day cases are unchanged |
 | [2026-11-04-bench-baselines](2026-11-04-bench-baselines.md) | What do the seed cases give at upstream a16b700, from saved fits and from raw audio, and does the current code match? | Identical on both profiles. Saved fits reproduce the published results; raw audio locates no positive: Oyster Bay's fit is biased (true pair 10th), and the eagle cam's second event is the wrong flyover |

@@ -131,6 +131,7 @@ Mistral OCR was chosen over the OpenAI backend because, on sample pages, OpenAI 
 
 Two fixes are applied to every file after conversion. Both are safe to re-run, and must be re-run after re-converting a file with `--overwrite`.
 
+- Known conversion errors, reported by an outside reviewer on 2026-11-04 and to be checked against the PDF before use: the Kelly & Wilson conversion loses a minus sign in the time equations (eqs. 8 and 12), and the Ramseier & Pieren conversion mislabels the left-hand side of its eq. 9. Take time equations from the PDF pages.
 - `tools/reference/tidy_latex.py` rewrites spaced-out LaTeX (`\mathbf { x }` → `\mathbf{x}`). It changes only whitespace that TeX ignores, and checks every formula still tokenizes identically.
 - `tools/reference/add_labels.py` restores 23 equation numbers Mistral dropped: 9 in Kay I, 10 in Kay II and 4 in Angelopoulos & Bates. Every file's printed equation numbers were compared with the Markdown (OCR of each page plus a numbering-gap check), and each restored number was placed by eye against the PDF page. A whole equation gets `\tag{n}`; one row of a multi-row equation gets `\qquad\text{(n)}`.
 

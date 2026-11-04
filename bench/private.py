@@ -20,7 +20,7 @@ from pathlib import Path
 
 import numpy as np
 
-from .cases import data_root, is_private
+from .cases import data_root, is_private, resolve
 
 GUARD_DEG = 0.5            # a latitude and a longitude this close to the site's, in one container, is a leak
 
@@ -38,7 +38,7 @@ def load_site(site_id: str) -> dict:
     pointer = private_root() / "sites" / f"{site_id}.json"
     if not pointer.exists():
         raise PrivateDataError(f"no site pointer {pointer}")
-    target = data_root() / json.loads(pointer.read_text())["site_json"]
+    target = resolve(json.loads(pointer.read_text())["site_json"])
     if not target.exists():
         raise PrivateDataError(f"the site file {target} named by {pointer} is missing")
     s = json.loads(target.read_text())

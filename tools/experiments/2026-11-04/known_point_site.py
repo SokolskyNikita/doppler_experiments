@@ -24,7 +24,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 from bench import private as priv  # noqa: E402
-from bench.cases import data_root, latest_case  # noqa: E402
+from bench.cases import data_root, latest_case, resolve  # noqa: E402
 from bench.runner import trace_paths  # noqa: E402
 from dopplertrack.adsb import AircraftTypes, join_days  # noqa: E402
 from dopplertrack.audio import Spectrogram  # noqa: E402
@@ -58,7 +58,7 @@ def main():
         sys.exit(f"{a.out} is not under {data_root() / 'private'}: the per-flight table would place the site")
     case = priv.resolve_case(latest_case(a.case))
     site = priv.load_site(case["site"])
-    sp = Spectrogram.load(data_root() / case["spectrogram"])
+    sp = Spectrogram.load(resolve(case["spectrogram"]))
     import datetime
     start = datetime.datetime.fromisoformat(case["start_time"]["utc"].replace("Z", "+00:00")).timestamp()
     t0, t1 = start + float(sp.t[0]), start + float(sp.t[-1])

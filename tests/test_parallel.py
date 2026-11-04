@@ -23,6 +23,27 @@ def test_jobs_default_comes_from_the_environment(monkeypatch):
         parallel.resolve_jobs(0)
 
 
+def _topology(root, siblings):
+    for cpu, sib in siblings.items():
+        d = root / f"cpu{cpu}" / "topology"
+        d.mkdir(parents=True)
+        (d / "core_cpus_list").write_text(sib + "\n")
+
+
+def test_linux_jobs_count_physical_cores_in_the_affinity_mask(tmp_path):
+    # two cores with two hyperthreads each: CPUs 0 and 2 share a core, as do 1 and 3
+    _topology(tmp_path, {0: "0,2", 1: "1,3", 2: "0,2", 3: "1,3"})
+    assert parallel.linux_physical_cores({0, 1, 2, 3}, str(tmp_path)) == 2
+    assert parallel.linux_physical_cores({0, 2}, str(tmp_path)) == 1
+    assert parallel.linux_physical_cores({1, 2}, str(tmp_path)) == 2
+    # no SMT (Graviton, AMD c7a): every CPU is its own core
+    nosmt = tmp_path / "nosmt"
+    _topology(nosmt, {i: str(i) for i in range(4)})
+    assert parallel.linux_physical_cores({0, 1, 2, 3}, str(nosmt)) == 4
+    # an unreadable topology falls back to os.cpu_count() in default_jobs
+    assert parallel.linux_physical_cores({0, 7}, str(tmp_path)) is None
+
+
 def test_pool_workers_are_pinned_to_one_thread(monkeypatch):
     monkeypatch.setenv("OMP_NUM_THREADS", "8")
     monkeypatch.delenv("VECLIB_MAXIMUM_THREADS", raising=False)

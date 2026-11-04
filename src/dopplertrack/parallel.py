@@ -19,8 +19,10 @@ THREAD_VARS = ("VECLIB_MAXIMUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREAD
 
 
 def default_jobs() -> int:
-    """$DOPPLERTRACK_JOBS if set, else the performance-core count: efficiency cores would set the pace for
-    equal shares of work. Falls back to os.cpu_count() where the core types can't be told apart."""
+    """$DOPPLERTRACK_JOBS if set, else the performance-core count on macOS (efficiency cores would set the pace
+    for equal shares of work) and the physical-core count this process may run on under Linux (hyperthreads
+    share a core's units, and every pool here assumes a whole core per worker). Falls back to os.cpu_count()
+    where neither can be read."""
     env = os.environ.get(JOBS_ENV)
     if env:
         try:
@@ -37,7 +39,29 @@ def default_jobs() -> int:
             return max(1, int(out))
         except (OSError, subprocess.CalledProcessError, ValueError):
             pass
+    if sys.platform.startswith("linux"):
+        n = linux_physical_cores(os.sched_getaffinity(0))
+        if n:
+            return n
     return os.cpu_count() or 1
+
+
+def linux_physical_cores(allowed: set[int], sysfs: str = "/sys/devices/system/cpu") -> int | None:
+    """How many physical cores the CPUs in `allowed` belong to: hyperthreads of one core list the same
+    siblings in sysfs, so each core counts once. None if the topology can't be read."""
+    cores = set()
+    for cpu in allowed:
+        topo = os.path.join(sysfs, f"cpu{cpu}", "topology")
+        for name in ("core_cpus_list", "thread_siblings_list"):
+            try:
+                with open(os.path.join(topo, name)) as f:
+                    cores.add(f.read().strip())
+                break
+            except OSError:
+                continue
+        else:
+            return None
+    return len(cores) or None
 
 
 def resolve_jobs(jobs: int | None) -> int:

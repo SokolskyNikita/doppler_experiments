@@ -154,3 +154,148 @@ def test_a_blocked_case_needs_a_reason_and_is_never_run(tmp_path):
     assert cases.case_ids(path) == [] and cases.case_ids(path, runnable_only=False) == ["blocked"]
     with pytest.raises(cases.CaseError, match="not runnable"):
         cases.blind_case("blocked", path)
+
+
+def test_pick_detected_takes_the_two_best_scores_in_time_order():
+    det = [{"t_cpa": 300.0, "score": 5.0}, {"t_cpa": 100.0, "score": 9.0}, {"t_cpa": 200.0, "score": 7.0}]
+    assert [d["t_cpa"] for d in runner.pick_detected(det)] == [100.0, 200.0]
+    with pytest.raises(ValueError):
+        runner.pick_detected(det[:1])
+
+
+def test_an_export_that_differs_from_its_commit_is_refused(tmp_path):
+    import subprocess
+    from bench import revisions
+    commit = revisions._git("rev-parse", "HEAD")
+    rev = revisions.Revision(commit, revisions._git("rev-parse", "HEAD^{tree}"), tmp_path / "rev")
+    (rev.src).mkdir(parents=True)
+    archive = subprocess.run(["git", "-C", str(cases.REPO), "archive", commit, "bench", "tests"],
+                             capture_output=True, check=True).stdout
+    subprocess.run(["tar", "-x", "-C", str(rev.src)], input=archive, check=True)
+    # a partial tree stands in for a full export: its own tree hash is what verify compares
+    rev.tree = revisions.tree_on_disk(rev.src)
+    with pytest.raises(revisions.RevisionError, match="unfinished"):
+        revisions.verify(rev)
+    (rev.root / "export.json").write_text(json.dumps({"commit": commit}))
+    revisions.verify(rev)
+    (rev.src / "bench" / "cases.json").write_text("{}")
+    (rev.src / "stray.pyc").write_bytes(b"")
+    with pytest.raises(revisions.RevisionError, match="changed after it was made") as exc:
+        revisions.verify(rev)
+    assert "M bench/cases.json" in str(exc.value) and "A stray.pyc" in str(exc.value)
+    (rev.root / "export.json").write_text(json.dumps({"commit": "0" * 40}))
+    with pytest.raises(revisions.RevisionError, match="exported from"):
+        revisions.verify(rev)
+
+
+def test_a_revision_that_fails_verification_yields_an_error_not_a_result(tmp_path):
+    from bench import revisions
+
+    class Stale:
+        short = "deadbee"
+        def provenance(self):
+            return {"package_version": "0", "git_commit": "d" * 40, "git_dirty": False}
+
+    def stale_verify(rev):
+        raise revisions.RevisionError("stale export")
+
+    orig, revisions.verify = revisions.verify, stale_verify
+    try:
+        rec = runner.execute_case_at(cases.blind_case("oyster-bay"), tmp_path, Stale(), log=lambda m: None)
+    finally:
+        revisions.verify = orig
+    assert rec["candidates"] == [] and any("stale export" in e for e in rec["execution"]["errors"])
+
+
+def test_a_record_with_execution_errors_is_an_error_entry(tmp_path, one_case):
+    def failing(case, case_dir, log=print, code=None):
+        rec = _fake_execute(case, case_dir, code=code)
+        rec["execution"]["errors"] = ["RuntimeError: search failed"]
+        return rec
+    entry = runner.bench_case("synthetic", tmp_path / "out", execute=failing, cases_path=one_case)
+    assert entry["status"] == "error"
+
+
+@pytest.mark.parametrize("flags, writes", [(["-I", "-B"], False), (["-I"], True)])
+def test_the_export_flags_keep_spawned_workers_from_writing_bytecode(tmp_path, flags, writes):
+    # a16b700's detect starts spawn workers; whatever the parent is run with must reach them
+    import subprocess
+    pkg = tmp_path / "pkg"
+    pkg.mkdir()
+    (pkg / "work.py").write_text("def square(x):\n    return x * x\n")
+    # only the worker imports `work`, so any bytecode for it was written by the worker
+    code = (f"import sys; sys.path.insert(0, {str(pkg)!r})\n"
+            "import multiprocessing as mp\n"
+            "def load(x):\n"
+            "    import work\n"
+            "    return work.square(x)\n"
+            "if __name__ == '__main__':\n"
+            "    with mp.get_context('spawn').Pool(1) as p:\n"
+            "        assert p.map(load, [3]) == [9]\n"
+            "    assert 'work' not in sys.modules\n")
+    (tmp_path / "main.py").write_text(code)
+    subprocess.run([sys.executable, *flags, str(tmp_path / "main.py")], check=True, cwd=tmp_path)
+    assert (pkg / "__pycache__").exists() is writes
+
+
+def _execute_with_triples(rows):
+    """A fake run whose scored triples are `rows` (icao1, icao2, lat, lon), written as the runner writes them."""
+    import pandas as pd
+
+    def execute(case, case_dir, log=print, code=None):
+        rec = _fake_execute(case, case_dir, code=code)
+        draft = runner.Draft(cases.blind_case("oyster-bay"), {}, "saved-fit", lambda m: None)
+        df = pd.DataFrame(rows, columns=["icao1", "icao2", "lat", "lon"]).assign(gidx=0, score=1.0)
+        draft.write_triples(case_dir, {"silence": df, "scored": df})
+        rec["funnel"]["triples_file"] = draft.funnel["triples_file"]
+        rec["provenance"]["parameters"]["refine"] = {"half_m": 600.0}
+        return rec
+    return execute
+
+
+def test_near_reference_is_decided_from_the_scored_triples_after_the_hash(tmp_path, one_case):
+    truth = cases.case_labels("oyster-bay", 1)["reference"]
+    rows = [("a1dfeb", "ace391", truth["lat"] + 0.004, truth["lon"]),      # about 445 m north
+            ("a1dfeb", "ace391", truth["lat"] + 0.0015, truth["lon"]),     # about 167 m north
+            ("a53001", "a19b2f", truth["lat"], truth["lon"])]              # another pair on the truth
+    entry = runner.bench_case("synthetic", tmp_path / "out", execute=_execute_with_triples(rows), cases_path=one_case)
+    assert entry["true_pair_near_reference"] is True and entry["true_pair_within_refine_reach"] is True
+    assert 160 < entry["true_pair_min_distance_m"]["scored"] < 175
+    far = runner.bench_case("synthetic", tmp_path / "far", execute=_execute_with_triples(rows[:1]), cases_path=one_case)
+    assert far["true_pair_near_reference"] is False and far["true_pair_within_refine_reach"] is True
+
+
+def test_a_changed_triples_file_discards_the_record(tmp_path, one_case):
+    runner.bench_case("synthetic", tmp_path / "out", execute=_execute_with_triples([("a", "b", 0.0, 0.0)]),
+                      cases_path=one_case)
+    (tmp_path / "out" / runner.TRIPLES_FILE).write_bytes(b"changed")
+
+    def labels():
+        raise AssertionError("labels read for a record whose triples changed")
+    meta = {"id": "synthetic", "version": 1, "group": "g", "set": "development", "expected_outcome": "located"}
+    assert runner.compare_case(tmp_path / "out", meta, labels)["status"] == "discarded"
+
+
+def test_search_overrides_parse_and_refuse_the_cpa_inputs():
+    assert runner.parse_overrides(["tol_s=12", "time_convention=emission", "sf_tol_s=null", "d_tol=[0.5, 2]"]) == \
+        {"tol_s": 12, "time_convention": "emission", "sf_tol_s": None, "d_tol": [0.5, 2]}
+    with pytest.raises(ValueError):
+        runner.parse_overrides(["tol_s"])
+    case = cases.blind_case("oyster-bay")
+    d = runner.Draft(case, {}, "saved-fit", lambda m: None, {"tol_s": 12, "time_convention": "emission"})
+    assert d.search["tol_s"] == 12 and d.extra_kwargs == {"time_convention": "emission"}
+    assert d.params["search_overrides"] == {"tol_s": 12, "time_convention": "emission"}
+    with pytest.raises(ValueError, match="CPA table"):
+        runner.Draft(case, {}, "saved-fit", lambda m: None, {"spacing_m": 100})
+
+
+def test_a_recipe_can_write_into_a_folder(tmp_path, monkeypatch):
+    import hashlib
+    monkeypatch.setenv("DOPPLERTRACK_DATA", str(tmp_path))
+    body = b"cut"
+    write = "import pathlib, sys; pathlib.Path(sys.argv[1], 'box.npz').write_bytes(b'cut'); pathlib.Path(sys.argv[1], 'other.npz').write_bytes(b'x')"
+    case = {"derived": [{"path": "derived/traces/box.npz", "sha256": hashlib.sha256(body).hexdigest(),
+                         "recipe": [["python", "-c", write, "{out_dir}"]]}]}
+    assert cases.build(case, log=lambda m: None) == []
+    assert (tmp_path / "derived" / "traces" / "box.npz").read_bytes() == body
+    assert sorted(p.name for p in (tmp_path / "derived" / "traces").iterdir()) == ["box.npz"]

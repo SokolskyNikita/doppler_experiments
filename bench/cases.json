@@ -407,11 +407,11 @@
        "-I",
        "{repo}/tools/data/extract_boxes.py",
        "{data}/raw/adsb/2026-09-08",
-       "{out}",
+       "{out_dir}",
        "ny_wsw150=39.82,40.94,-76.21,-74.11"
       ]
      ],
-     "note": "cut 2026-11-04 with tools/data/extract_boxes.py from the local tar (runs/2026-11-04-cut-ny-wsw150/). extract_boxes writes OUT_DIR/<name>.npz rather than one file, so this recipe needs its directory form until extract_boxes takes an output file"
+     "note": "cut 2026-11-04 with tools/data/extract_boxes.py from the local tar (runs/2026-11-04-cut-ny-wsw150/). Cut before extract_boxes wrote extraction metadata, so a rebuild today adds it and its bytes won't match this hash"
     }
    ],
    "spectrogram": "derived/oyster_bay/rec.npz",
@@ -763,11 +763,11 @@
        "-I",
        "{repo}/tools/data/extract_boxes.py",
        "{data}/raw/adsb/2026-09-08",
-       "{out}",
+       "{out_dir}",
        "ny_north150=41.64,42.76,-74.54,-72.46"
       ]
      ],
-     "note": "cut with tools/data/extract_boxes.py from the local tar (log in derived/traces/2026-09-08.log). extract_boxes writes a directory of boxes, not one file, so this recipe is not yet runnable as written"
+     "note": "cut with tools/data/extract_boxes.py from the local tar (log in derived/traces/2026-09-08.log). Cut before extract_boxes wrote extraction metadata, so a rebuild today adds it and its bytes won't match this hash"
     }
    ],
    "spectrogram": "derived/oyster_bay/rec.npz",
@@ -884,7 +884,7 @@
    "expected_outcome": "located",
    "description": "Eclipse Soundscapes ESID 375: two continuous 12.4 h WAVs with a 2 s hole between them, from 01:39:34 UTC on 2024-04-07, quiet airspace (6 prop passes within 12 km) (gaps: docs/experiments/2026-11-03-gap-aware-spectrogram.md)",
    "runnable": {
-    "blocked": "runs past UTC midnight into 2024-04-08: that day's flight data is on disk, but the runner loads one day's traces per case and cannot join two yet; evaluation cases run only at milestones (PLAN 5.4 tier E)"
+    "blocked": "evaluation cases run only at milestones (PLAN 5.4 tier E)"
    },
    "source": {
     "identifiers": {
@@ -925,17 +925,35 @@
      {
       "path": "raw/adsb/2024-04-07/v2024.04.07-planes-readsb-prod-0.tar",
       "sha256": "7237b5baa243842c38dfedd4aec8b128b04c02a542eaf1a3cc740c2ba38c2e74"
+     },
+     {
+      "path": "raw/adsb/2024-04-08/v2024.04.08-planes-readsb-prod-0.tar.aa",
+      "sha256": "f57a7ee4d6aaed578bfaabb4bf7fb44defbd8a24355348320454d1fc062c75e1"
+     },
+     {
+      "path": "raw/adsb/2024-04-08/v2024.04.08-planes-readsb-prod-0.tar.ab",
+      "sha256": "13cdd36c33803b43248bebf2d18d8912222dd6e6021ebb6ea2079c7cd291b511"
      }
     ],
-    "traces": "derived/traces/2024-04-07/esid375_margin12.npz",
-    "extraction_box": [
-     40.225,
-     41.342,
-     -85.038,
-     -82.968
+    "traces": [
+     "derived/traces/2024-04-07/esid375_margin12_v2.npz",
+     "derived/traces/2024-04-08/esid375_margin12.npz"
     ],
-    "extraction_note": "2024-04-08 cut: coverage_bbox measured in its metadata; the 2024-04-07 cut (esid<n>_margin12, pre-Phase 0) has no metadata and was cut to the same box (envelope recovered by SDE-D)",
-    "traces_next_day": "derived/traces/2024-04-08/esid375_margin12.npz"
+    "extraction_box": [
+     [
+      40.225,
+      41.342,
+      -85.038,
+      -82.968
+     ],
+     [
+      40.225,
+      41.342,
+      -85.038,
+      -82.968
+     ]
+    ],
+    "extraction_note": "both days cut to the same envelope with tools/data/extract_boxes.py, each carrying its measured extraction metadata; the runner joins them across midnight (adsb.join_days). The legacy 2024-04-07 cut (esid<n>_margin12.npz, no metadata) is no longer used"
    },
    "labels": {
     "reference": {
@@ -956,7 +974,39 @@
      -83.113
     ],
     "note": "padded_bbox(bbox, 12 km) lies inside the 2024-04-08 cut's measured coverage_bbox"
-   }
+   },
+   "derived": [
+    {
+     "path": "derived/traces/2024-04-07/esid375_margin12_v2.npz",
+     "sha256": "8a96b6fca9b641a37145ded25e622cb486046dd3f7c15f83010cbaaaa4d4c592",
+     "recipe": [
+      [
+       "python",
+       "-I",
+       "{repo}/tools/data/extract_boxes.py",
+       "{data}/raw/adsb/2024-04-07",
+       "{out_dir}",
+       "esid375_margin12_v2=40.225,41.342,-85.038,-82.968"
+      ]
+     ],
+     "note": "re-cut 2026-11-04 with extraction metadata (runs/2026-11-04-recut-eclipse-2024-04-07/)"
+    },
+    {
+     "path": "derived/traces/2024-04-08/esid375_margin12.npz",
+     "sha256": "8b98ddba19ec0c3bcaffe496f4a70c6a77be00510602735938debba335a8ef79",
+     "recipe": [
+      [
+       "python",
+       "-I",
+       "{repo}/tools/data/extract_boxes.py",
+       "{data}/raw/adsb/2024-04-08",
+       "{out_dir}",
+       "esid375_margin12=40.225,41.342,-85.038,-82.968"
+      ]
+     ],
+     "note": "cut 2026-11-04 by SDE-D with extraction metadata"
+    }
+   ]
   },
   {
    "id": "eclipse-esid710",
@@ -1007,16 +1057,35 @@
      {
       "path": "raw/adsb/2024-04-07/v2024.04.07-planes-readsb-prod-0.tar",
       "sha256": "7237b5baa243842c38dfedd4aec8b128b04c02a542eaf1a3cc740c2ba38c2e74"
+     },
+     {
+      "path": "raw/adsb/2024-04-08/v2024.04.08-planes-readsb-prod-0.tar.aa",
+      "sha256": "f57a7ee4d6aaed578bfaabb4bf7fb44defbd8a24355348320454d1fc062c75e1"
+     },
+     {
+      "path": "raw/adsb/2024-04-08/v2024.04.08-planes-readsb-prod-0.tar.ab",
+      "sha256": "13cdd36c33803b43248bebf2d18d8912222dd6e6021ebb6ea2079c7cd291b511"
      }
     ],
-    "traces": "derived/traces/2024-04-07/esid710_margin12.npz",
-    "extraction_box": [
-     40.136,
-     41.253,
-     -90.624,
-     -88.557
+    "traces": [
+     "derived/traces/2024-04-07/esid710_margin12_v2.npz",
+     "derived/traces/2024-04-08/esid710_margin12.npz"
     ],
-    "extraction_note": "2024-04-08 cut: coverage_bbox measured in its metadata; the 2024-04-07 cut (esid<n>_margin12, pre-Phase 0) has no metadata and was cut to the same box (envelope recovered by SDE-D)"
+    "extraction_box": [
+     [
+      40.136,
+      41.253,
+      -90.624,
+      -88.557
+     ],
+     [
+      40.136,
+      41.253,
+      -90.624,
+      -88.557
+     ]
+    ],
+    "extraction_note": "both days cut to the same envelope with tools/data/extract_boxes.py, each carrying its measured extraction metadata; the runner joins them across midnight (adsb.join_days). The legacy 2024-04-07 cut (esid<n>_margin12.npz, no metadata) is no longer used"
    },
    "labels": {
     "reference": {
@@ -1037,7 +1106,39 @@
      -88.702
     ],
     "note": "padded_bbox(bbox, 12 km) lies inside the 2024-04-08 cut's measured coverage_bbox"
-   }
+   },
+   "derived": [
+    {
+     "path": "derived/traces/2024-04-07/esid710_margin12_v2.npz",
+     "sha256": "e812dc0a990acc2c804ebaada8acc538d8d2d0a6b3c63f40f875c3fe1ea6701e",
+     "recipe": [
+      [
+       "python",
+       "-I",
+       "{repo}/tools/data/extract_boxes.py",
+       "{data}/raw/adsb/2024-04-07",
+       "{out_dir}",
+       "esid710_margin12_v2=40.136,41.253,-90.624,-88.557"
+      ]
+     ],
+     "note": "re-cut 2026-11-04 with extraction metadata (runs/2026-11-04-recut-eclipse-2024-04-07/)"
+    },
+    {
+     "path": "derived/traces/2024-04-08/esid710_margin12.npz",
+     "sha256": "f7db197739bf6bb4273d3fea6a42f18536415d3968500a8ed26078eb03c18cae",
+     "recipe": [
+      [
+       "python",
+       "-I",
+       "{repo}/tools/data/extract_boxes.py",
+       "{data}/raw/adsb/2024-04-08",
+       "{out_dir}",
+       "esid710_margin12=40.136,41.253,-90.624,-88.557"
+      ]
+     ],
+     "note": "cut 2026-11-04 by SDE-D with extraction metadata"
+    }
+   ]
   },
   {
    "id": "eclipse-esid740",
@@ -1088,16 +1189,35 @@
      {
       "path": "raw/adsb/2024-04-07/v2024.04.07-planes-readsb-prod-0.tar",
       "sha256": "7237b5baa243842c38dfedd4aec8b128b04c02a542eaf1a3cc740c2ba38c2e74"
+     },
+     {
+      "path": "raw/adsb/2024-04-08/v2024.04.08-planes-readsb-prod-0.tar.aa",
+      "sha256": "f57a7ee4d6aaed578bfaabb4bf7fb44defbd8a24355348320454d1fc062c75e1"
+     },
+     {
+      "path": "raw/adsb/2024-04-08/v2024.04.08-planes-readsb-prod-0.tar.ab",
+      "sha256": "13cdd36c33803b43248bebf2d18d8912222dd6e6021ebb6ea2079c7cd291b511"
      }
     ],
-    "traces": "derived/traces/2024-04-07/esid740_margin12.npz",
-    "extraction_box": [
-     37.195,
-     38.312,
-     -90.059,
-     -88.076
+    "traces": [
+     "derived/traces/2024-04-07/esid740_margin12_v2.npz",
+     "derived/traces/2024-04-08/esid740_margin12.npz"
     ],
-    "extraction_note": "2024-04-08 cut: coverage_bbox measured in its metadata; the 2024-04-07 cut (esid<n>_margin12, pre-Phase 0) has no metadata and was cut to the same box (envelope recovered by SDE-D)"
+    "extraction_box": [
+     [
+      37.195,
+      38.312,
+      -90.059,
+      -88.076
+     ],
+     [
+      37.195,
+      38.312,
+      -90.059,
+      -88.076
+     ]
+    ],
+    "extraction_note": "both days cut to the same envelope with tools/data/extract_boxes.py, each carrying its measured extraction metadata; the runner joins them across midnight (adsb.join_days). The legacy 2024-04-07 cut (esid<n>_margin12.npz, no metadata) is no longer used"
    },
    "labels": {
     "reference": {
@@ -1118,17 +1238,49 @@
      -88.22
     ],
     "note": "padded_bbox(bbox, 12 km) lies inside the 2024-04-08 cut's measured coverage_bbox"
-   }
+   },
+   "derived": [
+    {
+     "path": "derived/traces/2024-04-07/esid740_margin12_v2.npz",
+     "sha256": "5f1ab93d36ae2582d45800e7d62f02f00de4735b9f900e0072467dac50c336dd",
+     "recipe": [
+      [
+       "python",
+       "-I",
+       "{repo}/tools/data/extract_boxes.py",
+       "{data}/raw/adsb/2024-04-07",
+       "{out_dir}",
+       "esid740_margin12_v2=37.195,38.312,-90.059,-88.076"
+      ]
+     ],
+     "note": "re-cut 2026-11-04 with extraction metadata (runs/2026-11-04-recut-eclipse-2024-04-07/)"
+    },
+    {
+     "path": "derived/traces/2024-04-08/esid740_margin12.npz",
+     "sha256": "d82233800edcb75c78c9168c7b558ef12a102e4b1db38af1e7eb46c4afa10fa3",
+     "recipe": [
+      [
+       "python",
+       "-I",
+       "{repo}/tools/data/extract_boxes.py",
+       "{data}/raw/adsb/2024-04-08",
+       "{out_dir}",
+       "esid740_margin12=37.195,38.312,-90.059,-88.076"
+      ]
+     ],
+     "note": "cut 2026-11-04 by SDE-D with extraction metadata"
+    }
+   ]
   },
   {
    "id": "eclipse-esid937",
    "version": 1,
    "group": "eclipse-esid937",
-   "set": "calibration",
+   "set": "evaluation",
    "expected_outcome": "not_located",
    "description": "Eclipse Soundscapes ESID 937: two continuous 12.4 h WAVs with a 2 s hole between them, from 05:40:21 UTC on 2024-04-07, no prop pass within 20 km all day: must abstain (gaps: docs/experiments/2026-11-03-gap-aware-spectrogram.md)",
    "runnable": {
-    "blocked": "runs past UTC midnight into 2024-04-08: that day's flight data is on disk, but the runner loads one day's traces per case and cannot join two yet; calibration cases are not run before Phase 4's thresholds exist"
+    "blocked": "evaluation cases run only at milestones (PLAN 5.4 tier E)"
    },
    "source": {
     "identifiers": {
@@ -1169,17 +1321,35 @@
      {
       "path": "raw/adsb/2024-04-07/v2024.04.07-planes-readsb-prod-0.tar",
       "sha256": "7237b5baa243842c38dfedd4aec8b128b04c02a542eaf1a3cc740c2ba38c2e74"
+     },
+     {
+      "path": "raw/adsb/2024-04-08/v2024.04.08-planes-readsb-prod-0.tar.aa",
+      "sha256": "f57a7ee4d6aaed578bfaabb4bf7fb44defbd8a24355348320454d1fc062c75e1"
+     },
+     {
+      "path": "raw/adsb/2024-04-08/v2024.04.08-planes-readsb-prod-0.tar.ab",
+      "sha256": "13cdd36c33803b43248bebf2d18d8912222dd6e6021ebb6ea2079c7cd291b511"
      }
     ],
-    "traces": "derived/traces/2024-04-07/esid937_margin12.npz",
-    "extraction_box": [
-     36.413,
-     37.53,
-     -91.188,
-     -89.226
+    "traces": [
+     "derived/traces/2024-04-07/esid937_margin12_v2.npz",
+     "derived/traces/2024-04-08/esid937_margin12.npz"
     ],
-    "extraction_note": "2024-04-08 cut: coverage_bbox measured in its metadata; the 2024-04-07 cut (esid<n>_margin12, pre-Phase 0) has no metadata and was cut to the same box (envelope recovered by SDE-D)",
-    "traces_next_day": "derived/traces/2024-04-08/esid937_margin12.npz"
+    "extraction_box": [
+     [
+      36.413,
+      37.53,
+      -91.188,
+      -89.226
+     ],
+     [
+      36.413,
+      37.53,
+      -91.188,
+      -89.226
+     ]
+    ],
+    "extraction_note": "both days cut to the same envelope with tools/data/extract_boxes.py, each carrying its measured extraction metadata; the runner joins them across midnight (adsb.join_days). The legacy 2024-04-07 cut (esid<n>_margin12.npz, no metadata) is no longer used"
    },
    "labels": {
     "reference": {
@@ -1200,7 +1370,39 @@
      -89.37
     ],
     "note": "padded_bbox(bbox, 12 km) lies inside the 2024-04-08 cut's measured coverage_bbox"
-   }
+   },
+   "derived": [
+    {
+     "path": "derived/traces/2024-04-07/esid937_margin12_v2.npz",
+     "sha256": "33a7bd672b4d508a42a5a143ce438b080fd4bc5f75cd3efae13e37e8183315ce",
+     "recipe": [
+      [
+       "python",
+       "-I",
+       "{repo}/tools/data/extract_boxes.py",
+       "{data}/raw/adsb/2024-04-07",
+       "{out_dir}",
+       "esid937_margin12_v2=36.413,37.53,-91.188,-89.226"
+      ]
+     ],
+     "note": "re-cut 2026-11-04 with extraction metadata (runs/2026-11-04-recut-eclipse-2024-04-07/)"
+    },
+    {
+     "path": "derived/traces/2024-04-08/esid937_margin12.npz",
+     "sha256": "8f372bc79a9734558f49246fdbf64de3c40c3ab090fcc2afcc9d7f9ca3911f0c",
+     "recipe": [
+      [
+       "python",
+       "-I",
+       "{repo}/tools/data/extract_boxes.py",
+       "{data}/raw/adsb/2024-04-08",
+       "{out_dir}",
+       "esid937_margin12=36.413,37.53,-91.188,-89.226"
+      ]
+     ],
+     "note": "cut 2026-11-04 by SDE-D with extraction metadata"
+    }
+   ]
   },
   {
    "id": "xenocanto-xc979185",

@@ -1,0 +1,33 @@
+{
+ "schema": 1,
+ "note": "Tier 1 (PLAN 5.4): detect and fits against the blind labels on these spans, and the known point on these cases. `bench tier1` runs only the development spans unless asked for another set; ESID 740 is calibration, so Phase 4 runs it once. Paths as in cases.json.",
+ "spans": [
+  {
+   "id": "oyster-bay-0000-1200",
+   "labels": "bench/labels/oyster_bay-0000-1200.json",
+   "set": "development",
+   "group": "oyster-bay",
+   "spectrogram": {"path": "derived/oyster_bay/rec.npz", "sha256": "f996b61a2b596498d34e59af2e555446ef6ab879263e669868acb2b6221b531b"},
+   "reference_case": "oyster-bay"
+  },
+  {
+   "id": "eagle-cam-3600-4800",
+   "labels": "bench/labels/swfl_2024-12-28-3600-4800.json",
+   "set": "development",
+   "group": "eagle-cam",
+   "spectrogram": {"path": "derived/swfl/rec.npz", "sha256": "d9081beb6f641866010dd26ed6e0380848480008dcfb82b08209ffc6fe7b4888",
+                   "note": "the full 11.9 h stream's spectrogram, whose seconds are the label file's; no case covers this span"},
+   "reference_case": "eagle-cam-clip-18000s"
+  },
+  {
+   "id": "esid740-61200-62400",
+   "labels": "bench/labels/ESID_740_2024-04-07-61200-62400.json",
+   "set": "calibration",
+   "group": "eclipse-esid740",
+   "spectrogram": {"path": "derived/eclipse/ESID_740/spec_2024-04-07_1640-1740.npz", "sha256": null,
+                   "note": "not built: a spectrogram of the 2024-04-07 minute files from 16:40 to 17:40 UTC with the folder-mode spectrogram, made when Phase 4 first runs this span"},
+   "reference_case": "eclipse-esid740"
+  }
+ ],
+ "known_point": ["oyster-bay", "eagle-cam-clip-18000s", "oyster-bay-hp150-aac32k"]
+}

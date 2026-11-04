@@ -96,7 +96,12 @@
    "labeller": "Claude (SDE-D session), from the contact sheets",
    "blind": true,
    "date": "2026-11-04",
-   "notes": "long falling line 130 to 65 Hz, flat after 185 s; the 345-255 Hz line falls over 120-165 s and may be another source"
+   "notes": "long falling line 130 to 65 Hz, flat after 185 s; the 345-255 Hz line falls over 120-165 s and may be another source",
+   "checked": {
+    "by": "the user, by eye, from the zoomed windows in runs/2026-11-04-blind-labels-spotcheck/spotcheck.html",
+    "date": "2026-11-04",
+    "verdict": "stands"
+   }
   },
   {
    "id": "ob-e04",
@@ -150,7 +155,12 @@
    "labeller": "Claude (SDE-D session), from the contact sheets",
    "blind": true,
    "date": "2026-11-04",
-   "notes": "several parallel falling lines"
+   "notes": "several parallel falling lines",
+   "checked": {
+    "by": "the user, by eye, from the zoomed windows in runs/2026-11-04-blind-labels-spotcheck/spotcheck.html",
+    "date": "2026-11-04",
+    "verdict": "stands"
+   }
   },
   {
    "id": "ob-a03",
@@ -245,7 +255,12 @@
    "labeller": "Claude (SDE-D session), from the contact sheets",
    "blind": true,
    "date": "2026-11-04",
-   "notes": "strong wobbling tone falls 235 to 172 Hz over 480-497 s, then flat; broadband burst at 476-480 s"
+   "notes": "strong wobbling tone falls 235 to 172 Hz over 480-497 s, then flat; broadband burst at 476-480 s",
+   "checked": {
+    "by": "the user, by eye, from the zoomed windows in runs/2026-11-04-blind-labels-spotcheck/spotcheck.html",
+    "date": "2026-11-04",
+    "verdict": "stands"
+   }
   },
   {
    "id": "ob-a06",
@@ -302,7 +317,12 @@
    "labeller": "Claude (SDE-D session), from the contact sheets",
    "blind": true,
    "date": "2026-11-04",
-   "notes": "many parallel falling lines, steepest about 655-670 s"
+   "notes": "many parallel falling lines, steepest about 655-670 s",
+   "checked": {
+    "by": "the user, by eye, from the zoomed windows in runs/2026-11-04-blind-labels-spotcheck/spotcheck.html",
+    "date": "2026-11-04",
+    "verdict": "stands"
+   }
   },
   {
    "id": "ob-a08",
@@ -386,7 +406,8 @@
    "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
    "blind": false,
    "date": "2026-11-04",
-   "notes": "no pass within 40 s"
+   "notes": "no pass within 40 s",
+   "line": null
   },
   {
    "window": "ob-e02",
@@ -394,7 +415,8 @@
    "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
    "blind": false,
    "date": "2026-11-04",
-   "notes": "N360NY (7.3 km, heard 131 s) predicts a fall over the window; the lines rise"
+   "notes": "N360NY (7.3 km, heard 131 s) predicts a fall over the window; the lines rise",
+   "line": null
   },
   {
    "window": "ob-e03",
@@ -408,7 +430,8 @@
    "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
    "blind": false,
    "date": "2026-11-04",
-   "notes": "at f0 293 Hz the modelled curve follows the 345 to 255 Hz line over 120-155 s; the steep 130 to 65 Hz line falls further than the model's 1.75 ratio"
+   "notes": "at f0 293 Hz the modelled curve follows the 345 to 255 Hz line over 120-155 s; the steep 130 to 65 Hz line falls further than the model's 1.75 ratio",
+   "line": 1
   },
   {
    "window": "ob-e04",
@@ -416,7 +439,8 @@
    "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
    "blind": false,
    "date": "2026-11-04",
-   "notes": "rising lines; N360NY's curve is flat by then"
+   "notes": "rising lines; N360NY's curve is flat by then",
+   "line": null
   },
   {
    "window": "ob-e05",
@@ -424,7 +448,8 @@
    "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
    "blind": false,
    "date": "2026-11-04",
-   "notes": "no pass within 40 s"
+   "notes": "no pass within 40 s",
+   "line": null
   },
   {
    "window": "ob-e06",
@@ -432,7 +457,8 @@
    "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
    "blind": false,
    "date": "2026-11-04",
-   "notes": "no pass within 40 s"
+   "notes": "no pass within 40 s",
+   "line": null
   },
   {
    "window": "ob-e07",
@@ -440,7 +466,8 @@
    "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
    "blind": false,
    "date": "2026-11-04",
-   "notes": "no pass within 40 s"
+   "notes": "no pass within 40 s",
+   "line": null
   },
   {
    "window": "ob-e08",
@@ -448,7 +475,8 @@
    "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
    "blind": false,
    "date": "2026-11-04",
-   "notes": "no pass within 40 s; a strong event"
+   "notes": "no pass within 40 s; a strong event",
+   "line": null
   },
   {
    "window": "ob-e10",
@@ -456,7 +484,8 @@
    "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
    "blind": false,
    "date": "2026-11-04",
-   "notes": "only N2152Z, 11.8 km, heard 603 s, whose curve is flat over the window; the lines fall 43 %"
+   "notes": "only N2152Z, 11.8 km, heard 603 s, whose curve is flat over the window; the lines fall 43 %",
+   "line": null
   },
   {
    "window": "ob-e11",
@@ -464,7 +493,8 @@
    "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
    "blind": false,
    "date": "2026-11-04",
-   "notes": "C-GZQU (8.8 km, heard 814 s) could fit a falling streak near 800-820 s, but not the rising lines; N501EX (8.4 km, heard 782 s) is flat; left unmatched"
+   "notes": "C-GZQU (8.8 km, heard 814 s) could fit a falling streak near 800-820 s, but not the rising lines; N501EX (8.4 km, heard 782 s) is flat; left unmatched",
+   "line": null
   },
   {
    "window": "ob-e12",
@@ -472,7 +502,8 @@
    "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
    "blind": false,
    "date": "2026-11-04",
-   "notes": "N829RP (4.1 km, heard 1117 s) shows no visible curve; the streaks at 1160-1170 s don't follow it"
+   "notes": "N829RP (4.1 km, heard 1117 s) shows no visible curve; the streaks at 1160-1170 s don't follow it",
+   "line": null
   }
  ],
  "overlays": "runs/2026-11-04-blind-labels/oyster_bay_overlay"

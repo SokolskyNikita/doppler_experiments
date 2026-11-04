@@ -1,0 +1,169 @@
+"""PLAN Phase 2 item 7, stage A: event choice by the comparable score Z. SDE-B's event_pairs.py (copied, not
+changed) with run_search(comparable=True): each event is scored against its own null and the ten pairs of
+detect's top five are ranked by their search's top Z, blind, and the ranking hashed before any label is read.
+
+Criterion (docs/experiments/2026-11-04-comparable-score.md, fixed before running):
+  A1  eagle-cam-clip-18000s: the true pair (detect ranks 2 + 5) ranks first of the ten by top Z.
+  A2  oyster-bay-moved-wsw150: the top pair's Z margin over the second pair is no larger than the eagle cam's
+      true pair's Z margin over its second.
+  A3  oyster-bay: events 1 + 2 stay first of its ten.
+Reported separately, as the PM asked: whether the true pair survives the coarse search within 250 m of the
+reference (the runner's triples sidecar), and its rank once retained.
+
+usage, from the repo root:
+  event_pairs_z.py RUN_DIR DETECTED_RUN CASE [CASE ...]   prepare, run, rank, reveal, evaluate
+  event_pairs_z.py one RUN_DIR VARIANT CODE               (internal) one variant"""
+import itertools
+import json
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+from bench import cases, runner                                   # noqa: E402
+from dopplertrack.result import read_record, sha256_bytes, write_record   # noqa: E402
+
+TOP = 5
+JOBS = 2
+WORKERS = 4                     # run_search's pool per variant
+TRUE_EVENTS = {"eagle-cam-clip-18000s": [2, 5], "oyster-bay": [1, 2]}
+
+
+def prepare(run: Path, detected_run: Path, case_ids: list[str]) -> dict:
+    doc = cases.load_cases()
+    variants, plan = [], {}
+    for cid in case_ids:
+        base = next(c for c in doc["cases"] if c["id"] == cid)
+        det = json.loads((detected_run / cid / "detected.json").read_text())
+        top = sorted(det, key=lambda d: d["score"], reverse=True)[:TOP]
+        for k, d in enumerate(top, 1):
+            d["detect_rank"] = k
+        plan[cid] = []
+        for a, b in itertools.combinations(top, 2):
+            e1, e2 = sorted((a, b), key=lambda d: d["t_cpa"])
+            vid = f"{cid}--d{e1['detect_rank']}d{e2['detect_rank']}"
+            files = []
+            for e in (e1, e2):
+                p = run / "events" / f"{cid}-d{e['detect_rank']}.json"
+                p.parent.mkdir(parents=True, exist_ok=True)
+                p.write_text(json.dumps({k: v for k, v in e.items() if k != "detect_rank"}, indent=1) + "\n")
+                files.append(str(p))
+            v = json.loads(json.dumps(base))
+            v.update(id=vid, version=1)
+            v["events"] = {"mode": "saved_fits", "files": files, "pick": None, "time_offset_s": 0.0}
+            v["search"]["harmonics"] = [1, 1]
+            variants.append(v)
+            plan[cid].append({"variant": vid, "events": [e1["detect_rank"], e2["detect_rank"]],
+                              "t_cpa": [e1["t_cpa"], e2["t_cpa"]]})
+    (run / "cases.json").write_text(json.dumps({"schema": 1, "cases": variants}, indent=1) + "\n")
+    (run / "plan.json").write_text(json.dumps(plan, indent=1) + "\n")
+    return plan
+
+
+def one(run: Path, vid: str):
+    case = cases.blind_case(vid, run / "cases.json")
+    out = run / vid
+    out.mkdir(parents=True, exist_ok=True)
+    with open(out / "run.log", "w") as fh:
+        record = runner.execute_case(case, out, log=lambda m: print(m, file=fh, flush=True), code=CODE,
+                                     overrides={"workers": WORKERS, "comparable": True})
+    sha = write_record(out / "result.json", record)
+    (out / runner.HASH_FILE).write_text(f"{sha}  result.json\n")
+
+
+def rank(run: Path, plan: dict) -> dict:
+    """Each case's ten pairs ordered by the search's own top score, from the hashed records only."""
+    table = {}
+    for cid, rows in plan.items():
+        out = []
+        for r in rows:
+            d = run / r["variant"]
+            rec = read_record(d / "result.json", (d / runner.HASH_FILE).read_text().split()[0])
+            c = rec["candidates"]
+            out.append({**r, "errors": rec["execution"]["errors"], "flight_pairs": len(c),
+                        "top_score": c[0]["score"] if c else None, "top_flights": c[0]["flights"] if c else None,
+                        "top_raw_score": sum(c[0]["event_scores"]) if c else None,
+                        "top_event_scores": c[0]["event_scores"] if c else None,
+                        "z_margin_within": (c[0]["score"] - c[1]["score"]) if len(c) > 1 else None,
+                        "margin_pct": (100 * (c[0]["score"] - c[1]["score"]) / c[1]["score"]) if len(c) > 1 else None})
+        out.sort(key=lambda r: -(r["top_score"] or 0))
+        for k, r in enumerate(out, 1):
+            r["search_rank"] = k
+        if len(out) > 1:
+            out[0]["z_margin_over_next_pair"] = out[0]["top_score"] - out[1]["top_score"]
+        table[cid] = out
+    return table
+
+
+def main():
+    run, detected_run, case_ids = Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3:]
+    plan = prepare(run, detected_run, case_ids)
+    pending = [r["variant"] for rows in plan.values() for r in rows]
+    running = []
+    t0 = time.time()
+    while pending or running:
+        while pending and len(running) < JOBS:
+            vid = pending.pop(0)
+            running.append((vid, subprocess.Popen([sys.executable, __file__, "one", str(run), vid, json.dumps(CODE)])))
+            print(f"[{time.time() - t0:5.0f} s] started {vid}", flush=True)
+        for vid, p in list(running):
+            if p.poll() is not None:
+                running.remove((vid, p))
+                print(f"[{time.time() - t0:5.0f} s] {vid} exited {p.returncode}", flush=True)
+        time.sleep(2)
+    table = rank(run, plan)
+    data = (json.dumps(table, indent=1, sort_keys=True) + "\n").encode()
+    (run / "ranking.json").write_bytes(data)
+    (run / "ranking.json.sha256").write_text(f"{sha256_bytes(data)}  ranking.json\n")
+    print("ranking written and hashed; reading labels", flush=True)
+    reveal = {}
+    for cid, rows in table.items():
+        lab = cases.case_labels(cid, cases.latest_case(cid)["version"])
+        for r in rows:
+            meta = {"id": r["variant"], "version": 1, "group": "", "set": "development", "expected_outcome": ""}
+            e = runner.compare_case(run / r["variant"], meta, lambda: lab)
+            r.update({k: e.get(k) for k in ("status", "true_pair_rank", "top_error_m", "refined_error_m",
+                                            "true_pair_near_reference", "true_pair_within_refine_reach",
+                                            "true_pair_min_distance_m")})
+        reveal[cid] = rows
+    (run / "reveal.json").write_text(json.dumps(reveal, indent=1, sort_keys=True) + "\n")
+    (run / "evaluation.json").write_text(json.dumps(evaluate(reveal), indent=1, sort_keys=True) + "\n")
+    for cid, rows in reveal.items():
+        print(f"\n{cid}")
+        for r in rows:
+            print(f"  {r['search_rank']:>2}  d{r['events'][0]}+d{r['events'][1]}  Z {r['top_score'] or 0:6.2f}  "
+                  f"raw {r['top_raw_score'] or 0:6.2f}  near {r['true_pair_near_reference']}  "
+                  f"pairs {r['flight_pairs']:>4}  top {r['top_flights']}  error {r['top_error_m']}  "
+                  f"true-pair rank {r['true_pair_rank']}")
+
+
+def evaluate(reveal: dict) -> dict:
+    """A1-A3 from the revealed table, plus each case's ten top Z values."""
+    out = {"z_distribution": {cid: [r["top_score"] for r in rows] for cid, rows in reveal.items()}}
+    def by_events(cid, ev):
+        return next((r for r in reveal.get(cid, []) if sorted(r["events"]) == sorted(ev)), None)
+    eagle = by_events("eagle-cam-clip-18000s", TRUE_EVENTS["eagle-cam-clip-18000s"])
+    if eagle is not None:
+        rows = reveal["eagle-cam-clip-18000s"]
+        nxt = [r for r in rows if r is not eagle][0]
+        out["A1"] = {"true_pair_event_rank": eagle["search_rank"], "met": eagle["search_rank"] == 1}
+        out["eagle_true_margin_over_second"] = eagle["top_score"] - nxt["top_score"]
+    wsw = reveal.get("oyster-bay-moved-wsw150")
+    if wsw and eagle is not None:
+        m = wsw[0]["top_score"] - wsw[1]["top_score"]
+        out["A2"] = {"wsw_top_margin": m, "eagle_true_margin": out["eagle_true_margin_over_second"],
+                     "met": m <= out["eagle_true_margin_over_second"]}
+    ob = by_events("oyster-bay", TRUE_EVENTS["oyster-bay"])
+    if ob is not None:
+        out["A3"] = {"events_1_2_rank": ob["search_rank"], "met": ob["search_rank"] == 1}
+    return out
+
+
+if __name__ == "__main__":         # run_search may start spawn pools, which re-import this file
+    if sys.argv[1] == "one":
+        CODE = json.loads(sys.argv[4])
+        one(Path(sys.argv[2]), sys.argv[3])
+    else:
+        CODE = runner.code_revision()
+        main()

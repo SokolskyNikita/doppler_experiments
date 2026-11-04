@@ -86,6 +86,33 @@ Scored triples change by under 0.1 %: Oyster Bay 40,889 to 40,861, the eagle cam
 - **What the per-flight path did.** It recovers most of what one ground-temperature c lost: Oyster Bay goes back to rank 1, and the eagle cam's true pair from rank 6 to rank 2. It doesn't recover the seeds.
 - **The 15 °C default still gives the better seed results.** That isn't evidence the default is right. The committed saved fits were made at 15 °C, so the fits and the search share that c only in the default run.
 - **The next question,** fixed by the PM: are the 15 °C saved fits the mismatch? Refit one case's events at the station temperature, then search them at the per-flight speed.
+**Are the 15 °C saved fits the mismatch? The refit test** (`runs/2026-11-04-merge-refit-savedfit/`, merged from `runs/2026-11-04-refit-savedfit-s{1..8}of8`; fleet, commit 0734635; `tools/experiments/2026-11-04/refit_savedfit.py`).
+- **Setup.** Each positive case's two events were refitted with `fit_event` as the committed fits were made, at 15 °C (the procedure's check) and at the case's ground temperature, then searched. The committed fits were run with the weather off and on as controls.
+- **The criterion,** fixed before the run: with the ground-temperature refits searched through the per-flight path, the eagle cam's true pair returns to rank 1, and Oyster Bay's margin comes back to within 1 point of 4.9 %.
+
+| Case, events, weather | True pair rank | Margin | Refined error |
+|---|---|---|---|
+| oyster-bay, committed, off | 1 | 4.9 % | 43 m |
+| oyster-bay, refitted at 15 °C, off | 1 | 5.0 % | 43 m |
+| oyster-bay, committed, on | 1 | 2.0 % | 146 m |
+| oyster-bay, refitted at 25.6 °C, on | 1 | 8.7 % | 84 m |
+| eagle-cam, committed, off | 1 | 2.5 % | 877 m |
+| eagle-cam, refitted at 15 °C, off | 392 | 0.3 % | 14.1 km (wrong pair) |
+| eagle-cam, committed, on | 2 | 0.6 % | 14.1 km (wrong pair) |
+| eagle-cam, refitted at 26.1 °C, on | not ranked | 2.3 % | 14.2 km (wrong pair) |
+
+- **Oyster Bay.** The refit procedure reproduces the committed fits (f0, v, d and t_cpa to the second decimal), so the comparison is fair.
+  - Refitted at the ground temperature and searched per flight, the true pair keeps rank 1 with a margin of 8.7 %: above both the default's 4.9 % and the committed fits' 2.0 % with the weather on. Refined error is 84 m against the default's 43 m.
+  - Event 2's refit moves more than c alone would: v 141 to 121 m/s, d 5.9 to 4.3 km. The contrast optimum shifts with c.
+  - This supports the 15 °C fits being the mismatch. Read literally, though, "within 1 point of 4.9 %" fails: the margin overshoots, so the criterion's number isn't met.
+- **The eagle cam can't be judged.** Its check fails: refitting the committed fits at 15 °C, by `detect`'s refine step on the clip's spectrogram, doesn't reproduce them.
+  - Event 2's CPA moves 2.8 s and its distance from 3.1 to 3.3 km, and the true pair falls from rank 1 to rank 392.
+  - The committed fits came from `detect` on the full 12-hour recording, whose spectrogram and whitening differ from the clip's.
+  - So the temperature refit, with the true pair not ranked, says nothing about temperature. It does show again how fragile the eagle cam's result is: a 3 s shift in one fit takes the true pair from first to 392nd.
+- **Outcome: the criterion isn't met, and the temperature stays off by default.**
+  - Oyster Bay says the per-flight path wants fits made at the same temperature.
+  - The eagle cam needs its fits remade the way they were made, with `detect` on the full recording at each temperature, before it can answer.
+
 - **"Weather on" is now a run switch, not a case version.** Each case keeps its station reading as data. The runner uses it only when a run sets `use_case_weather`: `bench run --weather`. That run's overrides, run.json and folder tag record the switch.
   - The default is the 15 °C path, with the case's reading recorded in the record's `speed_of_sound` (`case_temperature_c`) but unused.
   - Tier 1 always runs the default.

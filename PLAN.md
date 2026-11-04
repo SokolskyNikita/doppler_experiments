@@ -182,7 +182,7 @@ Open problems, grouped by theme. The IDs are used throughout.
 
 | Milestone | Delivers | Phases | Depends on | Rough size |
 |---|---|---|---|---|
-| **M1: a measuring stick we can trust** | the small known bugs fixed, architecture contracts and a fast gate, the result record, and the seed benchmark with both baselines | 0, architecture preparation, 1 | – | 1–2 weeks + preparation |
+| **M1: a measuring stick we can trust** | the small known bugs fixed, a typed detector worker interface, a local check command, the result record, and the seed benchmark with both baselines | 0, architecture preparation, 1 | – | 1–2 weeks + preparation |
 | **M2: first usable release** | `locate`, from audio, date and box to a verdict and a report, with explicit failures and the alternatives it considered, installable from a release in the fork | 2, 3, 5, 6 and the machinery of Phase 4 | M1 | 3–4 more weeks |
 | **M3: validated claims** | the confident-wrong rate and region coverage measured on independent recordings, against criteria fixed in advance | 4 (claims) | M2, plus enough independent recordings (5.6) | no date: it waits on evidence |
 | **M4: toward the destination** | the extensions in section 1, each when a measurement calls for it | Later | M2 | open |
@@ -212,24 +212,12 @@ Each phase below gives its goal, the approach we expect to take given what we kn
 
 #### Between Phases 0 and 1: architecture preparation
 
-After Phase 0 merges and passes its checks, complete the bounded preparation in
-[architecture requirements](docs/rearchitecture-requirements.md) before starting any Phase 1 item,
-including parallelism. Existing phase numbers stay unchanged.
+Give the detector worker named inputs and outputs. Test which candidate survives a score tie when
+overlapping windows propose nearby events, and exercise the records through the process pool.
+The [preparation spec](docs/rearchitecture-requirements.md) describes the worker change and checks.
 
-Establish a trustworthy offline lint/type/test gate, named stage results, explicit time and position
-conventions, canonical settings with preserved CLI/library profiles, reusable workflow entry points,
-separate progress/results streams, and an accurate architecture map. Capture post-Phase-0 regression
-baselines before code moves and keep independent physics/time checks beside them. Preserve the
-scientific values and rankings of existing development workflows; document schema migrations separately.
-
-The result record, benchmark runner and cases, new caches, gap-aware audio and parallel execution
-remain Phase 1 work. Further module splits, annotation work and fixture cleanup need a specific
-downstream task.
-
-**Done when** the requirements document's R1–R12 acceptance checks pass, both development recordings
-retain their scientific results under declared comparison rules, and a fresh session can follow the
-documented edit paths for a parameter, record and workflow change. Hand the stable interfaces, check
-command and baseline run folders to Phase 1, then start its parallelism item.
+**Done when** the worker checks pass as part of the offline command and the edit map points to
+the detector, CPA computation and cache tests. Phase 1 starts with parallelism.
 
 #### Phase 1: minimal benchmark (M)
 
@@ -237,6 +225,7 @@ command and baseline run folders to Phase 1, then start its parallelism item.
    - One knob, `--jobs`, with an environment default of the performance-core count (10 on this M4 Pro; its 4 efficiency cores would set the pace for 14 equal workers).
    - Parallelism at the coarsest independent level only: cases in the runner, windows in `detect`, grid chunks in the CPA table. A worker always runs with jobs=1 and its BLAS threads pinned to 1, so pools never nest and 14 cores never carry 100 threads.
    - The CPA table build vectorised over a chunk of grid points at a time, then chunks across the pool.
+   - When changing the CPA build, run the previous serial implementation and the new implementation on the same grid, segments, range and sound speed. Compare the ordered rows, columns, dtypes and values. Check the resulting saved-fit search rankings and scores on Oyster Bay and the eagle cam. For the Oyster Bay speed comparison, time the same build operation on both revisions with a fresh CPA cache path for each run.
    - The scoreboard's stage timings (5.5) record wall time and CPU time per stage, so a missed budget points at a stage.
    - Acceptance: a CPA table for the Oyster Bay box in under 1 min from a cold cache; Tier 1 on the seed set under 3 min with the performance cores busy; the same results, byte for byte, at jobs=1 and jobs=10.
    - Not the GPU. The Metal backends (MLX, PyTorch MPS) have no float64, our timestamps are seconds since 1970 and our coordinates span 100 km, and the CPA table is built once per case-day and cached. The GPU is considered in M4 only if a Tier budget is still missed after this item, and only for the CPA table, curve scoring or the STFT.

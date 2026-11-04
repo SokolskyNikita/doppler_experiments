@@ -192,6 +192,18 @@ def pull_caches(bucket: str, kinds: list[str], cache: Path, work: Path) -> int:
     return applied
 
 
+# public files a tool fetches into the cache root on first use from a host the boxes can't reach: each comes from
+# the bucket's copy instead (dopplertrack.adsb.AircraftTypes reads opensky-network.org's Doc 8643 table)
+CACHE_ROOT_FILES = {"doc8643AircraftTypes.csv": "data/raw/aux/opensky/doc8643AircraftTypes.csv"}
+
+
+def seed_cache_root(bucket: str, cache: Path) -> None:
+    cache.mkdir(parents=True, exist_ok=True)
+    for name, key in CACHE_ROOT_FILES.items():
+        if not (cache / name).exists():
+            s5("cp", f"s3://{bucket}/{key}", str(cache / name), check=False)
+
+
 def cache_files(cache: Path) -> set[str]:
     """Every cache file that belongs to an entry, relative to the cache root."""
     out = set()
@@ -288,6 +300,7 @@ def main(argv=None) -> int:
         job.stage("uv_sync", uv_sync, repo)
         job.stage("inputs", pull_inputs, args.bucket, spec.get("inputs", []), data)
         deltas = job.stage("caches", pull_caches, args.bucket, spec.get("caches", []), cache, work)
+        seed_cache_root(args.bucket, cache)
     except Exception:
         job.report(state="failed", error=traceback.format_exc(limit=5))
         s5("cp", "/var/log/dopplertrack-boot.log", f"{job.prefix}/boot.log", check=False)

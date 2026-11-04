@@ -1,8 +1,9 @@
 """Judge coherent_duration.py's gates and test (docs/proposals/2026-11-04-coherent-duration.md), all fixed before
 any result was read.
 
-Thresholds: per pass, method and candidate set, 1 false alarm per hour, P = 18/3600 = 1/200 per window, the 1 - P
-point of a Gumbel fit to the calibration windows' maxima (each the best candidate of the set, clock and pitch).
+Thresholds: per pass, method and candidate set, 1 false alarm per hour, P = 18/3600 = 1/200 per window, the empirical
+1 - P point of the calibration windows' maxima (each the best candidate of the set, clock and pitch); the retune
+replaced the Gumbel fit, whose KS on real background was 0.11-0.35.
 A trial recovers when the set's winner is the true flight and clears its threshold. L80 is the lowest level at which
 the trials recover at least 80 % of the time at that level and at every higher one.
 
@@ -27,15 +28,19 @@ BOOT = 1000
 
 
 def gamma(x, seed):
+    """The threshold: the empirical 1 - P point of the calibration maxima (the retune: real background maxima are
+    heavier-tailed than a Gumbel), with a bootstrap interval; the Gumbel fit's KS is kept as the diagnostic."""
     x = np.asarray(x, float)
     x = x[np.isfinite(x)]
-    loc, scale = stats.gumbel_r.fit(x)
-    g = float(stats.gumbel_r.ppf(1 - P_WINDOW, loc, scale))
+    g = float(np.quantile(x, 1 - P_WINDOW, method="higher"))
     rng = np.random.default_rng(seed)
-    boot = [stats.gumbel_r.ppf(1 - P_WINDOW, *stats.gumbel_r.fit(rng.choice(x, len(x)))) for _ in range(BOOT)]
+    boot = [np.quantile(rng.choice(x, len(x)), 1 - P_WINDOW, method="higher") for _ in range(BOOT)]
+    loc, scale = stats.gumbel_r.fit(x)
     return {"gamma": g, "gamma_ci95": [float(np.percentile(boot, 2.5)), float(np.percentile(boot, 97.5))],
-            "mu": float(loc), "beta": float(scale), "n": int(len(x)),
-            "ks": float(stats.kstest(x, "gumbel_r", (loc, scale)).statistic)}
+            "estimator": "empirical", "n": int(len(x)),
+            "gumbel": {"mu": float(loc), "beta": float(scale),
+                       "gamma": float(stats.gumbel_r.ppf(1 - P_WINDOW, loc, scale)),
+                       "ks": float(stats.kstest(x, "gumbel_r", (loc, scale)).statistic)}}
 
 
 def l80(levels, rate):
@@ -44,7 +49,7 @@ def l80(levels, rate):
     best = None
     for i in order:
         if rate[i] >= 0.8:
-            best = int(levels[i])
+            best = float(levels[i])
         else:
             break
     return best

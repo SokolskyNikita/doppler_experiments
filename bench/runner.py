@@ -960,6 +960,7 @@ def run_bench(case_ids: list[str], tier: str = "t2", run_dir: Path | None = None
         tag = f"-o{overrides_tag(overrides)}" if overrides else ""
         sh = f"-s{shard.replace('/', 'of')}" if shard else ""
         run_dir = new_run(f"bench-{(commit if isinstance(commit, str) else 'nogit')[:7]}-{profile}-{tier}{tag}{sh}")
+    run_dir.mkdir(parents=True, exist_ok=True)      # an explicit --run-dir need not exist yet (a box's $RUN/locate)
     info_path = run_dir / "run.json"
     info = json.loads(info_path.read_text()) if info_path.exists() else {}
     want = {"tier": tier, "profile": profile, "search_overrides": overrides, "code": code}

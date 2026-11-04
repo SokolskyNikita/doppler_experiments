@@ -95,6 +95,11 @@ each allowed file, ships it from the Mac and marks the job private: on the box i
 brings the run folder to `$DOPPLERTRACK_DATA/private/runs/`. `runs seed` prints each allowed file and uploads only
 those. The exact home location still never goes into git, docs or records (the site-relative frame).
 
+**What a box can't reach.** opensky-network.org refuses the boxes, so `dopplertrack.adsb.AircraftTypes()`, which
+fetches Doc 8643 from there into the cache on first use, would fail on a box; the supervisor copies the bucket's
+`data/raw/aux/opensky/doc8643AircraftTypes.csv` into every job's cache first (`CACHE_ROOT_FILES` in supervisor.py,
+for any other file like it).
+
 ## Sizing
 
 Quota is counted in vCPUs per region and market: 256 spot and 256 on-demand in each region until AWS raises it

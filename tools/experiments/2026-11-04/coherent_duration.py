@@ -52,7 +52,7 @@ SEG_S = 40.0                    # background segment; the clip's heard CPA sits 
 WIN_S = 18.0
 A0 = SEG_S / 2
 CLOCKS = np.arange(-10.0, 10.0 + 1e-9, 0.25)
-LEVELS = np.arange(12, -19, -1)  # added clip band power against the background, dB
+LEVELS = np.arange(6.0, -20.0 - 1e-9, -0.5)   # added clip band power against the background, dB (the retune: 0.5 dB)
 BLOCKS = {"C1": 9, "C3": 3, "C9": 1}
 METHODS = ["C1", "C3", "C9", "T"]
 NFFT = 4 * int(WIN_S * SR)      # one fine pitch grid for every block length
@@ -316,9 +316,10 @@ def units_for(stage, pl):
     names = pl["verify"] if stage == "gates" else pl["test"]
     modes = ["synthetic", "assisted"] if stage == "gates" else ["blind"]
     out = []
+    n_cal = sum(s["role"] == "cal" for s in pl["segments"])     # the retune: every calibration segment
     for m in modes:
         for pid in names:
-            out += [f"{m}--{pid}--cal--{i}" for i in range(0, N_CAL, 20)]           # 20 segments per unit
+            out += [f"{m}--{pid}--cal--{i}" for i in range(0, n_cal, 20)]           # 20 segments per unit
             out += [f"{m}--{pid}--eval--{j}" for j in range(N_EVAL)]
     return out
 
@@ -337,8 +338,11 @@ def run_unit(uid, pl, bands, d: Path, jobs):
     clocks = CLOCKS if mode == "blind" else np.array([0.0])
     lo, hi = band_edges(p["band"])
     ref = np.median([v[str(p["band"])] for v in bands.values()])           # the fixed background band power
-    idx = pl["selection"][pid]["cal" if kind == "cal" else "eval"]
-    idx = idx[int(j):int(j) + 20] if kind == "cal" else [idx[int(j)]]
+    if kind == "cal":
+        cal_all = [i for i, s in enumerate(pl["segments"]) if s["role"] == "cal"]
+        idx = cal_all[int(j):int(j) + 20]
+    else:
+        idx = [pl["selection"][pid]["eval"][int(j)]]
     if mode == "synthetic":
         clip = synthetic_clip(p, cands[0], c)
     else:
@@ -400,7 +404,8 @@ def main():
     if a.stage != "prep" and bands is None:
         sys.exit("--bands PREP_RUN is required after prep")
     params = {"stage": a.stage, "plan_sha": __import__("hashlib").sha256(PLAN.read_bytes()).hexdigest(),
-              "levels": LEVELS.tolist(), "clocks": [float(CLOCKS[0]), float(CLOCKS[-1]), 0.25], "blocks": BLOCKS}
+              "levels": LEVELS.tolist(), "clocks": [float(CLOCKS[0]), float(CLOCKS[-1]), 0.25], "blocks": BLOCKS,
+              "calibration": "every calibration segment (retune)"}
     run = shards.open_run(a.run, f"coherent-duration-{a.stage}", {"script": "tools/experiments/2026-11-04/coherent_duration.py",
                           "params": params, "invocation": {"shard": "%d/%d" % a.shard, "resume": [str(r) for r in a.resume],
                                                            "merge": a.merge, "bands": str(a.bands)}})

@@ -6,7 +6,7 @@ mirror-union npz for "mirror") and search.cpa_cache (a private cpa/adsbfetch/<ca
 shared cache is read or written). bench.runner.bench_case runs it blind, writes result.json and its hash,
 and only then scores it against the case's labels; bench/cases.json is not touched.
 
-usage: uv run python tools/experiments/2026-11-04/adsbfetch_savedfit.py "$RUN" ADSBFETCH_RUN
+usage: uv run python tools/experiments/2026-11-04/adsbfetch_savedfit.py "$RUN" ADSBFETCH_RUN [CASE:NAME=NPZ ...]
 """
 import copy
 import json
@@ -30,11 +30,16 @@ def variant(name, traces):
     return execute
 
 
-def main(run: Path, fetch_run: Path):
+def main(run: Path, fetch_run: Path, extra: list[str]):
+    """extra: CASE:NAME=NPZ entries to run instead of the default cut and mirror pairs (diagnostics)."""
     code = runner.code_revision()
     out = {}
-    for cid, npz in CASES.items():
-        for name, traces in (("cut", None), ("mirror", fetch_run / npz)):
+    plan = [(cid, name, traces) for cid, npz in CASES.items() for name, traces in (("cut", None), ("mirror", fetch_run / npz))]
+    if extra:
+        plan = [(e.split(":", 1)[0], *e.split(":", 1)[1].split("=", 1)) for e in extra]
+        plan = [(cid, name, fetch_run / npz) for cid, name, npz in plan]
+    for cid, name, traces in plan:
+        if True:
             d = run / f"{cid}_{name}"
             entry = runner.bench_case(cid, d, execute=variant(name, traces), code=code, log=lambda m: None)
             out[f"{cid}/{name}"] = entry
@@ -44,4 +49,4 @@ def main(run: Path, fetch_run: Path):
 
 
 if __name__ == "__main__":
-    main(Path(sys.argv[1]), Path(sys.argv[2]))
+    main(Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3:])

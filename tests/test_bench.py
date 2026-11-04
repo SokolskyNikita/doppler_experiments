@@ -236,3 +236,54 @@ def test_the_export_flags_keep_spawned_workers_from_writing_bytecode(tmp_path, f
     (tmp_path / "main.py").write_text(code)
     subprocess.run([sys.executable, *flags, str(tmp_path / "main.py")], check=True, cwd=tmp_path)
     assert (pkg / "__pycache__").exists() is writes
+
+
+def _execute_with_triples(rows):
+    """A fake run whose scored triples are `rows` (icao1, icao2, lat, lon), written as the runner writes them."""
+    import pandas as pd
+
+    def execute(case, case_dir, log=print, code=None):
+        rec = _fake_execute(case, case_dir, code=code)
+        draft = runner.Draft(cases.blind_case("oyster-bay"), {}, "saved-fit", lambda m: None)
+        df = pd.DataFrame(rows, columns=["icao1", "icao2", "lat", "lon"]).assign(gidx=0, score=1.0)
+        draft.write_triples(case_dir, {"silence": df, "scored": df})
+        rec["funnel"]["triples_file"] = draft.funnel["triples_file"]
+        rec["provenance"]["parameters"]["refine"] = {"half_m": 600.0}
+        return rec
+    return execute
+
+
+def test_near_reference_is_decided_from_the_scored_triples_after_the_hash(tmp_path, one_case):
+    truth = cases.case_labels("oyster-bay", 1)["reference"]
+    rows = [("a1dfeb", "ace391", truth["lat"] + 0.004, truth["lon"]),      # about 445 m north
+            ("a1dfeb", "ace391", truth["lat"] + 0.0015, truth["lon"]),     # about 167 m north
+            ("a53001", "a19b2f", truth["lat"], truth["lon"])]              # another pair on the truth
+    entry = runner.bench_case("synthetic", tmp_path / "out", execute=_execute_with_triples(rows), cases_path=one_case)
+    assert entry["true_pair_near_reference"] is True and entry["true_pair_within_refine_reach"] is True
+    assert 160 < entry["true_pair_min_distance_m"]["scored"] < 175
+    far = runner.bench_case("synthetic", tmp_path / "far", execute=_execute_with_triples(rows[:1]), cases_path=one_case)
+    assert far["true_pair_near_reference"] is False and far["true_pair_within_refine_reach"] is True
+
+
+def test_a_changed_triples_file_discards_the_record(tmp_path, one_case):
+    runner.bench_case("synthetic", tmp_path / "out", execute=_execute_with_triples([("a", "b", 0.0, 0.0)]),
+                      cases_path=one_case)
+    (tmp_path / "out" / runner.TRIPLES_FILE).write_bytes(b"changed")
+
+    def labels():
+        raise AssertionError("labels read for a record whose triples changed")
+    meta = {"id": "synthetic", "version": 1, "group": "g", "set": "development", "expected_outcome": "located"}
+    assert runner.compare_case(tmp_path / "out", meta, labels)["status"] == "discarded"
+
+
+def test_search_overrides_parse_and_refuse_the_cpa_inputs():
+    assert runner.parse_overrides(["tol_s=12", "time_convention=emission", "sf_tol_s=null", "d_tol=[0.5, 2]"]) == \
+        {"tol_s": 12, "time_convention": "emission", "sf_tol_s": None, "d_tol": [0.5, 2]}
+    with pytest.raises(ValueError):
+        runner.parse_overrides(["tol_s"])
+    case = cases.blind_case("oyster-bay")
+    d = runner.Draft(case, {}, "saved-fit", lambda m: None, {"tol_s": 12, "time_convention": "emission"})
+    assert d.search["tol_s"] == 12 and d.extra_kwargs == {"time_convention": "emission"}
+    assert d.params["search_overrides"] == {"tol_s": 12, "time_convention": "emission"}
+    with pytest.raises(ValueError, match="CPA table"):
+        runner.Draft(case, {}, "saved-fit", lambda m: None, {"spacing_m": 100})

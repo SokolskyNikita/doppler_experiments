@@ -28,6 +28,14 @@ NO_VERDICT = "no verdict or abstention exists before Phase 4"
 NO_REGION = "no uncertainty region exists before Phase 4"
 PER_GATE = ("pair_candidates applies the speed, distance and time gates in one call and run_search returns no "
             "per-gate counts; filled once run_search returns its funnel")
+PER_EVENT_GATE = ("run_search gates speed and distance together for each event; see funnel.pipeline's event1_gates "
+                  "and event2_gates")
+NEAR_REFERENCE_M = 250.0     # the nearest 200 m grid point and its neighbours (Phase 2 item 1's criterion)
+TRIPLES_FILE = "funnel_triples.npz"
+# Overrides change how a run searches, never the CPA table a case's cache file holds, so the inputs of
+# cpa_table (the grid, the range, the terrain) and the cache path itself can't be overridden.
+FIXED_BY_CASE = ("bbox", "spacing_m", "dem", "max_range_m", "cpa_cache")
+SEARCH_ARGS = ("tol_s", "v_tol", "d_tol", "silence_d_m", "harmonics")
 
 
 def git(*args) -> str | None:
@@ -158,14 +166,22 @@ def code_revision() -> dict:
 class Draft:
     """The parts of one result record as a run fills them in; `record()` assembles it."""
 
-    def __init__(self, case: dict, code: dict, profile: str, log):
+    def __init__(self, case: dict, code: dict, profile: str, log, overrides: dict | None = None):
         from dopplertrack.coverage import padded_bbox
         from dopplertrack.doppler import speed_of_sound
         assert "labels" not in case, "the runner must be given the blind case"
         self.case, self.code, self.stage, self.errors = case, code, Stages(log), []
-        s = case["search"]
+        overrides = dict(overrides or {})
+        fixed = sorted(set(overrides) & set(FIXED_BY_CASE))
+        if fixed:
+            raise ValueError(f"--search-param can't override {fixed}: they define the case's CPA table")
+        # known settings replace the case's; anything else is a run_search keyword of its own
+        self.search = {**case["search"], **{k: v for k, v in overrides.items() if k in SEARCH_ARGS}}
+        self.extra_kwargs = {k: v for k, v in overrides.items() if k not in SEARCH_ARGS}
+        s = self.search
+        self.harmonics = list(overrides["harmonics"]) if "harmonics" in overrides else search_harmonics(case, profile)
         self.params = {"profile": profile, "profile_settings": PROFILES[profile], "search": s, "refine": case["refine"],
-                       "events": case["events"], "search_harmonics": search_harmonics(case, profile),
+                       "search_overrides": overrides, "events": case["events"], "search_harmonics": self.harmonics,
                        "speed_of_sound_m_s": speed_of_sound()}
         self.inputs, self.caches, self.events, self.candidates = [], [], [], []
         self.refined = unavailable("the search did not run")
@@ -237,6 +253,37 @@ class Draft:
                 e["utc"] = unavailable("no candidate survived the search, so there is no clock")
         return best
 
+    def write_triples(self, case_dir: Path, stages: dict):
+        """Every hypothesis each stage kept, with its location, into a sidecar whose hash goes in the
+        record: the comparison reads it after the hash check to see how near the truth they came.
+        stages: name -> DataFrame with icao1, icao2, gidx, lat, lon (and score at the scored stage)."""
+        from dopplertrack.result import sha256_file
+        arrays = {}
+        for name, df in stages.items():
+            arrays[f"{name}__icao1"] = df["icao1"].to_numpy(str)
+            arrays[f"{name}__icao2"] = df["icao2"].to_numpy(str)
+            arrays[f"{name}__gidx"] = df["gidx"].to_numpy(np.int32)
+            arrays[f"{name}__lat"] = df["lat"].to_numpy(np.float64)
+            arrays[f"{name}__lon"] = df["lon"].to_numpy(np.float64)
+            if "score" in df:
+                arrays[f"{name}__score"] = df["score"].to_numpy(np.float64)
+        path = case_dir / TRIPLES_FILE
+        tmp = case_dir / f".{TRIPLES_FILE}.{os.getpid()}.tmp.npz"
+        np.savez_compressed(tmp, **arrays)
+        os.replace(tmp, path)
+        self.funnel["triples_file"] = {"path": TRIPLES_FILE, "sha256": sha256_file(path), "stages": list(stages),
+                                       "rows": {k: len(v) for k, v in stages.items()}}
+
+    def add_pipeline_funnel(self, funnel: dict, flight_pairs: dict):
+        """The funnel run_search reports (res.attrs["funnel"]), kept as-is and mapped onto v1's fields."""
+        gate = "emission_gate" if "emission_gate" in funnel else "time_join"
+        self.funnel.update(pipeline=funnel, cpa_records=funnel["cpa_rows"],
+                           after_speed_gate=unavailable(PER_EVENT_GATE), after_distance_gate=unavailable(PER_EVENT_GATE),
+                           after_time_gate=funnel[gate], before_silence_filter=funnel[gate],
+                           after_silence_filter=funnel["silence"], scored=funnel["scored"], unevaluated_budget=0,
+                           flight_pairs_before_silence_filter=flight_pairs[gate],
+                           flight_pairs_after_silence_filter=flight_pairs["silence"])
+
     def add_refined(self, fine, extra_flights: list[str]):
         rf = self.case["refine"]
         b = fine.iloc[0]
@@ -265,19 +312,25 @@ class Draft:
         }
 
 
-def execute_case(case: dict, case_dir: Path, log=print, code: dict | None = None, profile: str = "saved-fit") -> dict:
+def execute_case(case: dict, case_dir: Path, log=print, code: dict | None = None, profile: str = "saved-fit",
+                 overrides: dict | None = None) -> dict:
     """Run one blind case through this revision's pipeline in-process (spectrogram, events, flight data,
     CPA table, search, refine) and return its result record. It never sees the case's labels."""
+    import pandas as pd
     from dopplertrack import pipeline
     from dopplertrack.audio import Spectrogram
-    from dopplertrack.doppler import speed_of_sound
-    from dopplertrack.search import Grid, pair_candidates
+    from dopplertrack.search import Grid
     from dopplertrack.terrain import Terrain
     from dopplertrack.tracks import EventFit
 
-    draft = Draft(case, code or code_revision(), profile, log)
-    stage, s, rf = draft.stage, case["search"], case["refine"]
-    harmonics = search_harmonics(case, profile)
+    try:
+        draft = Draft(case, code or code_revision(), profile, log, overrides)
+    except ValueError as exc:
+        draft = Draft(case, code or code_revision(), profile, log)
+        draft.errors.append(f"ValueError: {exc}")
+        return draft.record()
+    stage, s, rf = draft.stage, draft.search, case["refine"]
+    harmonics = draft.harmonics
     terrain = Terrain() if s["dem"] else None
     try:
         with stage("spectrogram"):
@@ -290,11 +343,14 @@ def execute_case(case: dict, case_dir: Path, log=print, code: dict | None = None
             draft.inputs += [file_entry("saved_fits", resolve(p)) for p in case["events"]["files"]]
             draft.add_events(fits, harmonics, "saved_fit", "fit objective value as saved with the fit")
         else:
+            from dopplertrack.cache import cached_detections
             from dopplertrack.tracks import detect_events
             d = PROFILES[profile]["detect"]
             with stage("detect"):
-                detected = [e.to_dict() for e in detect_events(sp, *d["band_hz"], harmonics=d["harmonics"], top=d["top"],
-                                                               window_s=d["window_s"])]
+                # cached on the spectrogram, the parameters and the detector's source
+                detected = [e.to_dict() for e in cached_detections(sp, detect_events, f_lo=d["band_hz"][0],
+                                                                   f_hi=d["band_hz"][1], harmonics=d["harmonics"],
+                                                                   top=d["top"], window_s=d["window_s"])]
             (case_dir / "detected.json").write_text(json.dumps(detected, indent=1) + "\n")
             fits = pick_detected(detected)
             draft.add_events(fits, harmonics, "detect", "detect's sweep-weighted ridge contrast")
@@ -306,25 +362,23 @@ def execute_case(case: dict, case_dir: Path, log=print, code: dict | None = None
             grid = Grid.make(*s["bbox"], s["spacing_m"], terrain.elevation if terrain else None)
         cache_path = resolve(s["cpa_cache"])
         cache_path.parent.mkdir(parents=True, exist_ok=True)
+        triples: dict = {}
         with stage("search"):
             res, segs = pipeline.run_search(sp, ev1, ev2, traces, grid, harmonics=tuple(harmonics[:2]),
                                             tol_s=s["tol_s"], v_tol=s["v_tol"], d_tol=tuple(s["d_tol"]),
                                             silence_d_m=s["silence_d_m"], max_range_m=s["max_range_m"],
                                             progress=False, cpa_cache=str(cache_path),
-                                            trace_metadata=meta, search_bbox=tuple(s["bbox"]))
+                                            trace_metadata=meta, search_bbox=tuple(s["bbox"]), triples=triples,
+                                            **draft.extra_kwargs)
         draft.caches.append(file_entry("cpa_table", cache_path))
-        with stage("funnel"):
-            # run_search keeps its intermediate counts to itself; the cached table makes recounting cheap
-            cpa = pipeline.cached_cpa_table(grid, segs, s["max_range_m"], speed_of_sound(), str(cache_path))
-            v_tol, (dlo, dhi) = s["v_tol"], s["d_tol"]
-            gated = pair_candidates(cpa, ev2.t_cpa - ev1.t_cpa, tol_s=s["tol_s"],
-                                    v1=(ev1.v * (1 - v_tol), ev1.v * (1 + v_tol)), d1=(ev1.d * dlo, ev1.d * dhi),
-                                    v2=(ev2.v * (1 - v_tol), ev2.v * (1 + v_tol)), d2=(ev2.d * dlo, ev2.d * dhi),
-                                    silence_d_m=None)
-            draft.funnel.update(cpa_records=len(cpa), before_silence_filter=len(gated), after_silence_filter=len(res),
-                                flight_pairs_before_silence_filter=_flight_pairs(gated, segs),
-                                flight_pairs_after_silence_filter=_flight_pairs(res), scored=len(res), unevaluated_budget=0)
-            del cpa, gated
+        draft.stage.stages += [{"name": f"search.{k}", "wall_s": round(v["wall_s"], 3), "cpu_s": round(v["cpu_s"], 3)}
+                               for k, v in res.attrs.get("stages", {}).items()]
+        icao = np.array([sg.icao for sg in segs])
+        frames = {k: pd.DataFrame({"icao1": icao[t["seg1"]], "icao2": icao[t["seg2"]], "gidx": t["gidx"],
+                                   "lat": grid.lat[t["gidx"]], "lon": grid.lon[t["gidx"]]}) for k, t in triples.items()}
+        frames["scored"] = res[["icao1", "icao2", "gidx", "lat", "lon", "score"]]
+        draft.add_pipeline_funnel(res.attrs["funnel"], {k: _flight_pairs(f) for k, f in frames.items()})
+        draft.write_triples(case_dir, frames)
         best = draft.add_candidates(res, ev1.t_cpa)
         draft.limits["candidate_gaps"] = [w.split("search: ", 1)[1] for w in stage.warnings
                                           if w.startswith("search: ") and "candidate" in w]
@@ -376,7 +430,7 @@ def _tiles_covering(bbox, zoom=12) -> list[Path]:
 
 
 def execute_case_at(case: dict, case_dir: Path, rev, log=print, code: dict | None = None,
-                    profile: str = "saved-fit") -> dict:
+                    profile: str = "saved-fit", overrides: dict | None = None) -> dict:
     """Run one blind case through another revision's own CLI in its own environment, and turn what it
     writes into a result record. No code of that revision is imported here."""
     import re
@@ -388,6 +442,12 @@ def execute_case_at(case: dict, case_dir: Path, rev, log=print, code: dict | Non
     stage, s, rf = draft.stage, case["search"], case["refine"]
     harmonics = search_harmonics(case, profile)
     try:
+        if set(overrides or {}) - {"tol_s"}:
+            raise ValueError(f"{rev.short}'s CLI takes only tol_s of the search overrides, not "
+                             f"{sorted(set(overrides) - {'tol_s'})}")
+        if overrides:
+            draft = Draft(case, draft.code, profile, log, overrides)
+            stage, s = draft.stage, draft.search
         verify(rev)
         bad = {k: s[k] for k, v in FIXED_IN_CLI.items() if s[k] != v}
         if bad or s["silence_d_m"] not in (6000.0, None):
@@ -449,6 +509,7 @@ def execute_case_at(case: dict, case_dir: Path, rev, log=print, code: dict | Non
                             after_silence_filter=len(res), flight_pairs_after_silence_filter=_flight_pairs(res),
                             scored=len(res), unevaluated_budget=0)
         draft.limits["candidate_gaps"] = unavailable(f"{rev.short} has no candidate-gap diagnostic")
+        draft.write_triples(case_dir, {"scored": res[["icao1", "icao2", "gidx", "lat", "lon", "score"]]})
         draft.add_candidates(res, fits[0]["t_cpa"])
         if draft.candidates:
             with stage("refine"):
@@ -493,6 +554,11 @@ def _distance_m(lat1, lon1, lat2, lon2) -> float:
     return float(haversine_m(lat1, lon1, lat2, lon2))
 
 
+def _distances_m(lat, lon, lat0, lon0) -> np.ndarray:
+    from dopplertrack.geo import haversine_m
+    return np.atleast_1d(np.asarray(haversine_m(np.asarray(lat), np.asarray(lon), lat0, lon0), float))
+
+
 def compare_case(case_dir: Path, meta: dict, read_labels) -> dict:
     """Score one record against its labels. The record must still hash to what was written beside it
     before the labels were read; if it doesn't, it is discarded and the labels are never opened."""
@@ -505,8 +571,21 @@ def compare_case(case_dir: Path, meta: dict, read_labels) -> dict:
         return {**entry, "status": "discarded", "reason": f"record does not match the hash written before the "
                 f"truth was read: {exc}"}
     # a run that failed is reported as an error, never scored as if it had abstained or found nothing
+    tf = record["funnel"].get("triples_file")
+    triples = None
+    if tf:
+        from dopplertrack.result import sha256_file
+        try:
+            ok = sha256_file(case_dir / tf["path"]) == tf["sha256"]
+        except OSError:
+            ok = False
+        if not ok:
+            return {**entry, "status": "discarded", "reason": f"{tf['path']} does not match the hash in the record"}
+        with np.load(case_dir / tf["path"]) as z:
+            triples = {k: z[k] for k in z.files}
     entry.update(status="error" if record["execution"]["errors"] else "scored", record_sha256=expected,
-                 stages=record["execution"]["stages"], errors=record["execution"]["errors"])
+                 stages=record["execution"]["stages"], errors=record["execution"]["errors"],
+                 search_overrides=record["provenance"]["parameters"].get("search_overrides", {}))
     lab = read_labels()
     ref = lab["reference"]
     box = record["provenance"]["parameters"]["search"]["bbox"]
@@ -532,8 +611,26 @@ def compare_case(case_dir: Path, meta: dict, read_labels) -> dict:
             stage: (list(pair) in f[key] if isinstance(f[key], list) else f[key])
             for stage, key in (("speed_distance_time_gates", "flight_pairs_before_silence_filter"),
                                ("silence_filter", "flight_pairs_after_silence_filter"))}
+        if triples is None:
+            for k in ("true_pair_near_reference", "true_pair_within_refine_reach", "true_pair_min_distance_m"):
+                entry[k] = unavailable("the record has no triples file")
+        else:
+            reach = record["provenance"]["parameters"].get("refine", {}).get("half_m")
+            nearest = {}
+            for stg in tf["stages"]:
+                m = (triples[f"{stg}__icao1"] == pair[0]) & (triples[f"{stg}__icao2"] == pair[1])
+                d = _distances_m(triples[f"{stg}__lat"][m], triples[f"{stg}__lon"][m], ref["lat"], ref["lon"])
+                nearest[stg] = float(d.min()) if len(d) else None
+            # decided at the stage that reaches scoring; the earlier stages say where it was lost
+            near = nearest.get("scored")
+            entry["true_pair_min_distance_m"] = nearest
+            entry["true_pair_near_reference"] = near is not None and near <= NEAR_REFERENCE_M
+            entry["true_pair_within_refine_reach"] = (near is not None and near <= float(reach)) if reach is not None \
+                else unavailable("the record has no refine half-width")
     else:
         entry["true_pair_rank"] = entry["true_pair_survived"] = unavailable("the case has no true flight pair in its box")
+        for k in ("true_pair_near_reference", "true_pair_within_refine_reach", "true_pair_min_distance_m"):
+            entry[k] = unavailable("the case has no true flight pair in its box")
     entry["outcome_met"] = unavailable(NO_VERDICT)
     for k in ("detection", "association", "fits", "verdicts", "region_coverage"):
         entry[k] = unavailable("not produced by today's pipeline")
@@ -546,15 +643,34 @@ def new_run(topic: str) -> Path:
     return Path(out)
 
 
-def _executor(revision: str | None, profile: str, log, code: dict | None = None):
+def _executor(revision: str | None, profile: str, log, code: dict | None = None, overrides: dict | None = None):
     import functools
     if profile not in PROFILES:
         raise ValueError(f"profile must be one of {sorted(PROFILES)}")
     if revision is None:
-        return code or code_revision(), functools.partial(execute_case, profile=profile)
+        return code or code_revision(), functools.partial(execute_case, profile=profile, overrides=overrides)
     from .revisions import ensure_revision
     rev = ensure_revision(revision, log=log)
-    return rev.provenance(), functools.partial(execute_case_at, rev=rev, profile=profile)
+    return rev.provenance(), functools.partial(execute_case_at, rev=rev, profile=profile, overrides=overrides)
+
+
+def parse_overrides(items: list[str]) -> dict:
+    """KEY=VALUE pairs, each value read as JSON when it parses (12, null, [0.4, 2.5]) and as a string otherwise."""
+    out = {}
+    for item in items:
+        key, sep, raw = item.partition("=")
+        if not sep or not key:
+            raise ValueError(f"--search-param {item!r} is not KEY=VALUE")
+        try:
+            out[key] = json.loads(raw)
+        except json.JSONDecodeError:
+            out[key] = raw
+    return out
+
+
+def overrides_tag(overrides: dict) -> str:
+    import hashlib
+    return hashlib.sha256(json.dumps(overrides, sort_keys=True).encode()).hexdigest()[:8]
 
 
 def run_one(cid: str, run_dir: Path, execute, code: dict, log=print) -> dict:
@@ -575,19 +691,23 @@ def run_one(cid: str, run_dir: Path, execute, code: dict, log=print) -> dict:
 
 
 def run_bench(case_ids: list[str], tier: str = "t2", run_dir: Path | None = None, log=print,
-              revision: str | None = None, profile: str = "saved-fit", parallel: int = 1) -> Path:
+              revision: str | None = None, profile: str = "saved-fit", parallel: int = 1,
+              overrides: dict | None = None) -> Path:
     """Run cases into a new run folder (or `run_dir`) and collect their scoreboard entries in results.json.
     revision: None runs this checkout in-process; any other commit-ish is exported, verified and run
     through its own CLI (bench/revisions.py). parallel > 1 runs that many cases at once, each in its own
     process (`bench run-case`), so stage logs and timings never mix."""
     # the code revision is read once, before anything runs, so an edit during a long run can't relabel it
-    code, execute = _executor(revision, profile, log)
+    overrides = dict(overrides or {})
+    code, execute = _executor(revision, profile, log, overrides=overrides)
     commit, dirty = code["git_commit"], code["git_dirty"]
     if run_dir is None:
-        run_dir = new_run(f"bench-{(commit if isinstance(commit, str) else 'nogit')[:7]}-{profile}-{tier}")
+        tag = f"-o{overrides_tag(overrides)}" if overrides else ""
+        run_dir = new_run(f"bench-{(commit if isinstance(commit, str) else 'nogit')[:7]}-{profile}-{tier}{tag}")
     info_path = run_dir / "run.json"
     info = json.loads(info_path.read_text()) if info_path.exists() else {}
-    info.update(command=sys.argv, cases=case_ids, tier=tier, profile=profile, code=code, parallel=parallel)
+    info.update(command=sys.argv, cases=case_ids, tier=tier, profile=profile, code=code, parallel=parallel,
+                search_overrides=overrides)
     info_path.write_text(json.dumps(info, indent=1) + "\n")
     if parallel <= 1:
         entries = [run_one(cid, run_dir, execute, code, log) for cid in case_ids]
@@ -598,7 +718,8 @@ def run_bench(case_ids: list[str], tier: str = "t2", run_dir: Path | None = None
                 cid = pending.pop(0)
                 (run_dir / cid).mkdir(parents=True, exist_ok=True)
                 cmd = [sys.executable, "-m", "bench", "run-case", "--run-dir", str(run_dir), "--profile", profile,
-                       "--code-json", json.dumps(code), cid] + (["--revision", revision] if revision else [])
+                       "--code-json", json.dumps(code), "--overrides-json", json.dumps(overrides), cid] + \
+                    (["--revision", revision] if revision else [])
                 out = open(run_dir / cid / "process.log", "w")
                 running[cid] = (subprocess.Popen(cmd, cwd=REPO, stdout=out, stderr=subprocess.STDOUT), out)
                 log(f"{cid}: started")
@@ -615,13 +736,15 @@ def run_bench(case_ids: list[str], tier: str = "t2", run_dir: Path | None = None
                     log(f"{cid}: {entries[cid]['status']}")
             time.sleep(2)
         entries = [entries[c] for c in case_ids]
-    doc = {"schema": 1, "tier": tier, "profile": profile, "code": code, "git_commit": commit, "git_dirty": dirty,
+    doc = {"schema": 1, "tier": tier, "profile": profile, "search_overrides": overrides, "code": code,
+           "git_commit": commit, "git_dirty": dirty,
            "created": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"), "cases": entries}
     (run_dir / "results.json").write_text(json.dumps(doc, indent=1, sort_keys=True) + "\n")
     return run_dir
 
 
-METRICS = ("true_pair_rank", "flight_pairs", "margin_pct", "top_error_m", "refined_error_m", "box_centre_error_m")
+METRICS = ("true_pair_rank", "true_pair_near_reference", "true_pair_within_refine_reach", "flight_pairs", "margin_pct",
+           "top_error_m", "refined_error_m", "box_centre_error_m")
 
 
 def _fmt(v) -> str:
@@ -638,7 +761,7 @@ def compare_runs(a: Path, b: Path) -> str:
     ca, cb = ({e["case"]: e for e in r["cases"]} for r in (ra, rb))
     def head(name, path, r):
         return (f"{name}: {path} ({str(r.get('git_commit') or '?')[:9]}{' dirty' if r.get('git_dirty') is True else ''}, "
-                f"{r.get('profile', 'saved-fit')})")
+                f"{r.get('profile', 'saved-fit')}{', overrides ' + json.dumps(r['search_overrides']) if r.get('search_overrides') else ''})")
     lines = [head("a", a, ra), head("b", b, rb), ""]
     for cid in sorted(set(ca) | set(cb)):
         ea, eb = ca.get(cid, {}), cb.get(cid, {})

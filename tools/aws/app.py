@@ -26,7 +26,9 @@ REGION = "us-west-2"        # the home region: the bucket and the dev box
 # where job boxes can run, nearest first, with the AZs that offer the fleet's families (c8gd: us-west-2, us-east-2)
 REGIONS = {"us-west-2": ["us-west-2a", "us-west-2b", "us-west-2c", "us-west-2d"],
            "us-west-1": ["us-west-1a", "us-west-1c"],
-           "us-east-2": ["us-east-2a", "us-east-2b", "us-east-2c"]}
+           "us-east-2": ["us-east-2a", "us-east-2b", "us-east-2c"],
+           "us-east-1": ["us-east-1a", "us-east-1b", "us-east-1c", "us-east-1d", "us-east-1f"],
+           "eu-central-1": ["eu-central-1a", "eu-central-1b", "eu-central-1c"]}
 UBUNTU = "/aws/service/canonical/ubuntu/server/24.04/stable/current/{arch}/hvm/ebs-gp3/ami-id"
 JOB_ROOT_GB = 200
 DEV_TYPE = "c8g.2xlarge"

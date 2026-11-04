@@ -39,7 +39,8 @@ REPO = HERE.parent.parent
 STACK = "DopplertrackFleet"
 REGION = "us-west-2"     # the bucket's and the dev box's
 # where a job box may run, tried in this order (app.py deploys a compute stack in each)
-JOB_REGIONS = ("us-west-2", "us-west-1", "us-east-2")
+JOB_REGIONS = ("us-west-2", "us-west-1", "us-east-2", "us-east-1", "eu-central-1")
+NOT_OFFERED = {"us-west-1": {"c8gd"}}     # families a region lacks, so the fleet doesn't ask for them
 FAMILIES = {"arm64": ("c8g", "c8gd", "c7g"), "amd64": ("c7a",)}
 TERMINAL = ("done", "failed", "interrupted", "timeout", "cancelled")
 # the caches a job box can use; cpa/ rebuilds on the box in under a minute and revisions/ is per machine
@@ -65,10 +66,23 @@ def session(region: str = REGION):
     return boto3.Session(profile_name=profile(), region_name=region)
 
 
+_OUTPUTS: dict[str, dict | None] = {}
+
+
 def outputs(region: str = REGION) -> dict:
-    cf = session(region).client("cloudformation")
-    stack = cf.describe_stacks(StackName=STACK)["Stacks"][0]
-    return {o["OutputKey"]: o["OutputValue"] for o in stack.get("Outputs", [])}
+    if _OUTPUTS.get(region) is None:
+        cf = session(region).client("cloudformation")
+        stack = cf.describe_stacks(StackName=STACK)["Stacks"][0]
+        _OUTPUTS[region] = {o["OutputKey"]: o["OutputValue"] for o in stack.get("Outputs", [])}
+    return _OUTPUTS[region]
+
+
+def deployed(region: str) -> bool:
+    """Whether the region has its compute stack (a region listed here may not be deployed yet)."""
+    try:
+        return bool(outputs(region).get("TemplateArm64"))
+    except Exception:       # noqa: BLE001 - no stack, or the region not reachable: skip it
+        return False
 
 
 def aws_cli(*args: str) -> None:
@@ -136,11 +150,12 @@ def listed_inputs(doc: dict) -> tuple[list[str], list[str], list[str]]:
     return cases, list(dict.fromkeys(paths)), [k for k in dict.fromkeys(kinds) if k in CACHE_KINDS]
 
 
-def fleet_request(out: dict, job: str, size: str, on_demand: bool, families=FAMILIES) -> dict:
+def fleet_request(out: dict, job: str, size: str, on_demand: bool, families=FAMILIES, region: str = REGION) -> dict:
     """The create_fleet arguments: one instance, any listed family of `size` in any of the subnets."""
     subnets = out["Subnets"].split(",")
     configs = []
     for arch, fams in families.items():
+        fams = [f for f in fams if f not in NOT_OFFERED.get(region, ())]
         overrides = [{"InstanceType": f"{fam}.{size}", "SubnetId": s} for fam in fams for s in subnets]
         if overrides:
             configs.append({"LaunchTemplateSpecification": {"LaunchTemplateId": out[f"Template{arch.capitalize()}"],
@@ -255,7 +270,7 @@ def launch(a) -> str:
     while True:      # every region and market in turn; while all are full, wait for capacity rather than fail
         ids, errs, region = [], [], None
         for od in markets:
-            for region in (a.region or JOB_REGIONS):
+            for region in (r for r in (a.region or JOB_REGIONS) if deployed(r)):
                 ec2 = session(region).client("ec2")
                 ids, err = start_box(ec2, outputs(region), job, a.size, od)
                 if ids:
@@ -294,7 +309,7 @@ JOB_EBS_USD_PER_HOUR = 0.063
 
 
 def start_box(ec2, out: dict, job: str, size: str, on_demand: bool) -> tuple[list[str], str]:
-    resp = ec2.create_fleet(**fleet_request(out, job, size, on_demand))
+    resp = ec2.create_fleet(**fleet_request(out, job, size, on_demand, region=ec2.meta.region_name))
     ids = [i for inst in resp.get("Instances", []) for i in inst.get("InstanceIds", [])]
     codes = sorted({e.get("ErrorCode") for e in resp.get("Errors", [])})     # one per code, not per type and AZ
     return ids, ", ".join(c for c in codes if c)
@@ -349,7 +364,7 @@ def get_status(s3, bucket: str, job: str) -> dict:
 def job_instances(job: str, states=("pending", "running", "stopping", "shutting-down")) -> dict[str, list[str]]:
     """The job's boxes by region."""
     out = {}
-    for region in JOB_REGIONS:
+    for region in (r for r in JOB_REGIONS if deployed(r)):
         r = session(region).client("ec2").describe_instances(Filters=[
             {"Name": "tag:dopplertrack-job", "Values": [job]}, {"Name": "instance-state-name", "Values": list(states)}])
         ids = [i["InstanceId"] for res in r["Reservations"] for i in res["Instances"]]
@@ -380,7 +395,7 @@ def fleet(a) -> None:
     """Every project box running now, by region, with its job and hourly price; the jobs whose launch failed
     for capacity or quota in the last day; and the hourly total."""
     total, rows, launches = 0.0, [], {}
-    for region in JOB_REGIONS:
+    for region in (r for r in JOB_REGIONS if deployed(r)):
         ec2 = session(region).client("ec2")
         r = ec2.describe_instances(Filters=[{"Name": "tag:project", "Values": ["dopplertrack"]},
                                             {"Name": "instance-state-name", "Values": ["pending", "running"]}])

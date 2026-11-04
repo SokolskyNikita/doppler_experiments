@@ -9,8 +9,8 @@ least_squares searches (tau, v, log R, w, phi) on each branch of s, from the str
 x phi {15, 45, 75} deg, and the lower-RSS branch is the fit. The compared R is the fitted path's minimum distance
 over the heard span, like the trajectory reference R*. Signed rate sw = s*w (deg/s, + away).
 
-Stages, each a set of units written one jsonl line per unit to RUN/<stage>[_<k>of<n>].jsonl, so a stopped or split
-run resumes (units already in any of the stage's files are skipped) and merges to the same numbers:
+Stages, each a set of units under RUN/units/<id>/ (tools/data/shards.py: finished when unit.json is there; --shard K/N,
+--resume DIR..., --merge, --inputs; workers from $DOPPLERTRACK_JOBS, which never change a result):
   synth    synthetic arcs (f0 180 Hz, 65 m/s, 1.5 km; w 0, 1, 3 deg/s; phi 20, 60 deg; both signs): recovery,
            and what a straight fit misses on each
   fit      the 40 Livermore passes on curve A (the trajectory curve; the criterion) and D (the published ridge)
@@ -19,14 +19,16 @@ run resumes (units already in any of the stage's files are skipped) and merges t
            Cramer-Rao bound of R with the pass's ridge noise (phi held fixed where sw's interval includes 0) beside
            the straight model's
   boot     (pass, replicate): A plus a moving-block replicate of the sub-5 s residuals, seed from (pass, replicate);
-           refit on both branches. The cloud part
-  merge    the CSVs, summary.json and the criterion
+           refit on both branches. The cloud job
+  report   the criterion from a merged fit.csv (and profile.csv)
 
-usage: uv run python tools/experiments/2026-11-04/turn_model.py RUN STAGE [--workers 2] [--shard K/N] [--replicates 200]
+usage: uv run python tools/experiments/2026-11-04/turn_model.py STAGE [RUN] [--shard K/N] [--resume DIR ...] [--merge]
+           [--inputs] [--replicates 200]
 """
 import argparse
 import csv
 import hashlib
+import sys
 import importlib.util
 import json
 from concurrent.futures import ProcessPoolExecutor
@@ -41,6 +43,9 @@ spec = importlib.util.spec_from_file_location("model_error", HERE / "model_error
 me = importlib.util.module_from_spec(spec); spec.loader.exec_module(me)
 spec = importlib.util.spec_from_file_location("crb", HERE / "crb.py")
 crb = importlib.util.module_from_spec(spec); spec.loader.exec_module(crb)
+sys.path.insert(0, str(HERE.parents[1] / "data"))
+import shards  # noqa: E402
+
 ls = me.ls
 C = me.C15
 V_B, R_B, W_MAX, PHI_B = (10.0, 300.0), (100.0, 30000.0), np.radians(6.0), (0.0, np.radians(90.0))
@@ -343,100 +348,132 @@ def unit_boot(key):
 
 
 UNITS = {"synth": unit_synth, "fit": unit_fit, "profile": unit_profile, "boot": unit_boot}
+SYNTH = [(w, ph, s) for w in (0.0, 1.0, 3.0) for ph in (20.0, 60.0) for s in (1, -1) if not (w == 0 and s == -1)]
 
 
-def keys(stage, reps):
+def unit_keys(stage, reps):
+    """(unit id, key) in a fixed order."""
     if stage == "synth":
-        return [(w, ph, s) for w in (0.0, 1.0, 3.0) for ph in (20.0, 60.0) for s in (1, -1) if not (w == 0 and s == -1)]
+        return [(f"synth-w{w:g}-phi{ph:g}-s{s:+d}", (w, ph, s)) for w, ph, s in SYNTH]
     ids = sorted(P())
     if stage == "fit":
-        return [(i, c) for i in ids for c in ("A", "D")]
+        return [(f"fit-{i}-{c}", (i, c)) for i in ids for c in ("A", "D")]
     if stage == "profile":
-        return ids
-    return [(i, r) for i in ids for r in range(reps)]
+        return [(f"profile-{i}", i) for i in ids]
+    return [(f"boot-{i}-{r:03d}", (i, r)) for i in ids for r in range(reps)]
 
 
-def unit_name(stage, k):
-    return f"{stage}:" + ":".join(map(str, k if isinstance(k, tuple) else (k,)))
+def params(stage, reps):
+    """Everything that decides a unit's result; merging refuses units run with other values."""
+    return dict(stage=stage, c=C, v_bounds=V_B, R_bounds=R_B, w_max_dps=6.0, w_starts_dps=[0.5, 1.5, 3.0],
+                phi_starts_deg=[15.0, 45.0, 75.0], sw_grid_dps=[-6.0, 6.0, 25], phi_grid_deg=[0.0, 90.0, 10],
+                stage1=str(STAGE1.relative_to(me.DATA)), replicates=reps if stage == "boot" else None)
 
 
-def done_units(run, stage):
-    out = set()
-    for f in run.glob(f"{stage}*.jsonl"):
-        for line in open(f):
-            if line.strip():
-                out.add(json.loads(line)["unit"])
-    return out
+def inputs():
+    corpus = sorted(str(f.relative_to(me.DATA)) for f in (me.DATA / "derived/livermore").glob("*/*/*")
+                    if f.suffix == ".kml" or f.name == "frequency_vs_time_used.csv")
+    return ["raw/audio/livermore/zenodo-23424278/final_results_40_cases.csv", "runs/2026-11-04-livermore-audit/passes.csv",
+            "runs/2026-11-04-livermore-audit/sites.json", f"{STAGE1.relative_to(me.DATA)}/fits.csv", *corpus]
 
 
-def run_stage(run, stage, workers, shard, reps):
-    ks = keys(stage, reps)
-    k, n = shard
-    ks = [x for i, x in enumerate(ks) if i % n == k - 1]
-    done = done_units(run, stage)
-    todo = [x for x in ks if unit_name(stage, x) not in done]
-    out = run / (f"{stage}.jsonl" if n == 1 else f"{stage}_{k}of{n}.jsonl")
-    print(f"{stage}: {len(ks)} units in this shard, {len(ks) - len(todo)} done, {len(todo)} to go", flush=True)
-    with ProcessPoolExecutor(workers) as ex, open(out, "a") as fh:
-        for r in ex.map(UNITS[stage], todo):
-            fh.write(json.dumps(r, default=float) + "\n"); fh.flush()
-            print("  ", r["unit"], {k2: (round(v, 3) if isinstance(v, float) else v) for k2, v in r.items()
-                                     if k2 in ("turn_err_R_pct", "straight_err_R_pct", "turn_sw_dps", "turn_err_pct", "straight_err_pct",
-                                               "sw_identified", "phi_identified", "best_sw_dps", "traj_sw_dps")}, flush=True)
+def _run(item):
+    uid, key, stage = item
+    return uid, UNITS[stage](key)
 
 
-def load(run, stage):
-    rows = {}
-    for f in sorted(run.glob(f"{stage}*.jsonl")):
-        for line in open(f):
-            if line.strip():
-                r = json.loads(line); rows[r["unit"]] = r
-    return [rows[k] for k in sorted(rows)]
+def run_stage(run, stage, units, todo_keys):
+    from dopplertrack.parallel import default_jobs
+    print(f"{stage}: {len(units.ids)} units, {len(todo_keys)} to run in this shard", flush=True)
+    with ProcessPoolExecutor(default_jobs()) as ex:
+        for uid, r in ex.map(_run, [(u, k, stage) for u, k in todo_keys]):
+            d = units.dir(uid); d.mkdir(parents=True, exist_ok=True)
+            (d / "result.json").write_text(json.dumps(r, default=float) + "\n")
+            units.finish(uid, {k: r[k] for k in ("turn_err_R_pct", "turn_sw_dps", "sw_identified", "turn_err_pct", "rmin") if k in r})
+            print("  ", uid, {k: (round(v, 3) if isinstance(v, float) else v) for k, v in r.items()
+                              if k in ("turn_err_R_pct", "straight_err_R_pct", "turn_sw_dps", "turn_err_pct", "straight_err_pct",
+                                       "sw_identified", "phi_identified", "best_sw_dps", "traj_sw_dps", "rmin")}, flush=True)
 
 
-def merge(run):
-    out = {}
-    for stage in UNITS:
-        rows = load(run, stage)
-        if rows:
-            keys_ = list(dict.fromkeys(k for r in rows for k in r))
-            with open(run / f"{stage}.csv", "w", newline="") as fh:
-                w = csv.DictWriter(fh, fieldnames=keys_); w.writeheader()
-                w.writerows({k: (json.dumps(v) if isinstance(v, list) else v) for k, v in r.items()} for r in rows)
-            out[f"n_{stage}"] = len(rows)
-    fits = [r for r in load(run, "fit") if r["curve"] == "A"]
+def write_csv(path, rows):
+    keys_ = list(dict.fromkeys(k for r in rows for k in r))
+    with open(path, "w", newline="") as fh:
+        w = csv.DictWriter(fh, fieldnames=keys_); w.writeheader()
+        w.writerows({k: (json.dumps(v) if isinstance(v, list) else v) for k, v in r.items()} for r in rows)
+
+
+def merge(run, stage, units):
+    rows = [json.loads((d / "result.json").read_text()) for d in units.all().values()]
+    write_csv(run / f"{stage}.csv", rows)
+    print(f"{stage}: {len(rows)} units merged into {run / (stage + '.csv')}")
+    if stage == "boot":
+        b = {}
+        for r in rows:
+            b.setdefault(r["id"], []).append(r)
+        out = []
+        for pid, rs in sorted(b.items()):
+            m = np.array([[x["rmin"], x["v"], x["sw_dps"], x["phi_deg"]] for x in rs])
+            sd = m.std(axis=0, ddof=1)
+            cc = np.corrcoef(m.T) if np.all(sd > 0) else np.full((4, 4), np.nan)
+            out.append(dict(id=pid, n=len(rs), sd_rmin=sd[0], sd_v=sd[1], sd_sw_dps=sd[2], sd_phi_deg=sd[3],
+                            corr_sw_R=cc[2, 0], corr_sw_v=cc[2, 1], corr_phi_R=cc[3, 0], corr_phi_v=cc[3, 1],
+                            branch_flips=int(np.sum([x["s"] != rs[0]["s"] for x in rs]))))
+        write_csv(run / "boot_summary.csv", out)
+
+
+def report(fit_run, profile_run):
+    """The criterion (fixed before running) from the merged fit.csv and profile.csv."""
+    fits = [r for r in csv.DictReader(open(fit_run / "fit.csv")) if r["curve"] == "A"]
+    prof = {r["id"]: r for r in csv.DictReader(open(profile_run / "profile.csv"))} if (profile_run / "profile.csv").exists() else {}
+    f = lambda r, k: float(r[k])
+    turning = lambda r: r["turning"] == "True"
     med = lambda xs: float(np.median(xs)) if len(xs) else None
-    if fits:
-        turn = [r for r in fits if r["turning"]]; non = [r for r in fits if not r["turning"]]; prim = [r for r in fits if r["group"] == "primary"]
-        for name, g in (("turning", turn), ("non_turning", non), ("primary", prim), ("flagged", [r for r in fits if r["group"] == "flagged"])):
-            out[name] = dict(n=len(g), straight_m=med([abs(r["straight_err_R"]) for r in g]), turn_m=med([abs(r["turn_err_R"]) for r in g]),
-                             straight_pct=med([abs(r["straight_err_R_pct"]) for r in g]), turn_pct=med([abs(r["turn_err_R_pct"]) for r in g]),
-                             turn_v_pct=med([abs(r["turn_err_v_pct"]) for r in g]),
-                             rss_ratio=med([r["turn_rss"] / r["straight_rss"] for r in g]))
-        sign_ok = [r for r in turn if r["turn_s"] == r["traj_s"] and np.sign(r["turn_sw_dps"]) == np.sign(r["traj_sw_dps"])]
-        x = np.array([r["turn_sw_dps"] for r in turn]); y = np.array([r["traj_sw_dps"] for r in turn])
-        corr = float(np.corrcoef(x, y)[0, 1]) if len(turn) > 2 and x.std() > 0 and y.std() > 0 else None
-        prof = {r["id"]: r for r in load(run, "profile")}
-        ident = [r for r in turn if prof.get(r["id"], {}).get("sw_identified")]
-        out["criterion"] = {
-            "1_turning_le_201m": out["turning"]["turn_m"] <= 201.0,
-            "2_non_turning_le_182m": out["non_turning"]["turn_m"] <= 182.0,
-            "3_primary_le_160m": out["primary"]["turn_m"] <= 160.0,
-            "4_sw_identified_ge_11_of_16": (len(ident) >= 11) if prof else None, "n_identified": len(ident) if prof else None,
-            "5_sign_ge_11_and_corr_ge_0.5": (len(sign_ok) >= 11 and corr is not None and corr >= 0.5), "n_sign": len(sign_ok), "corr": corr}
-        out["criterion"]["enters"] = all(v for k2, v in out["criterion"].items() if k2[0].isdigit())
-    json.dump(out, open(run / "summary.json", "w"), indent=1, default=float)
+    out = {}
+    for curve in ("A", "D"):
+        rows = [r for r in csv.DictReader(open(fit_run / "fit.csv")) if r["curve"] == curve]
+        groups = (("turning", [r for r in rows if turning(r)]), ("non_turning", [r for r in rows if not turning(r)]),
+                  ("primary", [r for r in rows if r["group"] == "primary"]), ("flagged", [r for r in rows if r["group"] == "flagged"]))
+        out[curve] = {name: dict(n=len(g), straight_m=med([abs(f(r, "straight_err_R")) for r in g]), turn_m=med([abs(f(r, "turn_err_R")) for r in g]),
+                                 straight_pct=med([abs(f(r, "straight_err_R_pct")) for r in g]), turn_pct=med([abs(f(r, "turn_err_R_pct")) for r in g]),
+                                 turn_v_pct=med([abs(f(r, "turn_err_v_pct")) for r in g]),
+                                 rss_ratio=med([f(r, "turn_rss") / f(r, "straight_rss") for r in g])) for name, g in groups}
+    turn = [r for r in fits if turning(r)]
+    sign_ok = [r for r in turn if int(r["turn_s"]) == int(r["traj_s"]) and np.sign(f(r, "turn_sw_dps")) == np.sign(f(r, "traj_sw_dps"))]
+    x = np.array([f(r, "turn_sw_dps") for r in turn]); y = np.array([f(r, "traj_sw_dps") for r in turn])
+    corr = float(np.corrcoef(x, y)[0, 1]) if len(turn) > 2 and x.std() > 0 and y.std() > 0 else None
+    ident = [r for r in turn if prof.get(r["id"], {}).get("sw_identified") == "True"]
+    A = out["A"]
+    c = {"1_turning_le_201m": A["turning"]["turn_m"] <= 201.0, "2_non_turning_le_182m": A["non_turning"]["turn_m"] <= 182.0,
+         "3_primary_le_160m": A["primary"]["turn_m"] <= 160.0,
+         "4_sw_identified_ge_11_of_16": len(ident) >= 11 if prof else None, "n_sw_identified": len(ident) if prof else None,
+         "5_sign_ge_11_and_corr_ge_0.5": len(sign_ok) >= 11 and corr is not None and corr >= 0.5, "n_sign": len(sign_ok), "corr": corr}
+    c["enters"] = all(v for k, v in c.items() if k[0].isdigit()) if prof else None
+    out["criterion"] = c
+    json.dump(out, open(fit_run / "summary.json", "w"), indent=1, default=float)
     print(json.dumps(out, indent=1, default=float))
 
 
 def main():
-    ap = argparse.ArgumentParser(); ap.add_argument("run", type=Path); ap.add_argument("stage", choices=list(UNITS) + ["merge"])
-    ap.add_argument("--workers", type=int, default=2); ap.add_argument("--shard", default="1/1"); ap.add_argument("--replicates", type=int, default=200)
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("stage", choices=list(UNITS) + ["report"])
+    shards.add_args(ap)
+    ap.add_argument("--replicates", type=int, default=200, help="boot: replicates per pass")
+    ap.add_argument("--profile-run", type=Path, help="report: the run folder holding profile.csv (default: RUN)")
     a = ap.parse_args()
-    if a.stage == "merge":
-        merge(a.run); return
-    k, n = map(int, a.shard.split("/"))
-    run_stage(a.run, a.stage, a.workers, (k, n), a.replicates)
+    if a.stage == "report":
+        report(a.run, a.profile_run or a.run); return
+    if a.inputs:
+        shards.print_inputs([], inputs(), [], ()); return
+    run = shards.open_run(a.run, f"turn-model-{a.stage}", {"script": "tools/experiments/2026-11-04/turn_model.py",
+                                                            "params": params(a.stage, a.replicates)})
+    ks = unit_keys(a.stage, a.replicates)
+    units = shards.Units(run, [u for u, _ in ks], params(a.stage, a.replicates), a.shard, a.resume)
+    if a.merge:
+        merge(run, a.stage, units); return
+    todo = set(units.todo())
+    run_stage(run, a.stage, units, [(u, k) for u, k in ks if u in todo])
+    if not units.todo() and a.shard == (1, 1):
+        merge(run, a.stage, units)
 
 
 if __name__ == "__main__":

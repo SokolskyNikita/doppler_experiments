@@ -57,7 +57,7 @@ def main(argv=None):
             sys.exit("\n".join(bad))
         print("every derived file matches its recorded hash")
     elif a.cmd == "run":
-        run_dir = runner.run_bench(a.case or cases.case_ids(), tier=a.tier, run_dir=a.run_dir,
+        run_dir = runner.run_bench(a.case or cases.case_ids(profile=a.profile), tier=a.tier, run_dir=a.run_dir,
                                    revision=a.revision, profile=a.profile, parallel=a.parallel,
                                    overrides=runner.parse_overrides(a.search_param))
         print(run_dir)

@@ -22,7 +22,7 @@ import numpy as np
 from dopplertrack.result import (CONVENTIONS_V1, KIND, SCHEMA_VERSION, RecordError, file_entry, read_record,
                                  unavailable, write_record)
 
-from .cases import REPO, blind_case, case_labels, resolve
+from .cases import REPO, blind_case, case_labels, case_profiles, latest_case, resolve
 
 NO_VERDICT = "no verdict or abstention exists before Phase 4"
 NO_REGION = "no uncertainty region exists before Phase 4"
@@ -98,6 +98,9 @@ PROFILES = {
     "saved-fit": {"events": "the case's saved fits", "harmonics": "the case's"},
     "raw-audio": {"events": "detect, top two by score, earlier first", "detect": {"band_hz": [60.0, 300.0], "top": 10,
                   "harmonics": 1, "window_s": 240.0}, "harmonics": [1, 1]},
+    # dopplertrack locate (PLAN Phase 3 step A) on the case's audio, date, box and flight data, nothing else of the
+    # case's: its own detection, pair rule ("pair_rule" override; top2 by default) and silence filter (off by default)
+    "locate": {"events": "detect, then locate's pair rule", "harmonics": [1, 1]},
 }
 
 
@@ -151,10 +154,26 @@ def sound_speed(case: dict) -> tuple[dict, dict]:
                       "station_distance_km": w.get("station_distance_km"), "observed_utc": w.get("observed_utc")}
 
 
-def trace_paths(case: dict) -> list[Path]:
+def trace_paths(case: dict, key: str = "traces") -> list[Path]:
     """A case's flight data: one trace file, or consecutive days of one box."""
-    t = case["flight_data"]["traces"]
+    t = case["flight_data"][key]
     return [resolve(p) for p in ([t] if isinstance(t, str) else t)]
+
+
+def locate_flight_data(case: dict, cpa_cache: str) -> tuple[list[Path], list[list[float]] | None, str]:
+    """The locate profile's trace files, declared envelopes and CPA cache. A case's flight_data.locate_traces, cut
+    with extraction metadata and the search-range margin, replaces its legacy traces for locate alone, so the other
+    profiles' baselines stay on the files they were measured with; it gets a CPA cache file of its own so the two
+    never rebuild each other's."""
+    from dopplertrack.adsb import load_trace_metadata
+    if "locate_traces" in case["flight_data"]:
+        c = Path(cpa_cache)
+        paths, cpa_cache = trace_paths(case, "locate_traces"), str(c.with_name(f"{c.stem}-locate{c.suffix}"))
+    else:
+        paths = trace_paths(case)
+    # a file's own measured envelope wins; the case's declared boxes stand in only for legacy files
+    measured = all(p.exists() and load_trace_metadata(p).get("coverage_bbox") for p in paths)
+    return paths, None if measured else day_boxes(case), cpa_cache
 
 
 def day_boxes(case: dict) -> list[list[float]]:
@@ -340,6 +359,7 @@ class Draft:
             },
             "events": self.events, "candidates": self.candidates, "refined": self.refined, "funnel": self.funnel,
             "verdict": unavailable(NO_VERDICT), "region": unavailable(NO_REGION),
+            "pair_rules": unavailable("a benchmark profile chooses its events (saved fits or detect's top two)"),
             "data_limitations": {"flight_data": self.flight, **self.limits, "ads_b": ADS_B_LIMITATION},
             "execution": {"errors": self.errors, "warnings": self.stage.warnings, "stages": self.stage.stages},
         }
@@ -638,6 +658,13 @@ def compare_case(case_dir: Path, meta: dict, read_labels) -> dict:
     else:
         entry["top_error_m"] = entry["margin_pct"] = unavailable("no candidates")
     entry["flight_pairs"] = len(cands)
+    v = record["verdict"]
+    if isinstance(v, dict) and "outcome" in v:
+        entry["verdict"] = {"outcome": v["outcome"], "reason_codes": v["reason_codes"]}
+        want = lab.get("expected_verdict")    # a failure case's labels name the verdict it should end in
+        if want:
+            entry["verdict_as_expected"] = (v["outcome"] == want["outcome"]
+                                            and set(want["reason_codes"]) <= set(v["reason_codes"]))
     ref_ = record["refined"]
     entry["refined_error_m"] = (_distance_m(ref_["lat"], ref_["lon"], ref["lat"], ref["lon"])
                                 if isinstance(ref_, dict) and "lat" in ref_ else unavailable("no refinement"))
@@ -681,10 +708,51 @@ def new_run(topic: str) -> Path:
     return Path(out)
 
 
+def execute_case_locate(case: dict, case_dir: Path, log=print, code: dict | None = None,
+                        overrides: dict | None = None) -> dict:
+    """The case through dopplertrack locate: its spectrogram, flight-data date, box and trace files, and nothing of
+    its fits. Overrides: pair_rule (top2, comparable, both) and silence_d_m (default None, the filter off)."""
+    from dopplertrack import locate as loc
+    assert "labels" not in case, "the runner must be given the blind case"
+    overrides = dict(overrides or {})
+    unknown = set(overrides) - {"pair_rule", "silence_d_m"}
+    s = case["search"]
+    paths, envelope, cpa_cache = locate_flight_data(case, str(resolve(s["cpa_cache"])))
+    cfg = loc.LocateConfig(spacing_m=s["spacing_m"], max_range_m=s["max_range_m"], tol_s=s["tol_s"], v_tol=s["v_tol"],
+                           d_tol=tuple(s["d_tol"]), silence_d_m=overrides.get("silence_d_m"),
+                           pair_rule=overrides.get("pair_rule", "top2"), dem=s["dem"], c=sound_speed(case)[0].get("c"),
+                           refine_spacing_m=case["refine"]["spacing_m"], refine_half_m=case["refine"]["half_m"],
+                           cpa_cache=cpa_cache, envelope=envelope,
+                           extra={"search_overrides": overrides, "speed_of_sound": sound_speed(case)[1]})
+    record = None
+    try:
+        if unknown:
+            raise ValueError(f"the locate profile takes only pair_rule and silence_d_m overrides, not {sorted(unknown)}")
+        out = loc.locate(resolve(case["spectrogram"]), case["flight_data"]["date"], s["bbox"], paths, cfg,
+                         out_dir=case_dir, code=code or code_revision(), log=log)
+        record = out.record
+        (case_dir / "summary.txt").write_text("\n".join(out.summary) + "\n")
+        for line in out.summary:
+            log(line)
+    except Exception as exc:          # a crash is an execution error, never a verdict
+        log(f"ERROR: {type(exc).__name__}: {exc}")
+        draft = Draft(case, code or code_revision(), "locate", log)
+        draft.errors.append(f"{type(exc).__name__}: {exc}")
+        return draft.record()
+    record["case"] = {"id": case["id"], "version": case["version"]}
+    record["provenance"]["parameters"]["search"] = s        # compare_case reads the box and refine width from here
+    record["provenance"]["parameters"]["refine"] = case["refine"]
+    return record
+
+
 def _executor(revision: str | None, profile: str, log, code: dict | None = None, overrides: dict | None = None):
     import functools
     if profile not in PROFILES:
         raise ValueError(f"profile must be one of {sorted(PROFILES)}")
+    if profile == "locate":
+        if revision is not None:
+            raise ValueError("the locate profile runs this checkout only")
+        return code or code_revision(), functools.partial(execute_case_locate, overrides=overrides)
     if revision is None:
         return code or code_revision(), functools.partial(execute_case, profile=profile, overrides=overrides)
     from .revisions import ensure_revision
@@ -737,6 +805,9 @@ def run_bench(case_ids: list[str], tier: str = "t2", run_dir: Path | None = None
     process (`bench run-case`), so stage logs and timings never mix."""
     # the code revision is read once, before anything runs, so an edit during a long run can't relabel it
     overrides = dict(overrides or {})
+    excluded = [c for c in case_ids if profile not in case_profiles(latest_case(c))]
+    if excluded:
+        raise ValueError(f"{excluded} don't run under the {profile} profile (their cases' profiles field)")
     code, execute = _executor(revision, profile, log, overrides=overrides)
     commit, dirty = code["git_commit"], code["git_dirty"]
     if run_dir is None:

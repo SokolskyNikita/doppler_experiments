@@ -299,3 +299,39 @@ def test_a_recipe_can_write_into_a_folder(tmp_path, monkeypatch):
     assert cases.build(case, log=lambda m: None) == []
     assert (tmp_path / "derived" / "traces" / "box.npz").read_bytes() == body
     assert sorted(p.name for p in (tmp_path / "derived" / "traces").iterdir()) == ["box.npz"]
+
+
+def test_locate_reads_its_own_traces_with_their_own_envelopes_and_cpa_cache(tmp_path, monkeypatch):
+    from dopplertrack.adsb import save_traces
+    monkeypatch.setattr(runner, "resolve", lambda p: tmp_path / p)
+    case = _case()
+    save_traces([], tmp_path / case["flight_data"]["traces"].replace("/", "_"))
+    case["flight_data"]["traces"] = case["flight_data"]["traces"].replace("/", "_")      # a legacy file
+    legacy = runner.locate_flight_data(case, "/c/cpa/bench/x_200m_dem.npz")
+    assert legacy == (runner.trace_paths(case), runner.day_boxes(case), "/c/cpa/bench/x_200m_dem.npz")
+    v2 = "derived/ny_margin12_v2.npz"
+    (tmp_path / "derived").mkdir()
+    save_traces([], tmp_path / v2, metadata={"coverage_bbox": [40.0, 41.5, -74.6, -72.4]})
+    case["derived"].append({"path": v2, "sha256": "0" * 64, "recipe": [["python", "x"]]})
+    case["flight_data"]["locate_traces"] = v2
+    cases.validate_case(case, cases.manifest_files())
+    paths, envelope, cpa = runner.locate_flight_data(case, "/c/cpa/bench/x_200m_dem.npz")
+    assert paths == [tmp_path / v2] and envelope is None and cpa == "/c/cpa/bench/x_200m_dem-locate.npz"
+    assert runner.trace_paths(case) == legacy[0]           # the other profiles keep the legacy file
+    case["derived"].pop()
+    with pytest.raises(cases.CaseError, match="locate_traces"):
+        cases.validate_case(case, cases.manifest_files())
+
+
+def test_a_case_runs_only_under_its_profiles():
+    assert set(cases.PROFILE_NAMES) == set(runner.PROFILES)
+    case = _case()
+    case["profiles"] = ["locate"]
+    case["events"] = {"mode": "detect"}
+    cases.validate_case(case, cases.manifest_files())
+    case["profiles"] = ["saved-fit", "locate"]
+    with pytest.raises(cases.CaseError, match="detect-mode"):
+        cases.validate_case(case, cases.manifest_files())
+    case["profiles"] = ["nope"]
+    with pytest.raises(cases.CaseError, match="profiles"):
+        cases.validate_case(case, cases.manifest_files())

@@ -42,10 +42,12 @@ def stream_audio(path: str | Path, sr: int = 4000, block: int = 1 << 20):
         p = subprocess.Popen(_ffmpeg_cmd(path, sr), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     except FileNotFoundError as exc:
         raise FFmpegNotFoundError(_FFMPEG_MISSING) from exc
+    out, errs = p.stdout, p.stderr
+    assert out is not None and errs is not None
     tail = b""
     try:
         while True:
-            raw = p.stdout.read(4 * block)
+            raw = out.read(4 * block)
             if not raw:
                 break
             raw = tail + raw
@@ -54,9 +56,9 @@ def stream_audio(path: str | Path, sr: int = 4000, block: int = 1 << 20):
             if n:
                 yield np.frombuffer(raw[:n], dtype=np.float32).copy()
     finally:
-        p.stdout.close()
-        err = p.stderr.read()
-        p.stderr.close()
+        out.close()
+        err = errs.read()
+        errs.close()
         rc = p.wait()
     if rc:
         raise subprocess.CalledProcessError(rc, p.args, stderr=err)
@@ -72,12 +74,17 @@ class Spectrogram:
     for any point that would interpolate from an invalid frame, and the per-bin medians used
     for whitening skip invalid frames. A spectrogram built without a mask is all valid.
 
+    A gap carries zero evidence, and a score must not be renormalised by the count of valid
+    samples: a curve sample in a gap adds the fill value (0) and still counts in the mean, so a
+    curve with half its samples in gaps keeps at most half its score. Renormalising would let a
+    fit to the flat tails alone, its sweep lost in a gap, look as confident as a full curve.
+
     `start_utc`, when known, is the UNIX time of audio second 0, so frame i was heard at
     start_utc + t[i]."""
     t: np.ndarray      # (T,) centre time of each frame, s
     f: np.ndarray      # (F,) bin frequencies, Hz
     S: np.ndarray      # (F, T) whitened power, dB above per-bin median
-    valid: np.ndarray | None = None    # (T,) bool, True where the frame carries evidence
+    valid: np.ndarray = None           # type: ignore[assignment]  # (T,) bool, True where the frame carries evidence; None -> all valid
     start_utc: float | None = None     # UNIX time of audio second 0, if known
 
     def __post_init__(self):
@@ -94,7 +101,7 @@ class Spectrogram:
     def df(self) -> float:
         return float(self.f[1] - self.f[0])
 
-    def with_S(self, S) -> "Spectrogram":
+    def with_S(self, S: np.ndarray) -> "Spectrogram":
         """The same grid, mask and start time with new power values."""
         return dataclasses.replace(self, S=S)
 
@@ -147,7 +154,7 @@ class Spectrogram:
     @classmethod
     def load(cls, path) -> "Spectrogram":
         z = np.load(path)
-        valid = z["valid"] if "valid" in z.files else None
+        valid = z["valid"] if "valid" in z.files else np.ones(len(z["t"]), bool)
         start = float(z["start_utc"]) if "start_utc" in z.files else None
         return cls(z["t"], z["f"], z["S"], valid, start)
 
@@ -170,19 +177,20 @@ def _whiten(L: np.ndarray, valid: np.ndarray | None, hop_s: float, whiten_window
     # block-wise running median (cheap, adequate for slow drifts), linearly blended between
     # block centres to avoid seams; a block without a valid frame contributes no centre
     nb = int(np.ceil(T / w))
-    centers, cm = [], []
+    centers: list[float] = []
+    meds: list[np.ndarray] = []
     for b in range(nb):
         sl = slice(b * w, min((b + 1) * w, T))
         if valid is None:
-            cm.append(np.median(L[:, sl], axis=1))
+            meds.append(np.median(L[:, sl], axis=1))
         elif valid[sl].any():
-            cm.append(np.median(L[:, sl][:, valid[sl]], axis=1))
+            meds.append(np.median(L[:, sl][:, valid[sl]], axis=1))
         else:
             continue
         centers.append((sl.start + sl.stop) / 2)
     if not centers:
         return L
-    cm = np.array(cm)                                                    # (nb, F)
+    cm = np.array(meds)                                                  # (nb, F)
     idx = np.arange(T)
     out = L if L.dtype == np.float32 else L.astype(np.float32)
     for k in range(L.shape[0]):                                          # row by row: no (F, T) float64 copy
@@ -332,7 +340,7 @@ def spectrogram_from_blocks(blocks, sr: int, start_utc: float | None = None, npe
     emit(True)
     if not parts:
         raise ValueError("recording shorter than one STFT window")
-    L = np.concatenate(parts, axis=1); del parts
+    L = np.concatenate(parts, axis=1)
     valid = np.concatenate(vparts)
     t = (nperseg / 2 + np.arange(L.shape[1]) * hop) / sr
     L = _whiten(L, valid, hop / sr, whiten_window_s)

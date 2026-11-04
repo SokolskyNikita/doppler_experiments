@@ -3,6 +3,7 @@
 Fork of [mjshiggins/dopplertrack](https://github.com/mjshiggins/dopplertrack): acoustic geolocation from the
 Doppler curves of propeller aircraft. `README.md` explains the method; `PLAN.md` is the fork's roadmap, and
 `docs/experiments/` the record of what has been measured. Read PLAN.md's sections 2 and 4 before starting work.
+[docs/architecture.md](docs/architecture.md) traces the detector and the CPA build, the two pieces Phase 1 changes.
 
 ## Setup
 
@@ -17,6 +18,14 @@ Doppler curves of propeller aircraft. `README.md` explains the method; `PLAN.md`
 
 ## Tests
 
+- `tools/check.sh`: every offline check, failing on the first problem. It runs ruff's pyflakes rules on
+  `src/` and `tests/`, mypy on `tracks.py`, the pytest suite below with the opt-in recording excluded, and
+  the installed-wheel smoke check (`tests/install_smoke.py`) from a fresh venv outside the checkout. It
+  prints the pytest and total wall times.
+- To check one edit before the full run:
+  - detector: `uv run pytest -q tests/test_phase0_cli.py`, or add
+    `-k "merge_breaks or worker_pool"` for just the tie and process-pool tests;
+  - CPA cache: `uv run pytest -q tests/test_cache.py`.
 - `uv run pytest -q`: about 45 s, no data or network needed. CI runs the same on Ubuntu.
 - Real data, opt-in, about 2 min:
   `DOPPLERTRACK_OYSTER_BAY="$DOPPLERTRACK_DATA/derived/oyster_bay" uv run pytest -q tests/test_oyster_bay.py`.
@@ -48,7 +57,7 @@ Doppler curves of propeller aircraft. `README.md` explains the method; `PLAN.md`
 - `main` mirrors upstream; never commit to it. `dev` is the fork's line, and all work branches off `dev`.
   Merge upstream into `dev`; never rebase or force-push `dev`.
 - Fork-only files: `PLAN.md`, `AGENTS.md`, `CLAUDE.md`, `.claude/`, `tools/`, `bench/`, `docs/reference/`,
-  `docs/experiments/`, `docs/phase1-preparation.md`. They may share a commit with upstream code; drop them when sending work upstream.
+  `docs/experiments/`, `docs/phase1-preparation.md`, `docs/architecture.md`. They may share a commit with upstream code; drop them when sending work upstream.
 - To send work upstream, branch `up/<topic>` from `upstream/main`, cherry-pick the topic's upstream commits
   by SHA, compare the series with `git range-diff`, and re-run the tests there. Don't use
   `git rebase --onto upstream/main dev <topic>`: it drops every commit `dev` already contains.
@@ -84,5 +93,6 @@ Doppler curves of propeller aircraft. `README.md` explains the method; `PLAN.md`
 | `tools/reference/` | scripts that converted the papers to Markdown |
 | `tools/experiments/<date>/` | scripts behind the numbers in `docs/experiments/`; records, not tools |
 | `bench/manifest.json` | size, SHA-256, source and licence of every raw input |
+| `docs/architecture.md` | edit map: the detector and CPA-build code paths and the tests that check them |
 | `docs/experiments/` | one record per experiment: question, setup, numbers, outcome, script and run folder |
 | `docs/reference/README.md` | reading list for the papers in `$DOPPLERTRACK_DATA/reference/` |

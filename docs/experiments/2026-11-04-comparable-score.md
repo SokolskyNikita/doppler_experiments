@@ -54,4 +54,51 @@ B1 and B2 pass and a Tier 2 run shows no regression on the seed cases.
 
 ## Results
 
-Pending.
+The run used `abe6998`, from a pinned checkout, in `runs/2026-11-04-comparable-score/`: 30 searches, two at a time with 4
+workers, 1,778 s. The ranking was written and hashed before any label was read (`ranking.json.sha256`); then came
+`reveal.json` and `evaluation.json`.
+
+**Eagle-cam clip**, the true events being `detect` ranks 2 and 5:
+
+| Z rank | Events | top Z | raw top score (its raw rank) | True pair: within 250 m / rank in its search | Top error |
+|---|---|---|---|---|---|
+| 1 | 4 + 2 | 8.37 | 10.40 (3rd) | – | 35.3 km |
+| **2** | **2 + 5** | **8.34** | 10.27 (5th) | **yes / 1st** | **917 m** |
+| 3 | 2 + 3 | 7.72 | 9.64 (7th) | – | 71.8 km |
+| 4 | 1 + 2 | 7.41 | 11.58 (1st) | – | 54.3 km |
+| 5–10 | the rest | 6.76–4.97 | | – | 18.7–69.4 km |
+
+**Oyster Bay**: events 1 + 2 first at Z 18.02, against 15.79 for the next. Their true pair is not within 250 m of
+the truth (the heard gate, as in the [timing-convention](2026-11-04-timing-convention.md) baseline), and it ranks 4th
+in its search, against 10th by raw score. The other nine pairs don't hold the true pair.
+
+**WSW moved box**: events 1 + 2 first at Z 17.53, against 14.94 for the next, answering 92.2 km from the truth.
+
+**The ten pairs' top Z**:
+- eagle cam: 8.37, 8.34, 7.72, 7.41, 6.76, 5.76, 5.47, 5.19, 5.06, 4.97;
+- Oyster Bay: 18.02, 15.79, 13.79, 12.23, 10.80, 9.35, 8.13, 7.39, 6.36, 6.21;
+- WSW: 17.53, 14.94, 13.82, 12.90, 10.70, 10.59, 8.06, 7.83, 6.94, 6.28.
+
+| | Criterion | Result |
+|---|---|---|
+| A1 | the eagle cam's true pair first of ten | **not met**: 2nd, 0.03 in Z behind 4 + 2 (5th by raw score) |
+| A2 | WSW's top margin ≤ the eagle cam true pair's margin | **not met**: 2.59 against −0.03 |
+| A3 | Oyster Bay's 1 + 2 first | met |
+
+## Outcome
+
+**Not met; stage A doesn't ship.** The one retune is not spent yet (see below).
+- **What Z fixes.** The loudest event no longer carries its pairs. On the eagle cam, every pair holding
+  `detect`'s rank 1 falls: 1 + 2 from 1st to 4th, 1 + 4 from 2nd to 8th, 1 + 5 from 4th to 10th. The true
+  pair rises from 5th to 2nd, 0.03 behind a pair that shares its event 2. Comparability, the thing stage A
+  was for, is mostly there.
+- **What it doesn't fix.** The moved box isn't a comparability failure. Its top pair is Oyster Bay's own two
+  true flyovers, which are genuinely the best-explained events in that audio, so Z picks them for the right
+  reason. A busy box then offers a wrong flight pair that explains them well. So event-pair ranking can't
+  make a wrong location less decisive: A2 asks event choice to do the verdict's job.
+- **Two results kept apart, as the PM asked.** Survival: on the eagle cam the true pair survives the coarse
+  search within 250 m in its own search; on Oyster Bay, under today's heard gate, it doesn't. Rank once
+  retained: 1st on the eagle cam, 4th on Oyster Bay.
+- **The size of the eagle-cam miss.** At 0.03 in Z, it is well inside the run's noise. A different null
+  draw of the same size would move each event's median by about 1.25σ/√1000 ≈ 0.04σ, which is enough to
+  swap the two pairs.

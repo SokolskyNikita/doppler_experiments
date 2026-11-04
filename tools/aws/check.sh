@@ -6,8 +6,8 @@ cd "$(dirname "$0")"
 echo "== shellcheck"
 shellcheck -S warning box/*.sh runs
 echo "== ruff (pyflakes rules)"
-uvx ruff check -q --select F ./*.py box/*.py tests/*.py ../../tests/test_aws_runs.py
+uvx ruff check -q --select F ./*.py box/*.py stack_checks.py ../../tests/test_aws_runs.py
 echo "== the stack"
-JSII_SILENCE_WARNING_UNTESTED_NODE_VERSION=1 uv run --frozen pytest -q -p no:cacheprovider tests
+JSII_SILENCE_WARNING_UNTESTED_NODE_VERSION=1 uv run --frozen pytest -q -p no:cacheprovider stack_checks.py
 echo "== runs and the supervisor"
 (cd ../.. && uv run --frozen pytest -q -p no:cacheprovider tests/test_aws_runs.py)

@@ -1,4 +1,4 @@
-"""The synthesized stack, checked before any deploy: the rules the README promises and the outputs runs reads."""
+"""(Named so the repo-wide pytest skips it: it needs this folder's environment.) The synthesized stack, checked before any deploy: the rules the README promises and the outputs runs reads."""
 import json
 import re
 import sys
@@ -7,7 +7,7 @@ from pathlib import Path
 import aws_cdk as cdk
 from aws_cdk.assertions import Match, Template
 
-HERE = Path(__file__).resolve().parent.parent
+HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 sys.argv = ["app.py"]     # app.py synthesizes on import; give it a clean argv
 

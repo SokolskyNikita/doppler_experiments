@@ -47,8 +47,7 @@ def inputs(tmp_path):
 
 @pytest.mark.parametrize("command", ["search", "refine", "search-single", "detect", "fit"])
 @pytest.mark.parametrize("flags, c", [([], None), (["--temperature", "15"], doppler.speed_of_sound(15.0)),
-                                      (["--temperature", "30"], doppler.speed_of_sound(30.0)),
-                                      (["--temperature", "15", "--aircraft-height", "2000"], doppler.speed_of_sound(8.5))])
+                                      (["--temperature", "30"], doppler.speed_of_sound(30.0))])
 def test_the_cli_passes_c_only_when_a_temperature_is_given(tmp_path, monkeypatch, inputs, command, flags, c):
     spec, files, traces, results = inputs
     seen = []
@@ -75,15 +74,12 @@ def test_the_cli_passes_c_only_when_a_temperature_is_given(tmp_path, monkeypatch
     cli.main(args + flags)
     (kw,) = seen
     if c is None:
-        assert "c" not in kw            # the default path is today's, untouched
+        assert "c" not in kw and "temperature_c" not in kw        # the default path is today's, untouched
     else:
         assert kw["c"] == pytest.approx(c)
-
-
-def test_aircraft_height_needs_a_temperature(inputs, capsys):
-    spec = inputs[0]
-    with pytest.raises(SystemExit):
-        cli.main(["fit", str(spec), "--window", "70", "130", "--band", "90", "160", "--aircraft-height", "1000"])
+        # the geometry gets each flight's own sound speed from the ground temperature; fits get the ground's c
+        geometry = command in ("search", "refine", "search-single")
+        assert (kw.get("temperature_c") == float(flags[1])) if geometry else "temperature_c" not in kw
 
 
 def test_a_changed_speed_of_sound_changes_the_cpa_fingerprint():
@@ -104,18 +100,26 @@ def test_the_case_weather_field_is_validated():
     cases.validate_case(_case(), files)                        # null throughout: today's default
     with pytest.raises(cases.CaseError, match="weather.source"):
         cases.validate_case(_case(temperature_c=21.0, station="KFRG", station_distance_km=12.0), files)
-    with pytest.raises(cases.CaseError, match="needs a temperature"):
-        cases.validate_case(_case(aircraft_height_m=1000.0), files)
-    cases.validate_case(_case(temperature_c=21.0, source="IEM ASOS", station="KFRG", station_distance_km=12.0,
-                              aircraft_height_m=1000.0), files)
+    with pytest.raises(cases.CaseError, match="superseded by the per-flight sound speed"):
+        cases.validate_case(_case(temperature_c=21.0, source="IEM ASOS", station="KFRG", station_distance_km=12.0,
+                                  aircraft_height_m=1000.0), files)
+    cases.validate_case(_case(temperature_c=21.0, source="IEM ASOS", station="KFRG", station_distance_km=12.0), files)
 
 
 def test_the_runner_passes_the_case_speed_of_sound_and_records_it():
     kw, rec = runner.sound_speed(_case())
     assert kw == {} and rec["c_m_s"] == doppler.speed_of_sound() and rec["temperature_c"] is None
-    kw, rec = runner.sound_speed(_case(temperature_c=21.0, source="IEM ASOS", station="KFRG", station_distance_km=12.0,
-                                       aircraft_height_m=1000.0))
-    assert kw["c"] == pytest.approx(doppler.speed_of_sound(21.0 - 3.25)) == rec["c_m_s"]
-    assert rec["effective_temperature_c"] == pytest.approx(17.75) and rec["station"] == "KFRG"
-    d = runner.Draft(cases.blind_case("oyster-bay"), {}, "saved-fit", lambda m: None)
+    case = _case(temperature_c=21.0, source="IEM ASOS", station="KFRG", station_distance_km=12.0)
+    kw, rec = runner.sound_speed(case)
+    # the fits take the ground temperature's c; the geometry gives each flight its own from its height
+    assert kw["c"] == pytest.approx(doppler.speed_of_sound(21.0)) == rec["c_m_s"] and rec["station"] == "KFRG"
+    assert runner.geometry_kw(case) == {"c": kw["c"], "temperature_c": 21.0}
+    assert runner.geometry_kw(_case()) == {}
+    blind = cases.blind_case("oyster-bay")
+    assert blind["weather"]["station"].startswith("KFRG") and blind["weather"]["temperature_c"] == 25.6
+    d = runner.Draft(blind, {}, "saved-fit", lambda m: None)
+    assert d.c_kw["c"] == pytest.approx(346.48, abs=0.01) == d.params["speed_of_sound"]["c_m_s"]
+    assert d.geo_kw["temperature_c"] == 25.6
+    blind["weather"] = dict.fromkeys(blind["weather"])        # no reading: the pipeline's default, untouched
+    d = runner.Draft(blind, {}, "saved-fit", lambda m: None)
     assert d.c_kw == {} and d.params["speed_of_sound"]["basis"].startswith("the pipeline's default")

@@ -116,6 +116,69 @@ def cached(kind: str, parts: dict, produce: Callable[[], T], root: str | Path | 
 # ---- detections ------------------------------------------------------------------------------
 
 DETECTOR_MODULES = ("dopplertrack.tracks", "dopplertrack.doppler", "dopplertrack.audio")
+# What detect_events and fit_event actually run, by module: the functions and classes whose code decides a
+# detection or a fit. tests/test_cache.py traces both producers and fails if they call anything not listed here,
+# so the list can't fall behind the code. Process-pool plumbing (parallel.py) is left out: results don't depend on
+# the number of workers.
+DETECTOR_CODE = {
+    "dopplertrack.tracks": ("EventFit", "ScanRequest", "Candidate", "local_whiten", "sweep_weights", "curve_contrast",
+                            "_shape", "grid_search", "fit_event", "_scan_window", "merge_candidates", "detect_events"),
+    "dopplertrack.doppler": ("speed_of_sound", "observed_frequency", "ideal_curve"),
+    "dopplertrack.audio": ("Spectrogram",),
+}
+
+
+def _without_text(node):
+    """A definition's AST with what can't change a result taken out: docstrings, and the messages of raise and
+    warnings.warn. Comments never reach the AST."""
+    import ast
+    import copy
+    node = copy.deepcopy(node)
+    for n in ast.walk(node):
+        body = getattr(n, "body", None)
+        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Module)) and body and \
+                isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant) and \
+                isinstance(body[0].value.value, str):
+            n.body = body[1:] or [ast.Pass()]
+        messages = []
+        if isinstance(n, ast.Raise) and n.exc is not None:
+            messages = [n.exc]
+        elif isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr == "warn":
+            messages = list(n.args[:1])
+        for m in messages:
+            for sub in ast.walk(m):
+                if isinstance(sub, ast.Call):
+                    sub.args = [ast.Constant("") if isinstance(a, (ast.Constant, ast.JoinedStr)) and
+                                not isinstance(getattr(a, "value", ""), (int, float)) else a for a in sub.args]
+                if isinstance(sub, ast.JoinedStr):
+                    sub.values = []
+    return node
+
+
+def code_sha256(code: dict[str, tuple[str, ...]] = DETECTOR_CODE) -> str:
+    """Hash of the named top-level functions and classes, read from source without importing them: each
+    definition's AST less its docstrings and error messages, plus the module-level constants it reads. A docstring
+    or message edit leaves it unchanged; any change to code that runs, or to a constant it uses, changes it."""
+    import ast
+    h = hashlib.sha256()
+    for module, names in sorted(code.items()):
+        spec = importlib.util.find_spec(module)
+        if spec is None or spec.origin is None:
+            raise ValueError(f"no source for module {module}")
+        tree = ast.parse(Path(spec.origin).read_text())
+        defs = {n.name: n for n in tree.body if isinstance(n, (ast.FunctionDef, ast.ClassDef))}
+        consts = {t.id: n for n in tree.body if isinstance(n, ast.Assign) for t in n.targets if isinstance(t, ast.Name)}
+        missing = [name for name in names if name not in defs]
+        if missing:
+            raise ValueError(f"{module} has no top-level {missing}")
+        for name in names:
+            node = defs[name]
+            used = sorted({n.id for n in ast.walk(node) if isinstance(n, ast.Name) and n.id in consts})
+            h.update(f"{module}:{name};".encode())
+            h.update(ast.dump(_without_text(node)).encode())
+            for c in used:
+                h.update(ast.dump(consts[c]).encode())
+    return h.hexdigest()
 DETECT_IGNORED = ("workers", "progress")    # change how detections are computed, not what they are
 
 
@@ -127,11 +190,12 @@ def spectrogram_sha256(sp) -> str:
 
 def detection_parts(sp, produce: Callable, **params) -> dict:
     """What a detection result depends on: the spectrogram's contents, every detect parameter except those
-    in DETECT_IGNORED, the producer, the detector's source (DETECTOR_MODULES) and the numeric libraries."""
+    in DETECT_IGNORED, the producer, the code detect and fit run (DETECTOR_CODE, without docstrings and messages)
+    and the numeric libraries."""
     import scipy
     return {"spectrogram": spectrogram_sha256(sp), "params": {k: v for k, v in params.items() if k not in DETECT_IGNORED},
             "producer": getattr(produce, "__qualname__", repr(produce)),
-            "source": source_sha256(*DETECTOR_MODULES),
+            "code": code_sha256(DETECTOR_CODE),
             "versions": {"numpy": np.__version__, "scipy": scipy.__version__}}
 
 

@@ -192,3 +192,45 @@ def test_a_non_finite_fit_is_a_missing_fit(tmp_path, monkeypatch):
     tier1._set_fit_crop(sp, spectrogram_sha256(sp))
     fit = tier1._fit_window((0, 0, 1.0, 8.0, 100.0, 200.0, "contrast"))["fit"]
     assert "non-finite" in fit["unavailable"]
+
+
+def test_a_weak_fit_is_a_missing_fit_with_its_reason(tmp_path, monkeypatch):
+    import numpy as np
+    from dopplertrack import tracks
+    from dopplertrack.audio import Spectrogram
+    from dopplertrack.cache import spectrogram_sha256
+    monkeypatch.setenv("DOPPLERTRACK_CACHE", str(tmp_path))
+    monkeypatch.setattr(tracks, "fit_event", lambda *a, **k: tracks.EventFit.unfit(1.0, 8.0, "band too narrow"))
+    sp = Spectrogram(np.arange(10.0), np.arange(5.0), np.zeros((5, 10), np.float32))
+    tier1._set_fit_crop(sp, spectrogram_sha256(sp))
+    assert tier1._fit_window((0, 0, 1.0, 8.0, 100.0, 200.0, "contrast"))["fit"] == \
+        {"unavailable": "fit_event's weak fit: band too narrow"}
+
+
+def test_shards_of_spans_merge_and_one_resumed_run_compares(tmp_path, monkeypatch):
+    from bench import runner
+    spans = [{"id": f"s{k}", "set": "development", "group": "g", "family": "f", "labels": str(tmp_path / "lab.json"),
+              "spectrogram": {"path": "derived/x.npz", "sha256": "0" * 64}} for k in range(3)]
+    (tmp_path / "lab.json").write_text("{}")
+    monkeypatch.setattr(tier1, "load_tier1", lambda path=None: {"spans": spans, "known_point": []})
+    monkeypatch.setattr(runner, "code_revision", lambda: {"package_version": "0", "git_commit": "c" * 40,
+                                                          "git_dirty": False})
+    blind = []
+    monkeypatch.setattr(tier1, "execute_span", lambda s, out, code, log=print, workers=None:
+                        blind.append(s["id"]) or {"span": s["id"]})
+    monkeypatch.setattr(tier1, "validate_span", lambda rec: None)
+    monkeypatch.setattr(tier1, "compare_span", lambda out, read, ref=None: {"span": out.name})
+    assert tier1.unit_ids() == ["s0", "s1", "s2"]
+    for k, only in ((1, ["s0", "s2"]), (2, ["s1"])):
+        (tmp_path / f"b{k}").mkdir()
+        tier1.run_tier1(run_dir=tmp_path / f"b{k}", only=only, compare=False)
+    assert sorted(blind) == ["s0", "s1", "s2"]
+    (tmp_path / "all").mkdir()
+    runner.merge_runs(tmp_path / "all", [tmp_path / "b1", tmp_path / "b2"])
+    tier1.run_tier1(run_dir=tmp_path / "all", resume=True)
+    assert sorted(blind) == ["s0", "s1", "s2"]            # nothing ran twice
+    res = json.loads((tmp_path / "all" / "results.json").read_text())
+    assert [e["span"] for e in res["spans"]] == ["s0", "s1", "s2"]
+    (tmp_path / "one").mkdir()
+    with pytest.raises(ValueError, match="missing"):            # comparing needs every unit's blind record
+        tier1.run_tier1(run_dir=tmp_path / "one", only=["s0"])

@@ -22,7 +22,7 @@ import numpy as np
 from dopplertrack.result import (CONVENTIONS_V1, KIND, SCHEMA_VERSION, RecordError, file_entry, read_record,
                                  unavailable, write_record)
 
-from .cases import REPO, blind_case, case_labels, resolve
+from .cases import REPO, blind_case, case_labels, case_profiles, latest_case, resolve
 
 NO_VERDICT = "no verdict or abstention exists before Phase 4"
 NO_REGION = "no uncertainty region exists before Phase 4"
@@ -98,6 +98,9 @@ PROFILES = {
     "saved-fit": {"events": "the case's saved fits", "harmonics": "the case's"},
     "raw-audio": {"events": "detect, top two by score, earlier first", "detect": {"band_hz": [60.0, 300.0], "top": 10,
                   "harmonics": 1, "window_s": 240.0}, "harmonics": [1, 1]},
+    # dopplertrack locate (PLAN Phase 3 step A) on the case's audio, date, box and flight data, nothing else of the
+    # case's: its own detection, pair rule ("pair_rule" override; top2 by default) and silence filter (off by default)
+    "locate": {"events": "detect, then locate's pair rule", "harmonics": [1, 1]},
 }
 
 
@@ -134,27 +137,54 @@ def pick_detected(detected: list[dict]) -> list[dict]:
 
 
 def sound_speed(case: dict) -> tuple[dict, dict]:
-    """The case's speed of sound, as keyword arguments for the pipeline ({} keeps its 15 C default untouched)
-    and as the record's account of where it came from."""
-    from dopplertrack.atmosphere import mid_height_temperature
+    """The case's speed of sound for the event fits and detection, as keyword arguments ({} keeps the pipeline's
+    15 C default untouched), and the record's account of it. With a station temperature, the geometry gives each
+    flight its own speed from its height (geometry_kw)."""
     from dopplertrack.doppler import speed_of_sound
     w = case.get("weather") or {}
     t = w.get("temperature_c")
     if t is None:
         return {}, {"c_m_s": speed_of_sound(), "temperature_c": None, "basis": "the pipeline's default, 15 C"}
-    h = w.get("aircraft_height_m")
-    eff = t if h is None else mid_height_temperature(t, h)
-    c = speed_of_sound(eff)
-    return {"c": c}, {"c_m_s": c, "temperature_c": t, "aircraft_height_m": h, "effective_temperature_c": eff,
-                      "basis": "ground temperature" if h is None else "temperature halfway up (ground - 3.25 C per km)",
+    c = speed_of_sound(t)
+    return {"c": c}, {"c_m_s": c, "temperature_c": t,
+                      "basis": "the ground temperature for the fits; for the geometry each flight's own speed at its "
+                               "mid-height temperature (ground - 3.25 C per km, atmosphere.point_sound_speed)",
                       "source": w.get("source"), "station": w.get("station"),
                       "station_distance_km": w.get("station_distance_km"), "observed_utc": w.get("observed_utc")}
 
 
-def trace_paths(case: dict) -> list[Path]:
+def geometry_kw(case: dict) -> dict:
+    """run_search, refine and pick_flight's speed-of-sound keywords: the fits' c, and with a station temperature
+    temperature_c, so each flight's propagation uses its own height."""
+    c_kw, rec = sound_speed(case)
+    return {**c_kw, "temperature_c": rec["temperature_c"]} if c_kw else {}
+
+
+def trace_paths(case: dict, key: str = "traces") -> list[Path]:
     """A case's flight data: one trace file, or consecutive days of one box."""
-    t = case["flight_data"]["traces"]
+    t = case["flight_data"][key]
     return [resolve(p) for p in ([t] if isinstance(t, str) else t)]
+
+
+def locate_cpa_cache(case: dict, cpa_cache: str) -> str:
+    """The locate profile's CPA table: the case's own, or with locate_traces a file of its own beside it."""
+    if "locate_traces" not in case["flight_data"]:
+        return cpa_cache
+    c = Path(cpa_cache)
+    return str(c.with_name(f"{c.stem}-locate{c.suffix}"))
+
+
+def locate_flight_data(case: dict, cpa_cache: str) -> tuple[list[Path], list[list[float]] | None, str]:
+    """The locate profile's trace files, declared envelopes and CPA cache. A case's flight_data.locate_traces, cut
+    with extraction metadata and the search-range margin, replaces its legacy traces for locate alone, so the other
+    profiles' baselines stay on the files they were measured with; it gets a CPA cache file of its own so the two
+    never rebuild each other's."""
+    from dopplertrack.adsb import load_trace_metadata
+    paths = trace_paths(case, "locate_traces" if "locate_traces" in case["flight_data"] else "traces")
+    cpa_cache = locate_cpa_cache(case, cpa_cache)
+    # a file's own measured envelope wins; the case's declared boxes stand in only for legacy files
+    measured = all(p.exists() and load_trace_metadata(p).get("coverage_bbox") for p in paths)
+    return paths, None if measured else day_boxes(case), cpa_cache
 
 
 def day_boxes(case: dict) -> list[list[float]]:
@@ -212,7 +242,7 @@ class Draft:
         self.params = {"profile": profile, "profile_settings": PROFILES[profile], "search": s, "refine": case["refine"],
                        "search_overrides": overrides, "events": case["events"], "search_harmonics": self.harmonics,
                        "speed_of_sound_m_s": sound_speed(case)[1]["c_m_s"], "speed_of_sound": sound_speed(case)[1]}
-        self.c_kw = sound_speed(case)[0]
+        self.c_kw, self.geo_kw = sound_speed(case)[0], geometry_kw(case)
         self.inputs, self.caches, self.events, self.candidates = [], [], [], []
         self.refined = unavailable("the search did not run")
         self.funnel = {k: unavailable("the search did not run") for k in (
@@ -340,6 +370,7 @@ class Draft:
             },
             "events": self.events, "candidates": self.candidates, "refined": self.refined, "funnel": self.funnel,
             "verdict": unavailable(NO_VERDICT), "region": unavailable(NO_REGION),
+            "pair_rules": unavailable("a benchmark profile chooses its events (saved fits or detect's top two)"),
             "data_limitations": {"flight_data": self.flight, **self.limits, "ads_b": ADS_B_LIMITATION},
             "execution": {"errors": self.errors, "warnings": self.stage.warnings, "stages": self.stage.stages},
         }
@@ -402,7 +433,7 @@ def execute_case(case: dict, case_dir: Path, log=print, code: dict | None = None
                                             silence_d_m=s["silence_d_m"], max_range_m=s["max_range_m"],
                                             progress=False, cpa_cache=str(cache_path),
                                             trace_metadata=meta, search_bbox=tuple(s["bbox"]), triples=triples,
-                                            **draft.c_kw, **draft.extra_kwargs)
+                                            **draft.geo_kw, **draft.extra_kwargs)
         draft.caches.append(file_entry("cpa_table", cache_path))
         draft.stage.stages += [{"name": f"search.{k}", "wall_s": round(v["wall_s"], 3), "cpu_s": round(v["cpu_s"], 3)}
                                for k, v in res.attrs.get("stages", {}).items()]
@@ -423,7 +454,7 @@ def execute_case(case: dict, case_dir: Path, log=print, code: dict | None = None
                 fine = pipeline.refine(sp, ev1, ev2, segs, row, spacing_m=rf["spacing_m"], half_m=rf["half_m"],
                                        harmonics=tuple(harmonics[:2]), elevation=terrain.elevation if terrain else None,
                                        extra=ev[2:], extra_harmonics=hs[2:], max_range_m=s["max_range_m"],
-                                       **draft.c_kw)
+                                       **draft.geo_kw)
             draft.add_refined(fine, list(fine.attrs.get("extra_icao", [])))
     except Exception as exc:          # kept apart from the verdict: a failed run is not an abstention
         draft.errors.append(f"{type(exc).__name__}: {exc}")
@@ -638,6 +669,13 @@ def compare_case(case_dir: Path, meta: dict, read_labels) -> dict:
     else:
         entry["top_error_m"] = entry["margin_pct"] = unavailable("no candidates")
     entry["flight_pairs"] = len(cands)
+    v = record["verdict"]
+    if isinstance(v, dict) and "outcome" in v:
+        entry["verdict"] = {"outcome": v["outcome"], "reason_codes": v["reason_codes"]}
+        want = lab.get("expected_verdict")    # a failure case's labels name the verdict it should end in
+        if want:
+            entry["verdict_as_expected"] = (v["outcome"] == want["outcome"]
+                                            and set(want["reason_codes"]) <= set(v["reason_codes"]))
     ref_ = record["refined"]
     entry["refined_error_m"] = (_distance_m(ref_["lat"], ref_["lon"], ref["lat"], ref["lon"])
                                 if isinstance(ref_, dict) and "lat" in ref_ else unavailable("no refinement"))
@@ -681,10 +719,52 @@ def new_run(topic: str) -> Path:
     return Path(out)
 
 
+def execute_case_locate(case: dict, case_dir: Path, log=print, code: dict | None = None,
+                        overrides: dict | None = None) -> dict:
+    """The case through dopplertrack locate: its spectrogram, flight-data date, box and trace files, and nothing of
+    its fits. Overrides: pair_rule (top2, comparable, both) and silence_d_m (default None, the filter off)."""
+    from dopplertrack import locate as loc
+    assert "labels" not in case, "the runner must be given the blind case"
+    overrides = dict(overrides or {})
+    unknown = set(overrides) - {"pair_rule", "silence_d_m"}
+    s = case["search"]
+    paths, envelope, cpa_cache = locate_flight_data(case, str(resolve(s["cpa_cache"])))
+    cfg = loc.LocateConfig(spacing_m=s["spacing_m"], max_range_m=s["max_range_m"], tol_s=s["tol_s"], v_tol=s["v_tol"],
+                           d_tol=tuple(s["d_tol"]), silence_d_m=overrides.get("silence_d_m"),
+                           pair_rule=overrides.get("pair_rule", "top2"), dem=s["dem"], c=sound_speed(case)[0].get("c"),
+                           temperature_c=sound_speed(case)[1]["temperature_c"],
+                           refine_spacing_m=case["refine"]["spacing_m"], refine_half_m=case["refine"]["half_m"],
+                           cpa_cache=cpa_cache, envelope=envelope,
+                           extra={"search_overrides": overrides, "speed_of_sound": sound_speed(case)[1]})
+    record = None
+    try:
+        if unknown:
+            raise ValueError(f"the locate profile takes only pair_rule and silence_d_m overrides, not {sorted(unknown)}")
+        out = loc.locate(resolve(case["spectrogram"]), case["flight_data"]["date"], s["bbox"], paths, cfg,
+                         out_dir=case_dir, code=code or code_revision(), log=log)
+        record = out.record
+        (case_dir / "summary.txt").write_text("\n".join(out.summary) + "\n")
+        for line in out.summary:
+            log(line)
+    except Exception as exc:          # a crash is an execution error, never a verdict
+        log(f"ERROR: {type(exc).__name__}: {exc}")
+        draft = Draft(case, code or code_revision(), "locate", log)
+        draft.errors.append(f"{type(exc).__name__}: {exc}")
+        return draft.record()
+    record["case"] = {"id": case["id"], "version": case["version"]}
+    record["provenance"]["parameters"]["search"] = s        # compare_case reads the box and refine width from here
+    record["provenance"]["parameters"]["refine"] = case["refine"]
+    return record
+
+
 def _executor(revision: str | None, profile: str, log, code: dict | None = None, overrides: dict | None = None):
     import functools
     if profile not in PROFILES:
         raise ValueError(f"profile must be one of {sorted(PROFILES)}")
+    if profile == "locate":
+        if revision is not None:
+            raise ValueError("the locate profile runs this checkout only")
+        return code or code_revision(), functools.partial(execute_case_locate, overrides=overrides)
     if revision is None:
         return code or code_revision(), functools.partial(execute_case, profile=profile, overrides=overrides)
     from .revisions import ensure_revision
@@ -728,34 +808,93 @@ def run_one(cid: str, run_dir: Path, execute, code: dict, log=print) -> dict:
     return entry
 
 
+def shard_of(case_ids: list[str], shard: str | None) -> list[str]:
+    """Shard "i/n" (1-based) of the cases: every n-th of them in sorted order, so n boxes split one run."""
+    if not shard:
+        return list(case_ids)
+    i, sep, n = shard.partition("/")
+    if not (sep and i.isdigit() and n.isdigit() and 1 <= int(i) <= int(n)):
+        raise ValueError(f"--shard must be i/n with 1 <= i <= n, not {shard!r}")
+    return sorted(case_ids)[int(i) - 1::int(n)]
+
+
+RUN_KEYS = ("tier", "profile", "search_overrides", "code")
+
+
+def check_resumable(info: dict, want: dict, where) -> None:
+    """A stopped run continues, or several runs merge, only from one clean commit with the same settings."""
+    diff = [k for k in RUN_KEYS if info.get(k) != want.get(k)]
+    if diff:
+        raise ValueError(f"{where}: its run.json differs in {diff}, so its cases can't be combined with this run")
+    if want["code"].get("git_dirty") is not False:
+        raise ValueError(f"{where}: the code had uncommitted changes, so a stopped run can't be told apart from an "
+                         "edited one; commit and start a new run")
+
+
+def write_results(run_dir: Path, info: dict, case_ids: list[str], crashed: dict | None = None) -> dict:
+    """results.json from every case of the run that has an entry.json; `complete` says whether all of them have.
+    A case whose process died has no entry, so a resumed run runs it again; `crashed` says why it died."""
+    entries = [json.loads((run_dir / c / "entry.json").read_text()) for c in case_ids
+               if (run_dir / c / "entry.json").exists()]
+    doc = {"schema": 1, "tier": info["tier"], "profile": info["profile"], "search_overrides": info["search_overrides"],
+           "code": info["code"], "git_commit": info["code"]["git_commit"], "git_dirty": info["code"]["git_dirty"],
+           "created": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
+           "complete": len(entries) == len(case_ids),
+           "missing": [c for c in case_ids if not (run_dir / c / "entry.json").exists()], "cases": entries,
+           "crashed": dict(crashed or {})}
+    tmp = run_dir / ".results.json.tmp"
+    tmp.write_text(json.dumps(doc, indent=1, sort_keys=True) + "\n")
+    os.replace(tmp, run_dir / "results.json")
+    return doc
+
+
 def run_bench(case_ids: list[str], tier: str = "t2", run_dir: Path | None = None, log=print,
               revision: str | None = None, profile: str = "saved-fit", parallel: int = 1,
-              overrides: dict | None = None) -> Path:
+              overrides: dict | None = None, shard: str | None = None, resume: bool = False) -> Path:
     """Run cases into a new run folder (or `run_dir`) and collect their scoreboard entries in results.json.
     revision: None runs this checkout in-process; any other commit-ish is exported, verified and run
     through its own CLI (bench/revisions.py). parallel > 1 runs that many cases at once, each in its own
-    process (`bench run-case`), so stage logs and timings never mix."""
+    process (`bench run-case`), so stage logs and timings never mix. shard "i/n" runs only that share of the
+    cases, for n boxes; `merge_runs` puts the shards together. resume continues a stopped run in run_dir: a case
+    with an entry.json is kept, and the rest run. results.json is rewritten as each case finishes."""
     # the code revision is read once, before anything runs, so an edit during a long run can't relabel it
     overrides = dict(overrides or {})
+    case_ids = shard_of(case_ids, shard)
+    excluded = [c for c in case_ids if profile not in case_profiles(latest_case(c))]
+    if excluded:
+        raise ValueError(f"{excluded} don't run under the {profile} profile (their cases' profiles field)")
     code, execute = _executor(revision, profile, log, overrides=overrides)
-    commit, dirty = code["git_commit"], code["git_dirty"]
+    commit = code["git_commit"]
+    if resume and run_dir is None:
+        raise ValueError("resume needs the stopped run's --run-dir")
     if run_dir is None:
         tag = f"-o{overrides_tag(overrides)}" if overrides else ""
-        run_dir = new_run(f"bench-{(commit if isinstance(commit, str) else 'nogit')[:7]}-{profile}-{tier}{tag}")
+        sh = f"-s{shard.replace('/', 'of')}" if shard else ""
+        run_dir = new_run(f"bench-{(commit if isinstance(commit, str) else 'nogit')[:7]}-{profile}-{tier}{tag}{sh}")
     info_path = run_dir / "run.json"
     info = json.loads(info_path.read_text()) if info_path.exists() else {}
-    info.update(command=sys.argv, cases=case_ids, tier=tier, profile=profile, code=code, parallel=parallel,
-                search_overrides=overrides)
-    info_path.write_text(json.dumps(info, indent=1) + "\n")
+    want = {"tier": tier, "profile": profile, "search_overrides": overrides, "code": code}
+    done = [c for c in case_ids if (run_dir / c / "entry.json").exists()]
+    if resume and done:      # with nothing finished yet a resume is a fresh start, so one command serves both
+        check_resumable(info, want, run_dir)
+        log(f"resuming {run_dir}: {len(done)} of {len(case_ids)} cases already have entries")
+    elif done:
+        raise ValueError(f"{run_dir} already has entries for {done}; pass --resume to continue it")
+    info.update(command=sys.argv, cases=case_ids, shard=shard, parallel=parallel, **want)
+    info.setdefault("attempts", []).append(datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"))
+    todo = [c for c in case_ids if c not in done]
     if parallel <= 1:
-        entries = [run_one(cid, run_dir, execute, code, log) for cid in case_ids]
+        info_path.write_text(json.dumps(info, indent=1) + "\n")
+        for cid in todo:
+            run_one(cid, run_dir, execute, code, log)
+            write_results(run_dir, info, case_ids)
     else:
         # each case's own pools get an equal share of the cores, so N cases never start N full-size pools
         from dopplertrack.parallel import JOBS_ENV, default_jobs
         child_env = {**os.environ, JOBS_ENV: os.environ.get(JOBS_ENV) or str(max(1, default_jobs() // parallel))}
         info["jobs_per_case"] = int(child_env[JOBS_ENV])
         info_path.write_text(json.dumps(info, indent=1) + "\n")
-        pending, running, entries = list(case_ids), {}, {}
+        pending, running, crashed = list(todo), {}, {}
         while pending or running:
             while pending and len(running) < parallel:
                 cid = pending.pop(0)
@@ -770,20 +909,59 @@ def run_bench(case_ids: list[str], tier: str = "t2", run_dir: Path | None = None
                 if proc.poll() is not None:
                     out.close()
                     del running[cid]
-                    try:
-                        entries[cid] = json.loads((run_dir / cid / "entry.json").read_text())
-                    except OSError:
+                    if (run_dir / cid / "entry.json").exists():
+                        log(f"{cid}: {json.loads((run_dir / cid / 'entry.json').read_text())['status']}")
+                    else:
                         tail = (run_dir / cid / "process.log").read_text().strip().splitlines()[-3:]
-                        entries[cid] = {"case": cid, "status": "error",
-                                        "reason": f"bench run-case exited with {proc.returncode}: " + " | ".join(tail)}
-                    log(f"{cid}: {entries[cid]['status']}")
+                        crashed[cid] = f"bench run-case exited with {proc.returncode}: " + " | ".join(tail)
+                        log(f"{cid}: crashed: {crashed[cid]}")
+                    write_results(run_dir, info, case_ids, crashed)
             time.sleep(2)
-        entries = [entries[c] for c in case_ids]
-    doc = {"schema": 1, "tier": tier, "profile": profile, "search_overrides": overrides, "code": code,
-           "git_commit": commit, "git_dirty": dirty,
-           "created": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"), "cases": entries}
-    (run_dir / "results.json").write_text(json.dumps(doc, indent=1, sort_keys=True) + "\n")
+        write_results(run_dir, info, case_ids, crashed)
+        return run_dir
+    write_results(run_dir, info, case_ids)
     return run_dir
+
+
+def merge_runs(out_dir: Path, sources: list[Path], log=print) -> dict:
+    """Copy the case folders of shard or stopped runs into out_dir (a new run folder, or one of them) and write its
+    results.json over all of them. Every source must be the same clean commit, profile, tier and overrides; a case
+    two sources both finished must have the same record hash, or the merge refuses."""
+    import shutil
+    infos = [(src, json.loads((src / "run.json").read_text())) for src in sources]
+    if infos[0][1].get("tier") == "t1":
+        from .tier1 import merge_tier1
+        merge_tier1(out_dir, sources, log)
+        return {}
+    want = {k: infos[0][1].get(k) for k in RUN_KEYS}
+    for src, info in infos:
+        check_resumable(info, want, src)
+    cases, sha = [], {}
+    for src, info in infos:
+        for cid in info.get("cases", []):
+            if cid not in cases:
+                cases.append(cid)
+            ep = src / cid / "entry.json"
+            if not ep.exists():
+                continue
+            entry = json.loads(ep.read_text())
+            if cid in sha:
+                if sha[cid] != entry.get("record_sha256"):
+                    raise ValueError(f"{cid}: {src} and an earlier source finished it with different records")
+                continue
+            sha[cid] = entry.get("record_sha256")
+            if src.resolve() != out_dir.resolve():
+                if (out_dir / cid).exists():
+                    raise ValueError(f"{out_dir} has an unfinished folder for {cid}; merge into a new run folder")
+                shutil.copytree(src / cid, out_dir / cid)
+    info_path = out_dir / "run.json"
+    info = json.loads(info_path.read_text()) if info_path.exists() else {}
+    info.update(want, cases=cases, merged_from=[str(s) for s in sources])
+    info_path.write_text(json.dumps(info, indent=1) + "\n")
+    doc = write_results(out_dir, info, cases)
+    log(f"merged {len(doc['cases'])} of {len(cases)} cases into {out_dir}" +
+        (f"; missing {doc['missing']}" if doc["missing"] else ""))
+    return doc
 
 
 METRICS = ("true_pair_rank", "true_pair_near_reference", "true_pair_within_refine_reach", "flight_pairs", "margin_pct",

@@ -60,11 +60,11 @@ def curve_from_trajectory(t_e, pos_enu, obs_enu, f0=1.0, c=None, *, return_valid
     a CPA but cannot supply evidence in a gap. Derivatives never cross invalid
     samples or emission-time gaps above max_gap_s (30 s by default).
     """
-    c = speed_of_sound() if c is None else c
+    c = speed_of_sound() if c is None else c      # a number, or one per emission sample
     t_e = np.asarray(t_e, float)
     if len(t_e) < 2 or not np.all(np.isfinite(t_e)) or not np.all(np.diff(t_e) > 0):
         raise ValueError("trajectory needs at least two finite, strictly increasing emission times")
-    if not np.isfinite(c) or c <= 0 or not np.isfinite(max_gap_s) or max_gap_s <= 0:
+    if not np.all(np.isfinite(c)) or np.any(np.asarray(c) <= 0) or not np.isfinite(max_gap_s) or max_gap_s <= 0:
         raise ValueError("sound speed and maximum trace gap must be finite and positive")
     d = np.asarray(pos_enu, float) - np.asarray(obs_enu, float)
     r = np.linalg.norm(d, axis=-1)

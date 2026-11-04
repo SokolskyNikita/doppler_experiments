@@ -42,7 +42,13 @@ class EventFit:
 
 
 def local_whiten(sp: Spectrogram, floor: float = 0.0) -> Spectrogram:
-    """Remove tones that are stationary over this window (per-bin median), clip at floor."""
+    """Remove tones that are stationary over this window (per-bin median), clip at floor. A spectrogram
+    whitened across frequency (sp.whitening == "frequency") keeps its stationary tones: it is only
+    clipped at floor."""
+    if sp.whitening == "frequency":
+        S = np.maximum(sp.S, floor).astype(np.float32)
+        S[:, ~sp.valid] = floor
+        return sp.with_S(S)
     S = np.maximum(sp.S - sp.bin_median(), floor).astype(np.float32)
     S[:, ~sp.valid] = floor
     return sp.with_S(S)
@@ -287,6 +293,7 @@ class TrackFit:
     identified: bool         # z_span, bounds, a falling curve and convergence all hold
     cov: list                # 4x4 over (f0, v, t_cpa_emit, d), a floor (see above)
     corr_v_d: float          # speed-distance correlation from cov
+    optima: list             # the distinct optima as (rss, t_c, s), best first; t_c in the track's seconds
 
     def event(self, score: float = float("nan")) -> EventFit:
         c = self.v / (-self.beta / self.alpha)
@@ -434,7 +441,8 @@ def fit_track(track: Track, c: float | None = None, weighted: bool = False,
                     rms_hz=float(np.sqrt((w * resid ** 2).sum() / w.sum())), z_span=z_span, cond=cond,
                     converged=converged, n_starts=len(sols), n_optima=len(distinct),
                     second_optimum_ratio=float(distinct[1][0] / rss) if len(distinct) > 1 and rss > 0 else float("inf"),
-                    at_bound=at_bound, identified=identified, cov=cov.tolist(), corr_v_d=corr)
+                    at_bound=at_bound, identified=identified, cov=cov.tolist(), corr_v_d=corr,
+                    optima=[(rss, t_ref + tc, s)] + [(o[0], t_ref + o[1], o[2]) for o in distinct[1:]])
 
 
 @dataclass(frozen=True)

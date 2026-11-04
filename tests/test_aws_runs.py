@@ -1,5 +1,6 @@
 """tools/aws: the parts of `runs` and the box's supervisor that need no AWS account."""
 import datetime
+import json
 import importlib.util
 import io
 import subprocess
@@ -120,7 +121,10 @@ def test_job_ids_follow_new_run_and_pulls_never_reuse_a_folder(tmp_path, monkeyp
 
 def test_a_case_brings_its_audio_spectrogram_and_traces():
     got = runs.case_inputs(["oyster-bay"])
-    assert {"raw/audio/youtube/oyster_bay.webm", "derived/oyster_bay/rec.npz", "derived/oyster_bay/traces_ny.npz"} <= set(got)
+    # the case's latest version, as case_inputs reads it: its trace file changes with the case bumps
+    case = [c for c in json.loads((runs.REPO / "bench" / "cases.json").read_text())["cases"] if c["id"] == "oyster-bay"][-1]
+    assert {case["audio"]["path"], case["spectrogram"], case["flight_data"]["traces"]} <= set(got)
+    assert "raw/audio/youtube/oyster_bay.webm" in got and "derived/oyster_bay/rec.npz" in got
     assert len(got) == len(set(got)) and not any(p.startswith("raw/adsb") for p in got)
 
 

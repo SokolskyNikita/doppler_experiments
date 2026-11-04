@@ -150,9 +150,6 @@ def execute_span(span: dict, out_dir: Path, code: dict, log=print, workers: int 
 _FIT_CROP = {}
 
 
-FIT_MODULES = ("dopplertrack.tracks", "dopplertrack.doppler", "dopplertrack.audio")
-
-
 def _set_fit_crop(crop, crop_sha256):
     _FIT_CROP.update(sp=crop, sha256=crop_sha256)
 
@@ -162,7 +159,7 @@ def _fit_window(task) -> dict:
     on the crop's contents, the window, the band, the objective and fit_event's source, under the cache rules."""
     import scipy
 
-    from dopplertrack.cache import cached, source_sha256
+    from dopplertrack.cache import DETECTOR_CODE, cached, code_sha256
     from dopplertrack.tracks import fit_event
     window, line, t0, t1, lo, hi, objective = task
 
@@ -172,10 +169,12 @@ def _fit_window(task) -> dict:
         except Exception as exc:
             return unavailable(f"{type(exc).__name__}: {exc}")
     parts = {"spectrogram": _FIT_CROP["sha256"], "window_s": [t0, t1], "band_hz": [lo, hi], "objective": objective,
-             "producer": "tracks.fit_event", "source": source_sha256(*FIT_MODULES),
+             "producer": "tracks.fit_event", "code": code_sha256(DETECTOR_CODE),
              "versions": {"numpy": np.__version__, "scipy": scipy.__version__}}
     fit = cached("window_fits", parts, produce)
-    if "unavailable" not in fit and not all(np.isfinite(v) for v in fit.values()):
+    if "unavailable" not in fit and fit.get("weak"):
+        fit = unavailable(f"fit_event's weak fit: {fit['weak']}")
+    elif "unavailable" not in fit and not all(np.isfinite(v) for v in fit.values() if not isinstance(v, str)):
         fit = unavailable("fit_event returned a non-finite fit: no curve to follow in this window and band")
     return {"window": window, "line": line, "band_hz": [lo, hi], "objective": objective, "fit": fit}
 
@@ -499,7 +498,7 @@ def known_point(case: dict, out_dir: Path, reference: dict, true_pair, log=print
     from dopplertrack.terrain import Terrain
     from dopplertrack.tracks import EventFit
 
-    from .runner import sound_speed, trace_paths
+    from .runner import geometry_kw, trace_paths
     try:
         ev = _read_hashed(out_dir / EVENTS_FILE)
     except (OSError, IndexError, RecordError, ValueError) as exc:
@@ -514,7 +513,7 @@ def known_point(case: dict, out_dir: Path, reference: dict, true_pair, log=print
     res, _ = pipeline.run_search(sp, ev1, ev2, traces, grid, harmonics=tuple(ev["harmonics"][:2]), tol_s=s["tol_s"],
                                  v_tol=s["v_tol"], d_tol=tuple(s["d_tol"]), silence_d_m=s["silence_d_m"],
                                  max_range_m=s["max_range_m"], progress=False, trace_metadata=meta,
-                                 search_bbox=(lat, lat, lon, lon), workers=1, **sound_speed(case)[0])
+                                 search_bbox=(lat, lat, lon, lon), workers=1, **geometry_kw(case))
     best = res.sort_values("score", ascending=False, kind="stable").drop_duplicates(["icao1", "icao2"])
     pairs = [{"flights": [str(r.icao1), str(r.icao2)], "score": float(r.score), "event_scores": [float(r.s1), float(r.s2)],
               "shift_s": float(r.shift)} for r in best.itertuples()]
@@ -565,16 +564,47 @@ def build_spans(sets=("development",), log=print) -> list[str]:
     return bad
 
 
-def run_tier1(sets=("development",), run_dir: Path | None = None, log=print, workers: int | None = None) -> Path:
-    """Every span of the given sets and every known-point case, blind first, then compared, into one run folder."""
+def _blind_done(path: Path, hash_name: str) -> bool:
+    """Whether a blind record was finished: it exists and matches the hash written beside it."""
+    try:
+        return sha256_bytes(path.read_bytes()) == (path.parent / hash_name).read_text().split()[0]
+    except (OSError, IndexError):
+        return False
+
+
+def unit_ids(sets=("development",)) -> list[str]:
+    """Tier 1's units of work, the ids `--only` and `--shard` choose from: its spans, then its known-point cases."""
+    doc = load_tier1()
+    return [s["id"] for s in doc["spans"] if s["set"] in sets] + list(doc["known_point"])
+
+
+def run_tier1(sets=("development",), run_dir: Path | None = None, log=print, workers: int | None = None,
+              only: list[str] | None = None, resume: bool = False, compare: bool = True) -> Path:
+    """Every span of the given sets and every known-point case, blind first, then compared, into one run folder.
+    only: run just these units (span ids, known-point case ids) blind; a shard of boxes each takes some with
+    compare=False, `merge_tier1` puts them together, and one resumed run compares. resume: keep every blind record
+    that matches its hash and run the rest. The comparison needs every unit's blind record."""
+    import sys
     import time
 
     from .cases import blind_case, case_labels, latest_case
-    from .runner import code_revision, new_run
+    from .runner import check_resumable, code_revision, new_run
     code = code_revision()
     t0 = time.perf_counter()
+    if resume and run_dir is None:
+        raise ValueError("resume needs the stopped run's --run-dir")
     if run_dir is None:
         run_dir = new_run(f"bench-{str(code['git_commit'])[:7]}-t1")
+    info_path = run_dir / "run.json"
+    info = json.loads(info_path.read_text()) if info_path.exists() else {}
+    want = {"tier": "t1", "profile": "tier1", "search_overrides": {}, "code": code}
+    if resume and any((run_dir / d).exists() for d in ("spans", "known_point")):
+        check_resumable(info, want, run_dir)
+    unknown = sorted(set(only or []) - set(unit_ids(sets)))
+    if unknown:
+        raise ValueError(f"{unknown} are not Tier 1 units of the sets {list(sets)}")
+    info.update(want, command=sys.argv, sets=list(sets), only=only)
+    info_path.write_text(json.dumps(info, indent=1) + "\n")
     doc = load_tier1()
     spans = [s for s in doc["spans"] if s["set"] in sets]
     skipped = [{"span": s["id"], "set": s["set"], "reason": f"not in the requested sets {list(sets)}"}
@@ -587,17 +617,32 @@ def run_tier1(sets=("development",), run_dir: Path | None = None, log=print, wor
             ready.append(s)
     timings = {}
     # blind: every span record and every case's events are written and hashed before any label is read
+    chosen = set(only) if only else set(unit_ids(sets))
     for s in ready:
-        w = time.perf_counter()
         out = run_dir / "spans" / s["id"]
+        if s["id"] not in chosen or (resume and _blind_done(out / SPAN_FILE, SPAN_HASH)):
+            continue
+        w = time.perf_counter()
         out.mkdir(parents=True, exist_ok=True)
         write_span(out, execute_span(s, out, code, log=log, workers=workers))
         timings[f"span {s['id']}"] = time.perf_counter() - w
     for cid in doc["known_point"]:
         for profile in ("saved-fit", "raw-audio-windows"):
+            out = run_dir / "known_point" / cid / profile
+            if cid not in chosen or (resume and _blind_done(out / EVENTS_FILE, EVENTS_HASH)):
+                continue
             w = time.perf_counter()
-            case_events(blind_case(cid), profile, run_dir / "known_point" / cid / profile, code, workers=workers)
+            case_events(blind_case(cid), profile, out, code, workers=workers)
             timings[f"events {cid} {profile}"] = time.perf_counter() - w
+    if not compare:
+        (run_dir / "timings.json").write_text(json.dumps({k: round(v, 2) for k, v in timings.items()}, indent=1) + "\n")
+        return run_dir
+    missing = [s["id"] for s in ready if not _blind_done(run_dir / "spans" / s["id"] / SPAN_FILE, SPAN_HASH)] + \
+        [f"{cid} {pr}" for cid in doc["known_point"] for pr in ("saved-fit", "raw-audio-windows")
+         if not _blind_done(run_dir / "known_point" / cid / pr / EVENTS_FILE, EVENTS_HASH)]
+    if missing:
+        raise ValueError(f"the comparison needs every unit's blind record; missing {missing}. Merge the shards "
+                         "or resume the run first")
     # truth: labels, references and the known-point searches
     span_entries = []
     for s in ready:
@@ -632,3 +677,34 @@ def run_tier1(sets=("development",), run_dir: Path | None = None, log=print, wor
                "within_budget": wall < BUDGET_S, "budget_s": BUDGET_S}
     (run_dir / "results.json").write_text(json.dumps(results, indent=1, sort_keys=True) + "\n")
     return run_dir
+
+
+def merge_tier1(out_dir: Path, sources: list[Path], log=print) -> None:
+    """Copy the blind records of Tier 1 shards (spans/<id>, known_point/<case>/<profile>) into out_dir, from one
+    clean commit only; then `bench tier1 --run-dir OUT --resume` compares them. A unit two shards both finished
+    must match byte for byte."""
+    import shutil
+
+    from .runner import check_resumable
+    infos = [(src, json.loads((src / "run.json").read_text())) for src in sources]
+    want = {k: infos[0][1].get(k) for k in ("tier", "profile", "search_overrides", "code")}
+    for src, info in infos:
+        check_resumable(info, want, src)
+    copied = 0
+    for src, _ in infos:
+        for unit, rec, h in [(d, d / SPAN_FILE, SPAN_HASH) for d in sorted((src / "spans").glob("*/"))] + \
+                [(d, d / EVENTS_FILE, EVENTS_HASH) for d in sorted((src / "known_point").glob("*/*/"))]:
+            if not _blind_done(rec, h) or src.resolve() == out_dir.resolve():
+                continue
+            dest = out_dir / unit.relative_to(src)
+            if dest.exists():
+                if not _blind_done(dest / rec.name, h) or (dest / rec.name).read_bytes() != rec.read_bytes():
+                    raise ValueError(f"{dest} already holds a different or unfinished record")
+                continue
+            shutil.copytree(unit, dest)
+            copied += 1
+    info_path = out_dir / "run.json"
+    info = json.loads(info_path.read_text()) if info_path.exists() else {}
+    info.update(want, merged_from=[str(s) for s in sources])
+    info_path.write_text(json.dumps(info, indent=1) + "\n")
+    log(f"copied {copied} blind records into {out_dir}; compare with bench tier1 --run-dir {out_dir} --resume")

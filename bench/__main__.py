@@ -1,7 +1,8 @@
-"""uv run python -m bench {validate,build,run,compare}"""
+"""uv run python -m bench {validate,build,run,merge,inputs,tier1,report,compare}"""
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -24,6 +25,10 @@ def main(argv=None):
     r.add_argument("--profile", choices=sorted(runner.PROFILES), default="saved-fit",
                    help="saved-fit: the case's committed fits; raw-audio: detect's top two by score, earlier first")
     r.add_argument("--parallel", type=int, default=1, help="cases to run at once, each in its own process (default: 1)")
+    r.add_argument("--shard", metavar="I/N", help="run only every N-th case from the I-th (1-based, sorted ids), so N "
+                   "boxes split one run; `bench merge` puts the shards together")
+    r.add_argument("--resume", action="store_true", help="continue the stopped run in --run-dir: cases with an "
+                   "entry.json are kept, the rest run (same clean commit and settings only)")
     r.add_argument("--search-param", action="append", default=[], metavar="KEY=VALUE",
                    help="override a search setting for this run (repeatable); VALUE is JSON or a string. tol_s, v_tol, "
                    "d_tol, silence_d_m and harmonics replace the case's; any other key is passed to run_search")
@@ -38,9 +43,35 @@ def main(argv=None):
     t1.add_argument("--run-dir", type=Path, help="an empty folder made by tools/data/new_run.py (default: make one)")
     t1.add_argument("--workers", type=int, help="processes for detect (default: the performance cores)")
     t1.add_argument("--build", action="store_true", help="only make the spans' missing derived files and check hashes")
+    t1.add_argument("--only", action="append", metavar="UNIT", help="run only this span or known-point case blind "
+                    "(repeatable); see --shard")
+    t1.add_argument("--shard", metavar="I/N", help="run every N-th unit from the I-th (spans, then known-point cases) "
+                    "blind, without comparing, so N boxes split Tier 1; then bench merge and one --resume compares")
+    t1.add_argument("--resume", action="store_true", help="keep the blind records in --run-dir that match their "
+                    "hashes, run the rest, then compare")
+    t1.add_argument("--no-compare", action="store_true", help="write the blind records only")
+    m = sub.add_parser("merge", help="put shard or stopped runs of one commit and profile together in one run folder")
+    m.add_argument("out", type=Path, help="a new run folder (tools/data/new_run.py), or one of the sources")
+    m.add_argument("sources", type=Path, nargs="+")
+    i = sub.add_parser("inputs", help="list the files a run needs (data root, repo, cache), as JSON, for a cloud box")
+    i.add_argument("case", nargs="*", help="case ids (default: every case the profile runs)")
+    i.add_argument("--profile", choices=sorted(runner.PROFILES), default="saved-fit")
+    i.add_argument("--tier1", action="store_true", help="Tier 1's spans and known-point cases instead of cases")
+    i.add_argument("--set", action="append", choices=("development", "calibration", "evaluation"))
+    rp = sub.add_parser("report", help="the Phase 5 HTML page of each case's result.json, and an index.html, in a new "
+                        "run folder (or --out)")
+    rp.add_argument("run_dir", type=Path)
+    rp.add_argument("--out", type=Path, help="the folder for the pages (default: a new runs/<date>-report-<RUN>/)")
+    rp.add_argument("case", nargs="*", help="case ids (default: every case folder with a result.json)")
     c = sub.add_parser("compare", help="print the difference between two benchmark runs")
     c.add_argument("a", type=Path); c.add_argument("b", type=Path)
     a = ap.parse_args(argv)
+    # on a fleet box `runs launch` sets $RUN (the job's run folder) and, with --shards, this box's shard
+    env_shard = (f"{os.environ['DOPPLERTRACK_SHARD']}/{os.environ['DOPPLERTRACK_SHARDS']}"
+                 if os.environ.get("DOPPLERTRACK_SHARD") and os.environ.get("DOPPLERTRACK_SHARDS") else None)
+    if a.cmd in ("run", "tier1"):
+        a.run_dir = a.run_dir or (Path(os.environ["RUN"]) if os.environ.get("RUN") else None)
+        a.shard = a.shard or env_shard
 
     if a.cmd == "validate":
         try:
@@ -57,10 +88,19 @@ def main(argv=None):
             sys.exit("\n".join(bad))
         print("every derived file matches its recorded hash")
     elif a.cmd == "run":
-        run_dir = runner.run_bench(a.case or cases.case_ids(), tier=a.tier, run_dir=a.run_dir,
+        run_dir = runner.run_bench(a.case or cases.case_ids(profile=a.profile), tier=a.tier, run_dir=a.run_dir,
                                    revision=a.revision, profile=a.profile, parallel=a.parallel,
-                                   overrides=runner.parse_overrides(a.search_param))
+                                   overrides=runner.parse_overrides(a.search_param), shard=a.shard,
+                                   resume=a.resume)
         print(run_dir)
+    elif a.cmd == "merge":
+        runner.merge_runs(a.out, a.sources)
+    elif a.cmd == "inputs":
+        import json
+        from . import inputs
+        doc = (inputs.tier1_inputs(tuple(a.set or ["development"])) if a.tier1 else
+               inputs.run_inputs(a.case or cases.case_ids(profile=a.profile), a.profile))
+        print(json.dumps(doc, indent=1))
     elif a.cmd == "run-case":
         import json
         code, execute = runner._executor(a.revision, a.profile, print, code=json.loads(a.code_json),
@@ -71,7 +111,13 @@ def main(argv=None):
         if a.build:
             bad = tier1.build_spans(tuple(a.set or ["development"]))
             sys.exit("\n".join(bad) if bad else 0)
-        print(tier1.run_tier1(tuple(a.set or ["development"]), run_dir=a.run_dir, workers=a.workers))
+        sets = tuple(a.set or ["development"])
+        only = runner.shard_of(tier1.unit_ids(sets), a.shard) if a.shard else a.only
+        print(tier1.run_tier1(sets, run_dir=a.run_dir, workers=a.workers, only=only, resume=a.resume,
+                              compare=not (a.no_compare or a.shard)))
+    elif a.cmd == "report":
+        from .report import report_run
+        print(report_run(a.run_dir, a.case or None, out_dir=a.out))
     elif a.cmd == "compare":
         print(runner.compare_runs(a.a, a.b))
 

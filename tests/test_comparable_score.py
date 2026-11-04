@@ -50,6 +50,8 @@ def test_comparable_score_ranks_by_each_events_own_null(monkeypatch):
     assert row.z1 == pytest.approx((11.0 - n1["median"]) / n1["sigma"])
     assert row.z2 == pytest.approx((2.0 - n2["median"]) / n2["sigma"])
     assert row.score == pytest.approx(row.z1 + row.z2) and row.raw_score == pytest.approx(13.0)
+    big, _ = pipeline.run_search(None, EV1, EV2, [], grid, comparable=True, null_n=4000, **run)
+    assert big.attrs["null"]["event1"]["n"] == 4000 and big.attrs["null"]["event2"]["n"] == 4000
 
 
 def test_the_null_belongs_to_the_event_not_the_pair(monkeypatch):

@@ -23,7 +23,7 @@ Outcomes: the reference's rank, z = (s_ref - s_best_wrong) / MAD(candidates' sco
 difference, the wrong-box count (box winners reaching the reference's score), the refined error around
 each scorer's top candidate, and runtimes.
 
-usage: warp_oyster.py RUN [full|band] [rank|wrongbox|refine|all]"""
+usage: warp_oyster.py RUN [full|band] [rank|wrongbox|all|refine]   (refine reads the all run's ranking)"""
 import json
 import os
 import sys
@@ -37,6 +37,7 @@ import pandas as pd                                                      # noqa:
 import scipy.signal as ss                                                # noqa: E402
 
 from dopplertrack import audio, warp as W                                # noqa: E402
+from dopplertrack.parallel import default_jobs                           # noqa: E402
 from dopplertrack.adsb import load_traces                                # noqa: E402
 from dopplertrack.audio import Spectrogram                               # noqa: E402
 from dopplertrack.geo import lla_to_enu                                  # noqa: E402
@@ -261,7 +262,7 @@ def _one(job):
 
 def pool(jobs, band_limited):
     from concurrent.futures import ProcessPoolExecutor
-    with ProcessPoolExecutor(int(os.environ.get("JOBS", "4")), initializer=_init, initargs=(band_limited,)) as ex:
+    with ProcessPoolExecutor(default_jobs(), initializer=_init, initargs=(band_limited,)) as ex:
         return list(ex.map(_one, jobs))
 
 
@@ -340,6 +341,53 @@ def peak_rates(lat0, lon0, cands, traces):
     return out
 
 
+# ---- refinement (PM's option (a)): around each scorer's top candidate, its flight pair fixed -----------
+
+REFINE_CLOCK = (1.0, 0.1)               # +-1 s at 0.1 s around the top candidate's best clock
+
+
+def _point_score(job):
+    """One grid point for one scorer: best over the refine clocks."""
+    traces, lat0, lon0, lat, lon, icaos, T0, scorer, knobs = job
+    case = _CASE["case"]; segs = _segs(traces, lat0, lon0)
+    el = Terrain().elevation(np.array([lat]), np.array([lon]))
+    obs = lla_to_enu(np.array([lat]), np.array([lon]), el, lat0, lon0)[0]
+    centres = [0.5 * sum(e["window"]) for e in EVENTS]
+    s2 = [seg_for(segs, icao, obs, c, T0) for icao, c in zip(icaos, centres)]
+    curves = [modelled_curve(q, obs, C) for q in s2]
+    fn = {"1a": lambda T: score_curve(case, case.win_a, curves, T), "1b": lambda T: score_curve(case, case.win_b, curves, T),
+          "2": lambda T: score_ls(case, curves, T),
+          "3": lambda T: score_warp(case, s2, obs, T, knobs["theta"], knobs["birth"], None, None)}[scorer]
+    best = max((fn(T)[0], float(T)) for T in T0 + np.arange(-REFINE_CLOCK[0], REFINE_CLOCK[0] + 1e-9, REFINE_CLOCK[1]))
+    return lat, lon, best[0], best[1]
+
+
+def refine(rank, knobs, band, spacing_by_scorer):
+    """Per scorer, the grid around its top-ranked candidate; returns the best point's error from the truth."""
+    from concurrent.futures import ProcessPoolExecutor
+    lat0, lon0 = rank["lat0"], rank["lon0"]
+    out = {}
+    for scorer, spacings in spacing_by_scorer.items():
+        res = rank["rank"]
+        top = max(res, key=lambda r: r[scorer][0])
+        cand, T0 = top["cand"], top[scorer][1]
+        for sp in spacings:
+            n = int(round(1000.0 / sp))
+            dl = sp / 111320.0; dlon = sp / (111320.0 * np.cos(np.radians(cand["lat"])))
+            pts = [(cand["lat"] + i * dl, cand["lon"] + j * dlon) for i in range(-n, n + 1) for j in range(-n, n + 1)]
+            jobs = [("derived/oyster_bay/traces_ny.npz", lat0, lon0, a, b, (cand["icao1"], cand["icao2"]), T0, scorer, knobs) for a, b in pts]
+            t = time.perf_counter()
+            with ProcessPoolExecutor(default_jobs(), initializer=_init, initargs=(band,)) as ex:
+                got = list(ex.map(_point_score, jobs, chunksize=4))
+            best = max(got, key=lambda g: g[2])
+            out[f"{scorer}@{sp:g}m"] = dict(top=cand["name"], lat=best[0], lon=best[1], score=best[2], clock=best[3], points=len(pts),
+                                           error_m=float(haversine(best[0], best[1], *TRUTH)),
+                                           top_error_m=float(haversine(cand["lat"], cand["lon"], *TRUTH)),
+                                           wall_s=time.perf_counter() - t)
+            print(scorer, sp, out[f"{scorer}@{sp:g}m"], flush=True)
+    return out
+
+
 if __name__ == "__main__":
     run = Path(sys.argv[1]); mode = sys.argv[2] if len(sys.argv) > 2 else "full"; what = sys.argv[3] if len(sys.argv) > 3 else "all"
     band = mode == "band"
@@ -363,4 +411,8 @@ if __name__ == "__main__":
         for name in BOXES:
             traces, blat0, blon0, bc = box_candidates(name)
             out["wrongbox"][name] = pool([(traces, blat0, blon0, c, knobs) for c in bc], band)
+    if what == "refine":
+        rank = json.loads((run / f"warp_oyster{tag}_all.json").read_text())
+        rank["lat0"], rank["lon0"] = lat0, lon0
+        out["refine"] = refine(rank, knobs, band, {"1a": (200.0, 50.0), "1b": (200.0, 50.0), "2": (200.0, 50.0), "3": (200.0,)})
     (run / f"warp_oyster{tag}_{what}.json").write_text(json.dumps(out, indent=1, default=lambda o: o.tolist() if hasattr(o, "tolist") else str(o)))

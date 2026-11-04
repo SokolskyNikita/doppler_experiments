@@ -26,6 +26,8 @@ CASES = REPO / "bench" / "cases.json"
 MANIFEST = REPO / "bench" / "manifest.json"
 SETS = ("development", "calibration", "evaluation")
 OUTCOMES = ("located", "not_located", "located_or_abstain")
+# the runner's profiles (bench.runner.PROFILES); a case may name the ones it runs under, else it runs under all
+PROFILE_NAMES = ("saved-fit", "raw-audio", "locate")
 
 
 def data_root() -> Path:
@@ -129,6 +131,12 @@ def validate_case(case: dict, manifest_files: dict[str, str]) -> None:
     for f in (case.get("flight_data") or {}).get("archive_assets", []):
         if f.get("path") not in manifest_files or manifest_files[f.get("path")] != f.get("sha256"):
             problems.append(f"{where}: flight-data asset {f.get('path')} is not linked to bench/manifest.json by hash")
+    lt = (case.get("flight_data") or {}).get("locate_traces")
+    derived_paths = {d.get("path") for d in case.get("derived", []) if isinstance(d, dict)} \
+        if isinstance(case.get("derived"), list) else set()
+    for path in [] if lt is None else [lt] if isinstance(lt, str) else lt:
+        if path not in derived_paths:
+            problems.append(f"{where}: flight_data.locate_traces {path} is not a derived file with a recipe")
     for d in case.get("derived", []) if isinstance(case.get("derived"), list) else []:
         for k in ("path", "sha256", "recipe"):
             if k not in d:
@@ -147,6 +155,11 @@ def validate_case(case: dict, manifest_files: dict[str, str]) -> None:
         problems.append(f"{where}: events.mode must be saved_fits or detect")
     if runnable and ev.get("mode") == "saved_fits" and not ev.get("files"):
         problems.append(f"{where}: saved_fits needs events.files")
+    profiles = case.get("profiles", list(PROFILE_NAMES))
+    if not (isinstance(profiles, list) and profiles and set(profiles) <= set(PROFILE_NAMES)):
+        problems.append(f"{where}: profiles must be a non-empty list of {PROFILE_NAMES}")
+    elif runnable and ev.get("mode") == "detect" and "saved-fit" in profiles:
+        problems.append(f"{where}: a detect-mode case has no saved fits, so its profiles can't include saved-fit")
     w = case.get("weather")
     if w is not None:
         if not isinstance(w, dict):
@@ -159,11 +172,10 @@ def validate_case(case: dict, manifest_files: dict[str, str]) -> None:
                     problems.append(f"{where}: weather.{k} is needed with a temperature")
             if not (_num(w.get("station_distance_km")) and w["station_distance_km"] >= 0):
                 problems.append(f"{where}: weather.station_distance_km is needed with a temperature")
-            h = w.get("aircraft_height_m")
-            if h is not None and not (_num(h) and h >= 0):
-                problems.append(f"{where}: weather.aircraft_height_m must be metres above the ground")
-        elif w.get("aircraft_height_m") is not None:
-            problems.append(f"{where}: weather.aircraft_height_m needs a temperature")
+        if w.get("aircraft_height_m") is not None:
+            # each flight's own height sets its speed now (atmosphere.point_sound_speed), so a per-case height is
+            # superseded; older versions carry the field as null
+            problems.append(f"{where}: weather.aircraft_height_m is superseded by the per-flight sound speed")
     lab = case.get("labels") or {}
     ref = lab.get("reference")
     if ref is not None and not (isinstance(ref, dict) and _num(ref.get("lat")) and _num(ref.get("lon"))):
@@ -228,9 +240,18 @@ def latest_case(case_id: str, path=CASES) -> dict:
     return copy.deepcopy(_latest(load_cases(path), case_id))
 
 
-def case_ids(path=CASES, runnable_only: bool = True) -> list[str]:
-    cases = load_cases(path)["cases"]
-    return sorted({c["id"] for c in cases if is_runnable(c) or not runnable_only})
+def case_profiles(case: dict) -> list[str]:
+    return list(case.get("profiles", PROFILE_NAMES))
+
+
+def case_ids(path=CASES, runnable_only: bool = True, profile: str | None = None) -> list[str]:
+    """Case ids, the latest version's runnability and profiles deciding: runnable ones, and with `profile`, only
+    those that run under it."""
+    doc = load_cases(path)
+    ids = {c["id"] for c in doc["cases"]}
+    latest = [_latest(doc, i) for i in ids]
+    return sorted(c["id"] for c in latest if (is_runnable(c) or not runnable_only)
+                  and (profile is None or profile in case_profiles(c)))
 
 
 def _expand(argv: list[str], out: Path) -> list[str]:

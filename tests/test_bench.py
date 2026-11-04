@@ -299,3 +299,149 @@ def test_a_recipe_can_write_into_a_folder(tmp_path, monkeypatch):
     assert cases.build(case, log=lambda m: None) == []
     assert (tmp_path / "derived" / "traces" / "box.npz").read_bytes() == body
     assert sorted(p.name for p in (tmp_path / "derived" / "traces").iterdir()) == ["box.npz"]
+
+
+def test_locate_reads_its_own_traces_with_their_own_envelopes_and_cpa_cache(tmp_path, monkeypatch):
+    from dopplertrack.adsb import save_traces
+    monkeypatch.setattr(runner, "resolve", lambda p: tmp_path / p)
+    case = _case()
+    save_traces([], tmp_path / case["flight_data"]["traces"].replace("/", "_"))
+    case["flight_data"]["traces"] = case["flight_data"]["traces"].replace("/", "_")      # a legacy file
+    legacy = runner.locate_flight_data(case, "/c/cpa/bench/x_200m_dem.npz")
+    assert legacy == (runner.trace_paths(case), runner.day_boxes(case), "/c/cpa/bench/x_200m_dem.npz")
+    v2 = "derived/ny_margin12_v2.npz"
+    (tmp_path / "derived").mkdir()
+    save_traces([], tmp_path / v2, metadata={"coverage_bbox": [40.0, 41.5, -74.6, -72.4]})
+    case["derived"].append({"path": v2, "sha256": "0" * 64, "recipe": [["python", "x"]]})
+    case["flight_data"]["locate_traces"] = v2
+    cases.validate_case(case, cases.manifest_files())
+    paths, envelope, cpa = runner.locate_flight_data(case, "/c/cpa/bench/x_200m_dem.npz")
+    assert paths == [tmp_path / v2] and envelope is None and cpa == "/c/cpa/bench/x_200m_dem-locate.npz"
+    assert runner.trace_paths(case) == legacy[0]           # the other profiles keep the legacy file
+    case["derived"].pop()
+    with pytest.raises(cases.CaseError, match="locate_traces"):
+        cases.validate_case(case, cases.manifest_files())
+
+
+def test_a_case_runs_only_under_its_profiles():
+    assert set(cases.PROFILE_NAMES) == set(runner.PROFILES)
+    case = _case()
+    case["profiles"] = ["locate"]
+    case["events"] = {"mode": "detect"}
+    cases.validate_case(case, cases.manifest_files())
+    case["profiles"] = ["saved-fit", "locate"]
+    with pytest.raises(cases.CaseError, match="detect-mode"):
+        cases.validate_case(case, cases.manifest_files())
+    case["profiles"] = ["nope"]
+    with pytest.raises(cases.CaseError, match="profiles"):
+        cases.validate_case(case, cases.manifest_files())
+
+
+CLEAN = {"package_version": "0.2.0", "git_commit": "c" * 40, "git_dirty": False}
+
+
+@pytest.fixture
+def fake_runs(monkeypatch):
+    """run_bench with the case work stubbed: each case writes an entry; a case named in `stop` stops the run once."""
+    ran, stop = [], set()
+
+    def fake_case(cid, case_dir, execute, log, code):
+        if cid in stop:
+            stop.discard(cid)
+            raise KeyboardInterrupt
+        ran.append(cid)
+        return {"case": cid, "status": "scored", "record_sha256": f"sha-{cid}"}
+    monkeypatch.setattr(runner, "bench_case", fake_case)
+    monkeypatch.setattr(runner, "latest_case", lambda cid: {})
+    monkeypatch.setattr(runner, "_executor", lambda *a, **k: (dict(CLEAN), None))
+    return ran, stop
+
+
+def test_a_stopped_run_resumes_with_only_its_unfinished_cases(tmp_path, fake_runs):
+    ran, stop = fake_runs
+    run = tmp_path / "run"
+    run.mkdir()
+    stop.add("b")
+    with pytest.raises(KeyboardInterrupt):
+        runner.run_bench(["a", "b", "c"], run_dir=run, profile="locate")
+    partial = json.loads((run / "results.json").read_text())       # written as each case finished
+    assert [e["case"] for e in partial["cases"]] == ["a"] and not partial["complete"]
+    assert partial["missing"] == ["b", "c"]
+    with pytest.raises(ValueError, match="--resume"):
+        runner.run_bench(["a", "b", "c"], run_dir=run, profile="locate")
+    with pytest.raises(ValueError, match="profile"):
+        runner.run_bench(["a", "b", "c"], run_dir=run, profile="saved-fit", resume=True)
+    runner.run_bench(["a", "b", "c"], run_dir=run, profile="locate", resume=True)
+    assert ran == ["a", "b", "c"]
+    done = json.loads((run / "results.json").read_text())
+    assert done["complete"] and [e["case"] for e in done["cases"]] == ["a", "b", "c"]
+    assert len(json.loads((run / "run.json").read_text())["attempts"]) == 2
+
+
+def test_a_dirty_tree_never_resumes(tmp_path, fake_runs, monkeypatch):
+    run = tmp_path / "run"
+    run.mkdir()
+    monkeypatch.setattr(runner, "_executor", lambda *a, **k: ({**CLEAN, "git_dirty": True}, None))
+    runner.run_bench(["a"], run_dir=run, profile="locate")
+    with pytest.raises(ValueError, match="uncommitted"):
+        runner.run_bench(["a", "b"], run_dir=run, profile="locate", resume=True)
+
+
+def test_shards_split_the_cases_and_merge_into_one_run(tmp_path, fake_runs):
+    assert runner.shard_of(["d", "a", "c", "b", "e"], "1/2") == ["a", "c", "e"]
+    assert runner.shard_of(["d", "a", "c", "b", "e"], "2/2") == ["b", "d"]
+    with pytest.raises(ValueError):
+        runner.shard_of(["a"], "3/2")
+    ids = ["a", "b", "c", "d", "e"]
+    for k in (1, 2):
+        (tmp_path / f"s{k}").mkdir()
+        runner.run_bench(ids, run_dir=tmp_path / f"s{k}", profile="locate", shard=f"{k}/2")
+    (tmp_path / "all").mkdir()
+    doc = runner.merge_runs(tmp_path / "all", [tmp_path / "s1", tmp_path / "s2"])
+    assert doc["complete"] and sorted(e["case"] for e in doc["cases"]) == ids
+    assert (tmp_path / "all" / "c" / "entry.json").exists()
+    other = tmp_path / "other"
+    other.mkdir()
+    (other / "run.json").write_text(json.dumps({**json.loads((tmp_path / "s1" / "run.json").read_text()),
+                                                "code": {**CLEAN, "git_commit": "d" * 40}}))
+    with pytest.raises(ValueError, match="code"):
+        runner.merge_runs(tmp_path / "all2", [tmp_path / "s1", other])
+
+
+def test_inputs_name_each_profiles_flight_data_and_cpa_table(monkeypatch):
+    from bench import inputs
+    v3 = next(c for c in cases.load_cases()["cases"] if c["id"] == "oyster-bay" and c["version"] == 3)
+    monkeypatch.setattr(inputs, "latest_case", lambda cid: copy.deepcopy(v3))     # the version with locate_traces
+    loc = inputs.run_inputs(["oyster-bay"], "locate")
+    fit = inputs.run_inputs(["oyster-bay"], "saved-fit")
+    for doc in (loc, fit):          # tools/data/shards.py's shape, which `runs launch` reads
+        assert set(doc) == {"cases", "inputs", "cache_kinds", "cpa_tables", "detail"} and doc["cases"] == ["oyster-bay"]
+        assert all(isinstance(p, str) and not p.startswith("raw/") for p in doc["inputs"])
+    v2 = v3["flight_data"]["locate_traces"]
+    assert v2 in loc["inputs"] and v2 not in fit["inputs"]
+    assert any(p.endswith("-locate.npz") for p in loc["cpa_tables"])
+    assert not any(p.endswith("-locate.npz") for p in fit["cpa_tables"])
+    assert "docs/results/oyster_bay_ev1.json" in {e["path"] for e in fit["detail"]["repo"]}
+    t1 = inputs.tier1_inputs()
+    assert {"detections", "window_fits", "terrarium"} <= set(t1["cache_kinds"])
+    assert t1["cpa_tables"] == []                           # the known point needs no table
+
+
+def test_a_box_command_with_resume_starts_fresh_and_continues_alike(tmp_path, fake_runs):
+    ran, _ = fake_runs
+    run = tmp_path / "run"
+    run.mkdir()
+    runner.run_bench(["a", "b"], run_dir=run, profile="locate", resume=True)      # nothing finished: a fresh start
+    runner.run_bench(["a", "b", "c"], run_dir=run, profile="locate", resume=True)  # a restarted box: only c runs
+    assert ran == ["a", "b", "c"]
+
+
+def test_the_box_environment_sets_the_run_folder_and_the_shard(tmp_path, monkeypatch):
+    from bench import __main__ as cli
+    seen = {}
+    monkeypatch.setattr(runner, "run_bench", lambda ids, **kw: seen.update(kw) or kw["run_dir"])
+    monkeypatch.setenv("RUN", str(tmp_path))
+    monkeypatch.setenv("DOPPLERTRACK_SHARD", "2")
+    monkeypatch.setenv("DOPPLERTRACK_SHARDS", "10")
+    cli.main(["run", "--profile", "locate", "oyster-bay"])
+    assert seen["run_dir"] == tmp_path and seen["shard"] == "2/10"

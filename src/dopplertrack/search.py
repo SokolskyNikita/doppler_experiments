@@ -244,11 +244,14 @@ def cpa_fingerprint(grid: Grid, segs: list[Segment], max_range_m: float, c: floa
 
 def save_cpa_table(path, cpa: pd.DataFrame, fingerprint):
     """Written under a temporary name in the same folder and renamed into place, so another process never
-    reads a partial table and an interrupted save leaves nothing behind."""
+    reads a partial table and an interrupted save leaves nothing behind.
+
+    Uncompressed: compressing Oyster Bay's 86M rows took 69 s on one core against 1.5 s to write them
+    (874 MB against 2.76 GB), longer than building the table. load_cpa_table reads either kind."""
     path = Path(path)
     tmp = path.with_name(f".{path.name}.{os.getpid()}.{threading.get_ident()}.tmp.npz")
     try:
-        np.savez_compressed(tmp, fingerprint=np.array(repr(fingerprint)), **{k: cpa[k].to_numpy() for k in CPA_COLUMNS})
+        np.savez(tmp, fingerprint=np.array(repr(fingerprint)), **{k: cpa[k].to_numpy() for k in CPA_COLUMNS})
         os.replace(tmp, path)
     except BaseException:
         tmp.unlink(missing_ok=True)

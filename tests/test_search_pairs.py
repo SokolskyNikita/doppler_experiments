@@ -52,6 +52,9 @@ def test_cpa_cache_roundtrip(tmp_path):
     back = search.load_cpa_table(p, fp)
     pd.testing.assert_frame_equal(back, cpa)
     assert search.load_cpa_table(p, {"grid": (3, 40.0), "segs": (2, 100)}) is None
+    old = tmp_path / "compressed.npz"            # tables saved before the cache stopped compressing
+    np.savez_compressed(old, fingerprint=np.array(repr(fp)), **{k: cpa[k].to_numpy() for k in search.CPA_COLUMNS})
+    pd.testing.assert_frame_equal(search.load_cpa_table(old, fp), cpa)
 
 
 def test_run_search_reports_stage_timings_and_funnel(monkeypatch):

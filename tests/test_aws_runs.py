@@ -236,3 +236,27 @@ def test_run_folders_go_up_only_by_name():
     for bad in ("runs", "runs/", "derived/x"):
         with pytest.raises(SystemExit, match="one run folder"):
             runs.check_run_input(bad)
+
+
+def test_a_resume_runs_the_resumed_jobs_own_code_unless_given_a_checkout(branch, tmp_path):
+    prior = {"git_commit": "6f0ce38" + "0" * 33, "git_dirty": False, "untracked": 0}
+    a = runs.argparse.Namespace(resume="2026-11-04-pairs-s1of8", repo=None)
+    code, where = runs.code_for(a, prior, tmp_path / "c1")
+    assert code["git_commit"] == prior["git_commit"] and where == "jobs/2026-11-04-pairs-s1of8/code"
+    assert not (tmp_path / "c1").exists()       # nothing bundled from this checkout
+    # a resume of a resume still points at the original bundle
+    code, where = runs.code_for(a, {**prior, "code_from": "jobs/2026-11-04-pairs-s1of8/code"}, tmp_path / "c2")
+    assert where == "jobs/2026-11-04-pairs-s1of8/code"
+    a.repo = str(branch)
+    code, where = runs.code_for(a, prior, tmp_path / "c3")
+    assert where is None and code["git_commit"] == _git(branch, "rev-parse", "HEAD") and (tmp_path / "c3" / "code.bundle").exists()
+
+
+def test_memory_in_use_is_total_less_available(tmp_path, monkeypatch):
+    import builtins
+    real = builtins.open
+    meminfo = tmp_path / "meminfo"
+    meminfo.write_text("MemTotal:       131072000 kB\nMemFree:  1000 kB\nMemAvailable:   31072000 kB\n")
+    monkeypatch.setattr(builtins, "open", lambda f, *x, **k: real(meminfo if f == "/proc/meminfo" else f, *x, **k))
+    total, used = supervisor.memory_gb()
+    assert round(total) == 131 and round(used) == 100

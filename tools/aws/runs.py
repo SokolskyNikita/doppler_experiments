@@ -235,6 +235,17 @@ def seed_run_inputs(s3, bucket: str, inputs: list[str]) -> None:
                 aws_cli("s3", "cp", "--only-show-errors", str(src), f"s3://{bucket}/data/{rel}")
 
 
+def code_for(a, prior: dict | None, dest: Path) -> tuple[dict, str | None]:
+    """The code a job runs, and where in the bucket it already is (None: bundled into dest, to upload). A resume
+    runs the resumed job's own bundle, so a pinned job never picks up this checkout; --repo overrides that."""
+    if prior and not getattr(a, "repo", None):
+        code = {k: prior.get(k) for k in ("git_commit", "git_dirty", "untracked")}
+        code["code_source"] = f"jobs/{a.resume}/code/ (the resumed job's own bundle)"
+        return code, prior.get("code_from") or f"jobs/{a.resume}/code"
+    repo = Path(a.repo).resolve() if getattr(a, "repo", None) else REPO
+    return {**code_bundle(dest, repo=repo), "code_source": f"bundled from {repo}"}, None
+
+
 def launch(a) -> str:
     out = outputs()
     s3 = session().client("s3")
@@ -276,7 +287,7 @@ def launch(a) -> str:
     seed_run_inputs(s3, bucket, inputs)
     caches = list(dict.fromkeys(a.cache or (["terrarium"] if a.case else [])))
     with tempfile.TemporaryDirectory() as tmp:
-        code = code_bundle(Path(tmp) / "code", repo=Path(a.repo).resolve() if getattr(a, "repo", None) else REPO)
+        code, code_from = code_for(a, prior, Path(tmp) / "code")
         ids = candidate_ids(f"{prior['run']}-resume", datetime.date.min) if prior else \
             candidate_ids(a.topic, datetime.date.today())
         for job in ids:
@@ -289,7 +300,7 @@ def launch(a) -> str:
                     "caches": caches, "jobs": a.jobs, "max_hours": a.max_hours,
                     "checkpoint_minutes": a.checkpoint_minutes, "size": a.size,
                     "market": "on-demand" if a.on_demand else "spot", "submitted": now(),
-                    "submitted_from": platform.node(), **code}
+                    "submitted_from": platform.node(), **code, "code_from": code_from}
             try:     # the claim: a conditional put fails if another launch took this id first
                 s3.put_object(Bucket=bucket, Key=f"jobs/{job}/spec.json", IfNoneMatch="*",
                               Body=json.dumps(spec, indent=1).encode())
@@ -298,8 +309,13 @@ def launch(a) -> str:
                 if e.response["Error"]["Code"] in ("PreconditionFailed", "ConditionalRequestConflict"):
                     continue
                 raise
-        for f in sorted((Path(tmp) / "code").iterdir()):
-            s3.upload_file(str(f), bucket, f"jobs/{job}/code/{f.name}")
+        if code_from:     # copied inside S3 from the resumed job, so a resume of a resume keeps the original code
+            for o in s3.list_objects_v2(Bucket=bucket, Prefix=f"{code_from}/")["Contents"]:
+                s3.copy_object(Bucket=bucket, Key=f"jobs/{job}/code/{o['Key'].rsplit('/', 1)[-1]}",
+                               CopySource={"Bucket": bucket, "Key": o["Key"]})
+        else:
+            for f in sorted((Path(tmp) / "code").iterdir()):
+                s3.upload_file(str(f), bucket, f"jobs/{job}/code/{f.name}")
     s3.upload_file(str(HERE / "box" / "supervisor.py"), bucket, f"jobs/{job}/supervisor.py")
     put_status(s3, bucket, job, {"job": job, "state": "submitted", "updated": now()})
     a._code = code

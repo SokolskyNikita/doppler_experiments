@@ -4,7 +4,8 @@ locate's detection (60-300 Hz, harmonics 1, top 10, 240 s windows) on the case's
 collective.Window (bounds, coarse tone, coarse heard CPA only), then collective.collective_find over the case's box with
 its flight data, 15 C, the weather off. The result is written before any label is read; the merge judges the criteria.
 
-With --null, the units are A's other-day draws instead (verdict_null_days.json): "<case>--null--<day>" runs the same
+With --null, the units are A's other-day draws instead (verdict_null_days.json, and verdict_null_days-essex.json less
+its five days without a release): "<case>--null--<day>" runs the same
 find, at +-10 % f0, with the case's box swapped to that day's cut of the same box, and writes null_draws.npz for
 collective_null.py (day, max_S = the winner's Z, second_S = the best mode 2 km or more from it, lat, lon, n_matched,
 clock_audio_minus_utc_s).
@@ -30,6 +31,10 @@ NEGATIVES = ["oyster-bay-moved-wsw150", "oyster-bay-moved-north150", "oyster-bay
 UNITS = [f"{c}--f0-10" for c in POSITIVES + NEGATIVES] + [f"{c}--f0-5" for c in POSITIVES]
 DETECT = dict(f_lo=60.0, f_hi=300.0, harmonics=1, top=10, window_s=240.0)
 NULL_GROUPS = json.loads((HERE / "verdict_null_days.json").read_text())["groups"]
+# Essex: the seeded 50 less the five days adsb.lol has no planes-readsb-prod-0 release for (A, not substituted)
+ESSEX_NO_RELEASE = {"2025-05-28", "2025-05-31", "2025-06-06", "2025-06-07", "2025-06-10"}
+NULL_GROUPS += [dict(g, days=[d for d in g["days"] if d not in ESSEX_NO_RELEASE])
+                for g in json.loads((HERE / "verdict_null_days-essex.json").read_text())["groups"]]
 NULL_UNITS = [f"{c}--null--{day}" for g in NULL_GROUPS for c in g["cases"] for day in g["days"]]
 
 

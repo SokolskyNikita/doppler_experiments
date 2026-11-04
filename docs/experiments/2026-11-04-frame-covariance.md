@@ -2,7 +2,7 @@
 
 <!-- index
 question: Does ridge()'s per-frame frequency error on synthesised passes correlate across frames as Harris's c or c² predicts, so that the provisional 63–74 m slant-range bound stands?
-outcome: Not met as pre-registered: the pooled N_eff is 2.2 against 3.94 (c²) and 5.46 (c), and the implied bound is 48 m. The 5 s detrend drives the long lags negative, and the measured σ (0.04–0.34 % of f0) is far below the 0.45 % the bound assumes, so σ, not the correlation, is the open input
+outcome: Not met in either run. With σ at each Livermore pass's own SNR (median 0.137 % of f0, not 0.45 %) the bound is 50 m, which replaces 63–74 m by the pre-registered rule; it moves to about 19 m under c², because ridge()'s error is mostly a slow bias whose correlation no detrend settles
 -->
 
 ## Question
@@ -77,6 +77,60 @@ The bound stays provisional, and items 2 and 4 keep quoting 63–74 m (σ 0.45 %
 "provisional" off needs a covariance measured with a detrend longer than the correlation length (or none, against
 the exact synthetic curve). It also needs σ measured on the Livermore passes' own SNR, not assumed from the ridge
 residual. Both are one script change on these units; the units are kept.
+
+## Follow-up: no detrend, and σ at each pass's own SNR
+
+Criterion, fixed before it ran (`cov_measure.py bound2`):
+- **Correlation:** N_eff over lags 1–4 matches c (5.32) or c² (3.93) within 20 %.
+- **Bound:** the implied bound's median lands within 15 % of 63 or 74 m.
+- **Otherwise:** this record names the number that replaces them, and "provisional" comes off with it.
+
+**How σ is matched.** The SNR is the median whitened dB on the curve over the pass's frames: on the synthetic
+passes along the true curve, and on each primary Livermore pass along its trajectory reference. A pass's σ is
+interpolated in SNR from the 27 synthetic passes' (SNR, σ) pairs.
+
+| | Lags 1–4 | N_eff (lags 1–4) |
+|---|---|---|
+| ρ against the exact curve, no detrend | 0.997, 0.993, 0.989, 0.985 | 8.93 |
+| ρ less a 5 s running median (the first run) | 0.656, 0.369, 0.155, 0.007 | 3.38 |
+| Harris c | 0.906, 0.672, 0.400, 0.183 | 5.32 |
+| Harris c² | 0.822, 0.452, 0.160, 0.033 | 3.93 |
+
+**The synthetic calibration.** The synthetic passes span 3.5–14.7 dB. σ is 0.6–11 % of f0 below 4.7 dB,
+0.10–0.16 % at 7.8–9.2 dB, and 0.08–0.13 % at 13–15 dB.
+
+**The Livermore passes.** The 29 primary passes span 2.5–20.6 dB. Their matched σ has a median of **0.137 %** of
+f0, against the 0.45 % assumed. Five passes lie above the synthetic range and are clamped to 0.125 %; one, at
+2.5 dB, is clamped to 11 %.
+
+**Median slant-range bound, 29 primary passes:**
+
+| σ | ρ | Median |
+|---|---|---|
+| At each pass's SNR | measured, no detrend (Bartlett-tapered) | **50 m** |
+| 0.45 % | measured, no detrend (tapered) | 94 m |
+| 0.45 % | c² | 63 m |
+| 0.45 % | c | 74 m |
+
+Neither half of the criterion is met:
+- **The correlation:** without a detrend, ρ is 0.97–0.997 at every lag. `ridge()`'s error is dominated by a bias
+  that varies slowly over the whole pass, not by frame noise. With the 5 s detrend, the long lags turn negative.
+  The noise's own correlation lies between the two, and a covariance this close to 1 at every lag isn't positive
+  definite as measured, so it is Bartlett-tapered.
+- **The bound:** 50 m is outside 15 % of 63 m.
+
+By the rule written before the run, **50 m** replaces 63–74 m and "provisional" comes off with it. One caution
+goes with that number:
+- **What is robust is σ.** At the passes' own SNR, `ridge()`'s frame noise is about a third of the 0.45 % the
+  bound assumed.
+- **The correlation is not robust.** The same σ with Harris's c² would give about 19 m (63 × 0.137 / 0.45, since
+  the bound is linear in σ). The measured, tapered raw ρ gives 50 m.
+
+So the bound is 20–50 m depending on how the slow bias is treated, against model errors of 229 m (the trajectory
+curve's median miss) or more. The conclusion PLAN item 2 draws, that information is not what limits 1 km, holds
+more strongly than before.
+
+**Cost:** the follow-up ran on one 4xlarge spot box, cov-bound2, in under 2 minutes.
 
 ## Script and run folder
 

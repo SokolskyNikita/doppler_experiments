@@ -39,6 +39,20 @@ def _file_lock(path):
             fcntl.flock(f, fcntl.LOCK_UN)
 
 
+@contextlib.contextmanager
+def _stage(stages: dict, name: str):
+    """Record a stage's wall and CPU seconds in stages[name]. CPU time includes child processes reaped
+    during the stage, so a process pool's workers count towards the stage that shut it down."""
+    def cpu():
+        t = os.times()
+        return t.user + t.system + t.children_user + t.children_system
+    w0, c0 = time.perf_counter(), cpu()
+    try:
+        yield
+    finally:
+        stages[name] = {"wall_s": time.perf_counter() - w0, "cpu_s": cpu() - c0}
+
+
 def cached_cpa_table(grid: Grid, segs: list[Segment], max_range_m: float, c: float, path=None,
                      workers: int | None = None) -> pd.DataFrame:
     """cpa_table(), reusing the table saved at `path` if it was built from identical inputs (cpa_fingerprint).
@@ -144,35 +158,53 @@ def run_search(sp: Spectrogram, ev1: EventFit, ev2: EventFit, traces: list[Trace
     cpa_cache: optional .npz path. The (grid point, flight) CPA table depends only on the grid
     (with its elevations), the traces, max_range and the speed of sound, not on the events, and is
     the slow part; with a path given it is reused when those inputs are identical, else computed
-    and saved (see cached_cpa_table). workers: processes for building the table (see cpa_table)."""
+    and saved (see cached_cpa_table). workers: processes for building the table (see cpa_table).
+
+    Besides the ranked rows, the returned frame carries two dicts in `res.attrs` (not written by to_csv):
+    - "stages": {name: {"wall_s", "cpu_s"}} for "segments", "cpa_table", "pairing", "scoring" and
+      "gap_report", in that order. CPU seconds include the process pool's workers.
+    - "funnel": hypothesis counts after each filter: "cpa_rows" (the table), "event1_gates" and
+      "event2_gates" (CPA rows within each event's speed and distance tolerances), "time_join"
+      (triples whose heard-time gap matches the events' within tol_s), "silence" (left after the
+      silence filter; equal to "time_join" when it is off) and "scored"."""
     c = speed_of_sound() if c is None else c
+    stages: dict = {}
+    funnel: dict = {}
     bbox = search_bbox if search_bbox is not None else (grid.lat.min(), grid.lat.max(), grid.lon.min(), grid.lon.max())
-    log(f"{len(traces)} loaded traces")
-    report_coverage(trace_metadata or {}, bbox, max_range_m, log)
-    report_altitude_sources(traces, log)
-    e0, e1 = grid.enu[:, 0].min() - max_range_m, grid.enu[:, 0].max() + max_range_m
-    n0, n1 = grid.enu[:, 1].min() - max_range_m, grid.enu[:, 1].max() + max_range_m
-    segs = build_segments(traces, grid.lat0, grid.lon0, clip_enu=(e0, e1, n0, n1))
-    log(f"{len(segs)} airborne segments; grid of {len(grid)} points")
-    cpa = cached_cpa_table(grid, segs, max_range_m, c, cpa_cache, workers=workers)
-    log(f"{len(cpa)} (point, flight) CPA records")
-    dt = ev2.t_cpa - ev1.t_cpa
-    pairs = pair_candidates(cpa, dt, tol_s=tol_s,
-                            v1=(ev1.v * (1 - v_tol), ev1.v * (1 + v_tol)), d1=(ev1.d * d_tol[0], ev1.d * d_tol[1]),
-                            v2=(ev2.v * (1 - v_tol), ev2.v * (1 + v_tol)), d2=(ev2.d * d_tol[0], ev2.d * d_tol[1]),
-                            silence_d_m=silence_d_m)
-    log(f"{len(pairs)} candidate (point, flight1, flight2) triples after offset + silence filters")
-    w1 = EventWindow.from_fit(sp, ev1, harmonics[0]); w2 = EventWindow.from_fit(sp, ev2, harmonics[1])
-    out = []
-    t0 = time.time()
-    for k, p in enumerate(pairs.itertuples()):
-        tot, s1, s2, sh = locked_score(w1, w2, segs[p.seg1], segs[p.seg2], grid.enu[p.gidx], float(p.t_heard1), c=c)
-        out.append((p.gidx, grid.lat[p.gidx], grid.lon[p.gidx], p.seg1, p.seg2, segs[p.seg1].icao, segs[p.seg2].icao, p.t_heard1, p.d1, p.v1, p.d2, p.v2, tot, s1, s2, sh))
-        if progress and (k + 1) % 500 == 0:
-            log(f"scored {k + 1}/{len(pairs)} ({(time.time() - t0) / (k + 1) * 1000:.0f} ms each)")
-    cols = ["gidx", "lat", "lon", "seg1", "seg2", "icao1", "icao2", "t_heard1", "d1", "v1", "d2", "v2", "score", "s1", "s2", "shift"]
-    res = pd.DataFrame(out, columns=cols).sort_values("score", ascending=False).reset_index(drop=True)
-    report_candidate_gaps(traces, res, sp, ev1, max_range_m, c, log)
+    with _stage(stages, "segments"):
+        log(f"{len(traces)} loaded traces")
+        report_coverage(trace_metadata or {}, bbox, max_range_m, log)
+        report_altitude_sources(traces, log)
+        e0, e1 = grid.enu[:, 0].min() - max_range_m, grid.enu[:, 0].max() + max_range_m
+        n0, n1 = grid.enu[:, 1].min() - max_range_m, grid.enu[:, 1].max() + max_range_m
+        segs = build_segments(traces, grid.lat0, grid.lon0, clip_enu=(e0, e1, n0, n1))
+        log(f"{len(segs)} airborne segments; grid of {len(grid)} points")
+    with _stage(stages, "cpa_table"):
+        cpa = cached_cpa_table(grid, segs, max_range_m, c, cpa_cache, workers=workers)
+        log(f"{len(cpa)} (point, flight) CPA records")
+    with _stage(stages, "pairing"):
+        dt = ev2.t_cpa - ev1.t_cpa
+        pairs = pair_candidates(cpa, dt, tol_s=tol_s,
+                                v1=(ev1.v * (1 - v_tol), ev1.v * (1 + v_tol)), d1=(ev1.d * d_tol[0], ev1.d * d_tol[1]),
+                                v2=(ev2.v * (1 - v_tol), ev2.v * (1 + v_tol)), d2=(ev2.d * d_tol[0], ev2.d * d_tol[1]),
+                                silence_d_m=silence_d_m, funnel=funnel)
+        log(f"{len(pairs)} candidate (point, flight1, flight2) triples after offset + silence filters")
+    with _stage(stages, "scoring"):
+        w1 = EventWindow.from_fit(sp, ev1, harmonics[0]); w2 = EventWindow.from_fit(sp, ev2, harmonics[1])
+        out = []
+        t0 = time.time()
+        for k, p in enumerate(pairs.itertuples()):
+            tot, s1, s2, sh = locked_score(w1, w2, segs[p.seg1], segs[p.seg2], grid.enu[p.gidx], float(p.t_heard1), c=c)
+            out.append((p.gidx, grid.lat[p.gidx], grid.lon[p.gidx], p.seg1, p.seg2, segs[p.seg1].icao, segs[p.seg2].icao, p.t_heard1, p.d1, p.v1, p.d2, p.v2, tot, s1, s2, sh))
+            if progress and (k + 1) % 500 == 0:
+                log(f"scored {k + 1}/{len(pairs)} ({(time.time() - t0) / (k + 1) * 1000:.0f} ms each)")
+        cols = ["gidx", "lat", "lon", "seg1", "seg2", "icao1", "icao2", "t_heard1", "d1", "v1", "d2", "v2", "score", "s1", "s2", "shift"]
+        res = pd.DataFrame(out, columns=cols).sort_values("score", ascending=False).reset_index(drop=True)
+        funnel["scored"] = len(res)
+    with _stage(stages, "gap_report"):
+        report_candidate_gaps(traces, res, sp, ev1, max_range_m, c, log)
+    res.attrs["stages"] = stages
+    res.attrs["funnel"] = funnel
     return res, segs
 
 

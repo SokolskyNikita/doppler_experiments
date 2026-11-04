@@ -33,10 +33,15 @@ def test_pair_candidates_exact_tolerance_and_silence():
         (1, 1, 0, 1000.0, 3000, 100), (1, 2, 0, 1918.0, 3000, 100), (1, 3, 0, 1500.0, 2000, 100),
         (2, 1, 0, 1000.0, 3000, 100), (2, 2, 0, 1918.0 + 6.5, 3000, 100),
     ])
-    m = search.pair_candidates(cpa, 918.0, tol_s=6.0, silence_d_m=None)
+    funnel = {}
+    m = search.pair_candidates(cpa, 918.0, tol_s=6.0, silence_d_m=None, funnel=funnel)
     assert set(m.gidx) == {0, 1}
-    m = search.pair_candidates(cpa, 918.0, tol_s=6.0, silence_d_m=6000.0)
+    assert funnel == dict(cpa_rows=7, event1_gates=7, event2_gates=7, time_join=2, silence=2)
+    m = search.pair_candidates(cpa, 918.0, tol_s=6.0, silence_d_m=6000.0, funnel=funnel)
     assert set(m.gidx) == {0}
+    assert funnel == dict(cpa_rows=7, event1_gates=7, event2_gates=7, time_join=2, silence=1)
+    search.pair_candidates(cpa, 918.0, tol_s=6.0, d1=(0, 2500), funnel=funnel)
+    assert funnel["event1_gates"] == 1 and funnel["event2_gates"] == 7
 
 
 def test_cpa_cache_roundtrip(tmp_path):
@@ -47,3 +52,24 @@ def test_cpa_cache_roundtrip(tmp_path):
     back = search.load_cpa_table(p, fp)
     pd.testing.assert_frame_equal(back, cpa)
     assert search.load_cpa_table(p, {"grid": (3, 40.0), "segs": (2, 100)}) is None
+
+
+def test_run_search_reports_stage_timings_and_funnel(monkeypatch):
+    from dopplertrack import pipeline
+    from dopplertrack.tracks import EventFit
+    cpa = _cpa([(0, 1, 0, 1000.0, 3000, 100), (0, 2, 0, 1918.0, 3000, 100),
+                (1, 1, 0, 1000.0, 3000, 100), (1, 2, 0, 1918.0, 3000, 100), (1, 3, 0, 1500.0, 500, 100)])
+    segs = [search.Segment(0, f"s{k}", np.zeros(2), np.zeros((2, 3)), np.zeros(2)) for k in range(4)]
+    monkeypatch.setattr(pipeline, "build_segments", lambda *a, **k: segs)
+    monkeypatch.setattr(pipeline, "cached_cpa_table", lambda *a, **k: cpa)
+    monkeypatch.setattr(pipeline.EventWindow, "from_fit", staticmethod(lambda *a: None))
+    monkeypatch.setattr(pipeline, "locked_score", lambda *a, **k: (2.0, 1.0, 1.0, 0.0))
+    for name in ("report_coverage", "report_altitude_sources", "report_candidate_gaps"):
+        monkeypatch.setattr(pipeline, name, lambda *a, **k: None)
+    grid = search.Grid.points([40.0, 40.01], [-74.0, -74.0], np.zeros(2))
+    ev1 = EventFit(1000.0, 997.0, 120, 100, 3000, 950, 1050, 5, 150, 90)
+    ev2 = EventFit(1918.0, 1915.0, 120, 100, 3000, 1870, 1970, 5, 150, 90)
+    res, _ = pipeline.run_search(None, ev1, ev2, [], grid, progress=False)
+    assert res.attrs["funnel"] == dict(cpa_rows=5, event1_gates=4, event2_gates=4, time_join=2, silence=1, scored=1)
+    assert list(res.attrs["stages"]) == ["segments", "cpa_table", "pairing", "scoring", "gap_report"]
+    assert all(v["wall_s"] >= 0 and v["cpu_s"] >= 0 for v in res.attrs["stages"].values())

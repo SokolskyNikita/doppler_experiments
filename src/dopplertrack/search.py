@@ -264,26 +264,34 @@ def load_cpa_table(path, fingerprint) -> pd.DataFrame | None:
 
 def pair_candidates(cpa: pd.DataFrame, dt_offset: float, tol_s: float = 6.0,
                     v1=(0, 1e9), d1=(0, 1e9), v2=(0, 1e9), d2=(0, 1e9),
-                    silence_d_m: float | None = 6000.0, silence_margin_s: float = 40.0) -> pd.DataFrame:
+                    silence_d_m: float | None = 6000.0, silence_margin_s: float = 40.0,
+                    funnel: dict | None = None) -> pd.DataFrame:
     """Grid points that hear an event-1-like CPA then, dt_offset later, an event-2-like CPA.
 
     The join is on (grid point, time bucket) rather than grid point alone: a grid point in a
     busy region hears hundreds of flights a day, and the unconstrained per-point cross product
     is billions of rows before the time filter. Buckets of width 2*tol_s with a +-1 bucket
-    overlap find exactly the pairs within tol_s."""
+    overlap find exactly the pairs within tol_s.
+
+    funnel, if given, receives the row counts after each step: "cpa_rows", "event1_gates",
+    "event2_gates", "time_join" and "silence" (see pipeline.run_search)."""
+    funnel = {} if funnel is None else funnel
     a = cpa[(cpa.v.between(*v1)) & (cpa.d.between(*d1))]
     b = cpa[(cpa.v.between(*v2)) & (cpa.d.between(*d2))]
+    funnel.update(cpa_rows=len(cpa), event1_gates=len(a), event2_gates=len(b))
     w = 2.0 * tol_s
     a = a.assign(key=np.floor(a.t_heard.to_numpy() / w).astype(np.int64))
     kb = np.floor((b.t_heard.to_numpy() - dt_offset) / w).astype(np.int64)
     parts = [a.merge(b.assign(key=kb + off), on=["gidx", "key"], suffixes=("1", "2")) for off in (-1, 0, 1)]
     m = pd.concat(parts, ignore_index=True).drop(columns="key")
     m = m[(m.seg1 != m.seg2) & ((m.t_heard2 - m.t_heard1 - dt_offset).abs() <= tol_s)].copy()
+    funnel["time_join"] = len(m)
     if silence_d_m is not None and len(m):
         near = cpa[(cpa.d <= silence_d_m) & cpa.gidx.isin(m.gidx.unique())][["gidx", "seg", "t_heard"]]
         x = m[["gidx", "seg1", "seg2", "t_heard1", "t_heard2"]].reset_index().merge(near, on="gidx")
         bad = x[(x.seg != x.seg1) & (x.seg != x.seg2) & (x.t_heard > x.t_heard1 + silence_margin_s) & (x.t_heard < x.t_heard2 - silence_margin_s)]
         m = m.drop(index=bad["index"].unique())
+    funnel["silence"] = len(m)
     return m.reset_index(drop=True)
 
 

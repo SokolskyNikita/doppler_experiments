@@ -10,7 +10,10 @@ Per case and source:
                     the mirrors' day traces are clipped to the same box)
   at CPA            the true flights' points within +-60 s of CPA and the largest gap there, from
                     compare_flights.json (adsbfetch_compare.py), summed and maximised over the case's two flights
-  only here / only in the cut   window hexes the source has that the cut lacks, and the reverse
+  only here         the source's traced window aircraft with no trace at all in the cut that day
+  only in the cut   the cut's window aircraft the source didn't see in the box during the window at all, of any
+                    type; "type disagrees" counts the cut's window aircraft the source saw there but typed as a jet
+                    (the cut has no type for most of them)
 The unions: "free union" merges adsbfi and airplanes.live (the morning's union), "free union + adsblol" adds
 adsb.lol where it has the day, "four-mirror union" adds adsbx. A trace changed when its set of (time to the
 ms, lat, lon to 1e-6 deg, height to 0.1 m) points differs; the share of points changed is the symmetric
@@ -47,13 +50,13 @@ def utc(s):
     return datetime.fromisoformat(s.replace("Z", "+00:00")).replace(tzinfo=timezone.utc).timestamp()
 
 
-def replay_window(path, t0, t1, types):
+def replay_window(path, t0, t1, types, any_type=False):
     if not path.exists():
         return None
     out = set()
     for line in open(path):
         r = json.loads(line)
-        if t0 <= utc(r["ts"]) <= t1 and types.is_prop(r.get("type_code")):
+        if t0 <= utc(r["ts"]) <= t1 and (any_type or types.is_prop(r.get("type_code"))):
             out.add(r["hex"].lower())
     return out
 
@@ -99,7 +102,9 @@ def cpa_numbers(compare, site, flights, source):
 
 def case(site, c, new, adsbx, old, types):
     t0, t1 = utc(c["start"]) - PAD, utc(c["start"]) + c["length"] + PAD
-    cut = [tr for tr in load_traces(c["cut"]) if types.is_prop(tr.typ)]
+    cut_all = load_traces(c["cut"])
+    cut_any = {tr.icao.lower() for tr in cut_all}
+    cut = [tr for tr in cut_all if types.is_prop(tr.typ)]
     cut_w = {}
     for tr in cut:
         m = in_box(tr, c["box"]) & (tr.t >= t0) & (tr.t <= t1)
@@ -111,18 +116,20 @@ def case(site, c, new, adsbx, old, types):
     cmp_new = json.load(open(new / "compare_flights.json"))
     cmp_old = json.load(open(old / "compare_flights.json"))
     cut_cpa = cpa_numbers(cmp_new, c["compare_site"], c["flights"], "adsblol-tar (our cut)")
-    win, trs, out = {}, {}, {}
+    win, trs, seen, out = {}, {}, {}, {}
     for s in folders:
         w = replay_window(replays[s], t0, t1, types)
         if not w:
             continue
         win[s] = w
+        seen[s] = replay_window(replays[s], t0, t1, types, any_type=True)
         trs[s] = source_traces(folders[s], site, w, s)
     for name, members in UNIONS.items():
         have = [s for s in members if s in win]
         if len(have) < 2 or (name == "free union + adsblol" and "adsblol" not in have) or (name == "four-mirror union" and "adsbx" not in have):
             continue
         win[name] = set().union(*(win[s] for s in have))
+        seen[name] = set().union(*(seen[s] for s in have))
         trs[name] = {h: conv.merge([trs[s][h] for s in have if h in trs[s]]) for h in win[name] if any(h in trs[s] for s in have)}
     old_win = {s: replay_window(old / f"replay/{site}_{s}.jsonl", t0, t1, types) for s in FREE}
     old_win = {s: w for s, w in old_win.items() if w}
@@ -131,7 +138,10 @@ def case(site, c, new, adsbx, old, types):
         old_win["free union"] = old_win["adsbfi"] | old_win["airplaneslive"]
         old_trs["free union"] = {h: conv.merge([old_trs[s][h] for s in old_trs if h in old_trs[s]])
                                  for h in old_win["free union"] if any(h in old_trs[s] for s in ("adsbfi", "airplaneslive"))}
+    # part 2's "mirror union" merges every free mirror that has the day
     cpa_label = {"free union + adsblol": "mirror union", "four-mirror union": "union with adsbx"}
+    if "adsblol" not in win:
+        cpa_label["free union"] = "mirror union"
     for s in win:
         pts = sum(int(in_box(tr, c["box"]).sum()) for tr in trs[s].values())
         cpa = cpa_numbers(cmp_new, c["compare_site"], c["flights"], cpa_label.get(s, s))
@@ -144,8 +154,9 @@ def case(site, c, new, adsbx, old, types):
                       points_vs_morning_pct=pct(pts, o_pts) if o_pts is not None else None,
                       cpa=cpa, cpa_points_vs_cut_pct=pct(cpa["points"], cut_cpa["points"]) if cpa and cut_cpa else None,
                       cpa_points_vs_morning_pct=pct(cpa["points"], cpa_o["points"]) if cpa and cpa_o else None,
-                      cpa_morning=cpa_o, only_here=len(set(trs[s]) - set(cut_w)), only_in_cut=len(set(cut_w) - set(trs[s])),
-                      only_here_hexes=sorted(set(trs[s]) - set(cut_w)), only_in_cut_hexes=sorted(set(cut_w) - set(trs[s])))
+                      cpa_morning=cpa_o, only_here=len(set(trs[s]) - cut_any), only_in_cut=len(set(cut_w) - seen[s]),
+                      type_disagrees=len((set(cut_w) & seen[s]) - win[s]),
+                      only_here_hexes=sorted(set(trs[s]) - cut_any), only_in_cut_hexes=sorted(set(cut_w) - seen[s]))
     return dict(cut=dict(window_aircraft=len(cut_w), box_points=cut_points, cpa=cut_cpa), sources=out)
 
 
@@ -191,7 +202,7 @@ def main(new: Path, adsbx: Path, old: Path):
             print(f"  {s:22s} win {r['window_aircraft']:4d} ({f(r['window_vs_cut_pct'])} cut, {f(r['window_vs_morning_pct'])} morning)  "
                   f"pts {r['box_points']:8d} ({f(r['points_vs_cut_pct'])}, {f(r['points_vs_morning_pct'])})  "
                   f"cpa {cpa.get('points', '–')} ({f(r['cpa_points_vs_cut_pct'])}, {f(r['cpa_points_vs_morning_pct'])}) gap {cpa.get('max_gap_s', float('nan')):.1f}  "
-                  f"only here {r['only_here']} / only cut {r['only_in_cut']}")
+                  f"only here {r['only_here']} / only cut {r['only_in_cut']} (type disagrees {r['type_disagrees']})")
     print(json.dumps(out["changed_vs_morning"], indent=1, default=float))
 
 

@@ -121,6 +121,18 @@ retired.
 Inputs: the same as job 3. The box runs the steps in order, so the knobs are picked on synthetic data before any
 Livermore pass is read.
 
+## 5. Item 5 round 2, the window (`window_roc.py`)
+
+decision: whether the package's window and hop change from the 2.048 s Hann window at a 0.25 s hop.
+
+| Step | Units | Command |
+|---|---|---|
+| roc | one candidate per box (`--shards 6`); per candidate, the noise unit and 27 passes | `window_roc.py "$RUN" roc [CANDIDATE ...]` |
+| gate | — | `window_roc.py "$RUN" gate`, over the shards' `window_roc/` collected into one folder (`copy_new.py`) |
+
+Inputs: none; the noise and the passes are synthetic. The real-data stage runs on copies of the cases, never by
+editing the committed fits.
+
 ## SDE-B
 
 # SDE-B's benchmark jobs for the fleet (2026-11-04)

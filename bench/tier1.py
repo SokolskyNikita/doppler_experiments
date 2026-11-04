@@ -598,7 +598,7 @@ def run_tier1(sets=("development",), run_dir: Path | None = None, log=print, wor
     info_path = run_dir / "run.json"
     info = json.loads(info_path.read_text()) if info_path.exists() else {}
     want = {"tier": "t1", "profile": "tier1", "search_overrides": {}, "code": code}
-    if resume:
+    if resume and any((run_dir / d).exists() for d in ("spans", "known_point")):
         check_resumable(info, want, run_dir)
     unknown = sorted(set(only or []) - set(unit_ids(sets)))
     if unknown:

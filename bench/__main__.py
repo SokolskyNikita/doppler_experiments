@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -65,6 +66,12 @@ def main(argv=None):
     c = sub.add_parser("compare", help="print the difference between two benchmark runs")
     c.add_argument("a", type=Path); c.add_argument("b", type=Path)
     a = ap.parse_args(argv)
+    # on a fleet box `runs launch` sets $RUN (the job's run folder) and, with --shards, this box's shard
+    env_shard = (f"{os.environ['DOPPLERTRACK_SHARD']}/{os.environ['DOPPLERTRACK_SHARDS']}"
+                 if os.environ.get("DOPPLERTRACK_SHARD") and os.environ.get("DOPPLERTRACK_SHARDS") else None)
+    if a.cmd in ("run", "tier1"):
+        a.run_dir = a.run_dir or (Path(os.environ["RUN"]) if os.environ.get("RUN") else None)
+        a.shard = a.shard or env_shard
 
     if a.cmd == "validate":
         try:

@@ -868,7 +868,7 @@ def run_bench(case_ids: list[str], tier: str = "t2", run_dir: Path | None = None
     info = json.loads(info_path.read_text()) if info_path.exists() else {}
     want = {"tier": tier, "profile": profile, "search_overrides": overrides, "code": code}
     done = [c for c in case_ids if (run_dir / c / "entry.json").exists()]
-    if resume:
+    if resume and done:      # with nothing finished yet a resume is a fresh start, so one command serves both
         check_resumable(info, want, run_dir)
         log(f"resuming {run_dir}: {len(done)} of {len(case_ids)} cases already have entries")
     elif done:

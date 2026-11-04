@@ -412,12 +412,34 @@ def test_inputs_name_each_profiles_flight_data_and_cpa_table():
     from bench import inputs
     loc = inputs.run_inputs(["oyster-bay"], "locate")
     fit = inputs.run_inputs(["oyster-bay"], "saved-fit")
-    paths = lambda doc, kind: {e["path"] for e in doc[kind]}             # noqa: E731
+    for doc in (loc, fit):          # tools/data/shards.py's shape, which `runs launch` reads
+        assert set(doc) == {"cases", "inputs", "cache_kinds", "cpa_tables", "detail"} and doc["cases"] == ["oyster-bay"]
+        assert all(isinstance(p, str) and not p.startswith("raw/") for p in doc["inputs"])
     v2 = cases.latest_case("oyster-bay")["flight_data"]["locate_traces"]
-    assert v2 in paths(loc, "data") and v2 not in paths(fit, "data")
-    assert any(p.endswith("-locate.npz") for p in paths(loc, "cache"))
-    assert not any(p.endswith("-locate.npz") for p in paths(fit, "cache"))
-    assert "docs/results/oyster_bay_ev1.json" in paths(fit, "repo")
+    assert v2 in loc["inputs"] and v2 not in fit["inputs"]
+    assert any(p.endswith("-locate.npz") for p in loc["cpa_tables"])
+    assert not any(p.endswith("-locate.npz") for p in fit["cpa_tables"])
+    assert "docs/results/oyster_bay_ev1.json" in {e["path"] for e in fit["detail"]["repo"]}
     t1 = inputs.tier1_inputs()
-    assert {"detections/", "window_fits/"} <= paths(t1, "cache")
-    assert not any(p.startswith("cpa/") for p in paths(t1, "cache"))      # the known point needs no table
+    assert {"detections", "window_fits", "terrarium"} <= set(t1["cache_kinds"])
+    assert t1["cpa_tables"] == []                           # the known point needs no table
+
+
+def test_a_box_command_with_resume_starts_fresh_and_continues_alike(tmp_path, fake_runs):
+    ran, _ = fake_runs
+    run = tmp_path / "run"
+    run.mkdir()
+    runner.run_bench(["a", "b"], run_dir=run, profile="locate", resume=True)      # nothing finished: a fresh start
+    runner.run_bench(["a", "b", "c"], run_dir=run, profile="locate", resume=True)  # a restarted box: only c runs
+    assert ran == ["a", "b", "c"]
+
+
+def test_the_box_environment_sets_the_run_folder_and_the_shard(tmp_path, monkeypatch):
+    from bench import __main__ as cli
+    seen = {}
+    monkeypatch.setattr(runner, "run_bench", lambda ids, **kw: seen.update(kw) or kw["run_dir"])
+    monkeypatch.setenv("RUN", str(tmp_path))
+    monkeypatch.setenv("DOPPLERTRACK_SHARD", "2")
+    monkeypatch.setenv("DOPPLERTRACK_SHARDS", "10")
+    cli.main(["run", "--profile", "locate", "oyster-bay"])
+    assert seen["run_dir"] == tmp_path and seen["shard"] == "2/10"

@@ -137,21 +137,27 @@ def pick_detected(detected: list[dict]) -> list[dict]:
 
 
 def sound_speed(case: dict) -> tuple[dict, dict]:
-    """The case's speed of sound, as keyword arguments for the pipeline ({} keeps its 15 C default untouched)
-    and as the record's account of where it came from."""
-    from dopplertrack.atmosphere import mid_height_temperature
+    """The case's speed of sound for the event fits and detection, as keyword arguments ({} keeps the pipeline's
+    15 C default untouched), and the record's account of it. With a station temperature, the geometry gives each
+    flight its own speed from its height (geometry_kw)."""
     from dopplertrack.doppler import speed_of_sound
     w = case.get("weather") or {}
     t = w.get("temperature_c")
     if t is None:
         return {}, {"c_m_s": speed_of_sound(), "temperature_c": None, "basis": "the pipeline's default, 15 C"}
-    h = w.get("aircraft_height_m")
-    eff = t if h is None else mid_height_temperature(t, h)
-    c = speed_of_sound(eff)
-    return {"c": c}, {"c_m_s": c, "temperature_c": t, "aircraft_height_m": h, "effective_temperature_c": eff,
-                      "basis": "ground temperature" if h is None else "temperature halfway up (ground - 3.25 C per km)",
+    c = speed_of_sound(t)
+    return {"c": c}, {"c_m_s": c, "temperature_c": t,
+                      "basis": "the ground temperature for the fits; for the geometry each flight's own speed at its "
+                               "mid-height temperature (ground - 3.25 C per km, atmosphere.point_sound_speed)",
                       "source": w.get("source"), "station": w.get("station"),
                       "station_distance_km": w.get("station_distance_km"), "observed_utc": w.get("observed_utc")}
+
+
+def geometry_kw(case: dict) -> dict:
+    """run_search, refine and pick_flight's speed-of-sound keywords: the fits' c, and with a station temperature
+    temperature_c, so each flight's propagation uses its own height."""
+    c_kw, rec = sound_speed(case)
+    return {**c_kw, "temperature_c": rec["temperature_c"]} if c_kw else {}
 
 
 def trace_paths(case: dict, key: str = "traces") -> list[Path]:
@@ -236,7 +242,7 @@ class Draft:
         self.params = {"profile": profile, "profile_settings": PROFILES[profile], "search": s, "refine": case["refine"],
                        "search_overrides": overrides, "events": case["events"], "search_harmonics": self.harmonics,
                        "speed_of_sound_m_s": sound_speed(case)[1]["c_m_s"], "speed_of_sound": sound_speed(case)[1]}
-        self.c_kw = sound_speed(case)[0]
+        self.c_kw, self.geo_kw = sound_speed(case)[0], geometry_kw(case)
         self.inputs, self.caches, self.events, self.candidates = [], [], [], []
         self.refined = unavailable("the search did not run")
         self.funnel = {k: unavailable("the search did not run") for k in (
@@ -427,7 +433,7 @@ def execute_case(case: dict, case_dir: Path, log=print, code: dict | None = None
                                             silence_d_m=s["silence_d_m"], max_range_m=s["max_range_m"],
                                             progress=False, cpa_cache=str(cache_path),
                                             trace_metadata=meta, search_bbox=tuple(s["bbox"]), triples=triples,
-                                            **draft.c_kw, **draft.extra_kwargs)
+                                            **draft.geo_kw, **draft.extra_kwargs)
         draft.caches.append(file_entry("cpa_table", cache_path))
         draft.stage.stages += [{"name": f"search.{k}", "wall_s": round(v["wall_s"], 3), "cpu_s": round(v["cpu_s"], 3)}
                                for k, v in res.attrs.get("stages", {}).items()]
@@ -448,7 +454,7 @@ def execute_case(case: dict, case_dir: Path, log=print, code: dict | None = None
                 fine = pipeline.refine(sp, ev1, ev2, segs, row, spacing_m=rf["spacing_m"], half_m=rf["half_m"],
                                        harmonics=tuple(harmonics[:2]), elevation=terrain.elevation if terrain else None,
                                        extra=ev[2:], extra_harmonics=hs[2:], max_range_m=s["max_range_m"],
-                                       **draft.c_kw)
+                                       **draft.geo_kw)
             draft.add_refined(fine, list(fine.attrs.get("extra_icao", [])))
     except Exception as exc:          # kept apart from the verdict: a failed run is not an abstention
         draft.errors.append(f"{type(exc).__name__}: {exc}")
@@ -726,6 +732,7 @@ def execute_case_locate(case: dict, case_dir: Path, log=print, code: dict | None
     cfg = loc.LocateConfig(spacing_m=s["spacing_m"], max_range_m=s["max_range_m"], tol_s=s["tol_s"], v_tol=s["v_tol"],
                            d_tol=tuple(s["d_tol"]), silence_d_m=overrides.get("silence_d_m"),
                            pair_rule=overrides.get("pair_rule", "top2"), dem=s["dem"], c=sound_speed(case)[0].get("c"),
+                           temperature_c=sound_speed(case)[1]["temperature_c"],
                            refine_spacing_m=case["refine"]["spacing_m"], refine_half_m=case["refine"]["half_m"],
                            cpa_cache=cpa_cache, envelope=envelope,
                            extra={"search_overrides": overrides, "speed_of_sound": sound_speed(case)[1]})

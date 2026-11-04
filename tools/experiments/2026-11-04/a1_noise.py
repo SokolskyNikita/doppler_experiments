@@ -15,7 +15,8 @@ Decision, fixed before the result:
 - otherwise inside the null's noise at this n. Then the follow-up is the same search at the n that would put the
   observed gap at 2 standard errors (the gap's spread falls as 1 / sqrt(n)), reported here as n_needed.
 
-usage: a1_noise.py RUN [UNIT_FOLDER_ROOT ...]   (RUN holds plan.json; units are looked up in RUN and the others)
+usage: a1_noise.py RUN [UNIT_FOLDER_ROOT ...]   (RUN holds plan.json; units are looked up in RUN, the others and
+the --resume folders RUN's run.json records, so a merged run of shards needs nothing more)
 Writes RUN/a1_noise.json and prints it."""
 import json
 import sys
@@ -98,6 +99,12 @@ def main(run: Path, roots: list[Path]):
     print(json.dumps(out, indent=1))
 
 
+def roots_of(run: Path, extra: list[str]) -> list[Path]:
+    info = json.loads((run / "run.json").read_text()) if (run / "run.json").exists() else {}
+    resumed = [Path(r) for inv in info.get("invocations", []) for r in inv.get("resume", [])]
+    return list(dict.fromkeys([run, *map(Path, extra), *resumed]))
+
+
 if __name__ == "__main__":
     run = Path(sys.argv[1])
-    main(run, [run, *map(Path, sys.argv[2:])])
+    main(run, roots_of(run, sys.argv[2:]))

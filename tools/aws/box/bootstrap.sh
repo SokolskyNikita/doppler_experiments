@@ -10,7 +10,8 @@ shutdown -h +30     # a boot that hangs before the supervisor starts still ends;
 IMDS=http://169.254.169.254/latest
 TOKEN=$(curl -sfX PUT "$IMDS/api/token" -H 'X-aws-ec2-metadata-token-ttl-seconds: 21600')
 md() { curl -sf -H "X-aws-ec2-metadata-token: $TOKEN" "$IMDS/meta-data/$1"; }
-export AWS_REGION=$(md placement/region) HOME=/root DEBIAN_FRONTEND=noninteractive
+AWS_REGION=$(md placement/region)
+export AWS_REGION HOME=/root DEBIAN_FRONTEND=noninteractive
 JOB=$(md tags/instance/dopplertrack-job) || { echo "no dopplertrack-job tag"; shutdown -h now; exit 1; }
 echo "dopplertrack job $JOB on $(md instance-type) in $(md placement/availability-zone)"
 
@@ -30,7 +31,7 @@ DEVS=$(lsblk -dpno NAME,MODEL | awk '/Instance Storage/ {print $1}')
 DEV=""
 if [ -n "$DEVS" ]; then
   if [ "$(echo $DEVS | wc -w)" -gt 1 ]; then
-    mdadm --create /dev/md0 --level=0 --raid-devices=$(echo $DEVS | wc -w) $DEVS --run && DEV=/dev/md0
+    mdadm --create /dev/md0 --level=0 --raid-devices="$(echo $DEVS | wc -w)" $DEVS --run && DEV=/dev/md0
   else
     DEV=$DEVS
   fi

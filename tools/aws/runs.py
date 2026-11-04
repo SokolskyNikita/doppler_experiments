@@ -5,6 +5,7 @@
     tools/aws/runs status [JOB]      tools/aws/runs wait JOB      tools/aws/runs pull JOB
     tools/aws/runs log JOB           tools/aws/runs cancel JOB    tools/aws/runs interrupt JOB
     tools/aws/runs seed-tools        tools/aws/runs seed [--dry-run]
+    tools/aws/runs fetch-sources [--dry-run]
     tools/aws/runs dev start|stop|status|shell|sync|run -- <command>
 
 `launch` claims the job id <yyyy-mm-dd>-<topic>[-n] (free here and in the bucket), puts the branch (a git
@@ -42,9 +43,13 @@ TERMINAL = ("done", "failed", "interrupted", "timeout", "cancelled")
 CACHE_KINDS = ("detections", "window_fits", "terrarium")
 DATA_ROOT = Path(os.environ.get("DOPPLERTRACK_DATA", Path.home() / "data" / "dopplertrack"))
 CACHE_ROOT = Path(os.environ.get("DOPPLERTRACK_CACHE", Path.home() / ".cache" / "dopplertrack"))
-# what `seed` uploads: raw/ and derived/ (not reference/, the papers; not runs/, which come back per job)
-# and the caches above (PM decision, 2026-11-04)
-SEED_DATA = ("raw", "derived")
+# what `seed` uploads from this machine: the files with no public source a box could fetch them from (YouTube
+# blocks cloud addresses, xeno-canto needs the API key), derived/ and the small aux/ and models/, plus the
+# caches above; also A2O (its originals need a login) and the 1,203 small seismic windows. The rest of raw/
+# comes from its sources (`runs fetch-sources`). Never reference/ (the papers)
+# or runs/, which come back per job.
+SEED_DATA = ("derived", "raw/audio/youtube", "raw/audio/xenocanto", "raw/aux", "raw/models", "raw/audio/a2o",
+             "raw/seismic")
 TOOLS = "tools.json"
 
 
@@ -366,8 +371,8 @@ def seed_tools(a) -> None:
 
 
 def seed(a) -> None:
-    """Uploads the data root (raw/ without the papers, derived/) and the caches a job can use. Only new or
-    changed files are sent; nothing in the bucket is deleted."""
+    """Uploads SEED_DATA and the caches a job can use. Only new or changed files are sent; nothing in the
+    bucket is deleted."""
     bucket = outputs()["Bucket"]
     dry = ["--dryrun"] if a.dry_run else []
     for sub in SEED_DATA:
@@ -378,6 +383,75 @@ def seed(a) -> None:
         aws_cli("s3", "sync", "--only-show-errors", "--exclude", "locks/*", "--exclude", "*.lock", *dry,
                 str(CACHE_ROOT / kind), f"s3://{bucket}/cache/{kind}")
         print(f"cache/{kind}", flush=True)
+
+
+def manifest_files() -> list[dict]:
+    return json.loads((REPO / "bench" / "manifest.json").read_text())["files"]
+
+
+def bucket_sizes(s3, bucket: str, prefix: str) -> dict[str, int]:
+    out = {}
+    for page in s3.get_paginator("list_objects_v2").paginate(Bucket=bucket, Prefix=prefix):
+        out.update({o["Key"]: o["Size"] for o in page.get("Contents", [])})
+    return out
+
+
+def source_url(f: dict, zenodo: dict) -> str | None:
+    """Where a raw file can be downloaded again: adsb.lol's GitHub releases, or its Zenodo record (matched by
+    name and size). None if neither applies."""
+    name = Path(f["path"]).name
+    if f["path"].startswith("raw/adsb/") and "planes-readsb" in name:
+        tag = name.split(".tar")[0]
+        return f"https://github.com/adsblol/globe_history_{name[1:5]}/releases/download/{tag}/{name}"
+    m = re.match(r"https://zenodo\.org/records/(\d+)", f.get("source") or "")
+    if m:
+        rec = m.group(1)
+        if rec not in zenodo:
+            import urllib.request
+            with urllib.request.urlopen(f"https://zenodo.org/api/records/{rec}", timeout=60) as r:
+                zenodo[rec] = {x["key"]: x for x in json.loads(r.read())["files"]}
+        hit = zenodo[rec].get(name)
+        if hit and hit["size"] == f["bytes"]:
+            return hit["links"]["self"]
+    return None
+
+
+def fetch_plan(s3, bucket: str) -> tuple[list[dict], list[dict]]:
+    """The raw files not yet in the bucket at their size: those with a public URL, and the rest."""
+    have = bucket_sizes(s3, bucket, "data/raw/")
+    plan, rest, zenodo = [], [], {}
+    for f in manifest_files():
+        if not f["path"].startswith("raw/") or have.get(f"data/{f['path']}") == f["bytes"]:
+            continue
+        if any(f["path"].startswith(p + "/") for p in SEED_DATA):
+            continue       # `runs seed` sends these from here
+        url = source_url(f, zenodo)
+        (plan if url else rest).append({"path": f["path"], "url": url, "bytes": f["bytes"], "sha256": f["sha256"]})
+    return plan, rest
+
+
+def fetch_sources(a) -> None:
+    """Plans the download of every public raw file the bucket lacks and launches a box to fetch them."""
+    out = outputs()
+    bucket = out["Bucket"]
+    s3 = session().client("s3")
+    plan, rest = fetch_plan(s3, bucket)
+    gb = sum(i["bytes"] for i in plan) / 1e9
+    print(f"{len(plan)} files ({gb:.1f} GB) to fetch from their sources")
+    for r in rest:
+        print(f"  no public URL, sent from here: {r['path']} ({r['bytes'] / 1e6:.1f} MB)")
+    if a.dry_run:
+        return
+    for r in rest:       # files written alongside the downloads (record metadata, checksum lists): small
+        s3.upload_file(str(DATA_ROOT / r["path"]), bucket, f"data/{r['path']}")
+    if not plan:
+        return
+    key = f"plans/{datetime.datetime.now():%Y%m%d-%H%M%S}-fetch.json"
+    s3.put_object(Bucket=bucket, Key=key, Body=json.dumps({"files": plan}, indent=1).encode())
+    a.topic, a.case, a.input, a.cache, a.jobs = "aws-fetch-sources", [], [], [], None
+    a.on_demand, a.max_hours, a.checkpoint_minutes, a.wait = False, 6, 5, False
+    a.command = ["python3", "tools/aws/box/fetch_sources.py", f"s3://{bucket}/{key}", bucket]
+    launch(a)
 
 
 # ---- the dev box ---------------------------------------------------------------------------------------
@@ -396,7 +470,9 @@ def dev(a) -> None:
     elif a.action == "status":
         i = ec2.describe_instances(InstanceIds=[iid])["Reservations"][0]["Instances"][0]
         print(iid, i["State"]["Name"], i["InstanceType"], i["Placement"]["AvailabilityZone"])
-    elif a.action == "shell":
+    elif a.action in ("shell", "sync", "run"):
+        dev_ready(ec2, iid)
+    if a.action == "shell":
         os.execvp("aws", ["aws", "--profile", profile(), "--region", REGION, "ssm", "start-session",
                           "--target", iid])
     elif a.action == "sync":
@@ -409,6 +485,24 @@ def dev(a) -> None:
 DEV_CHECKOUT = "/home/ubuntu/branch"
 
 
+def dev_ready(ec2, iid: str) -> None:
+    """Starts the dev box if the idle alarm stopped it, and waits until Systems Manager can reach it."""
+    state = ec2.describe_instances(InstanceIds=[iid])["Reservations"][0]["Instances"][0]["State"]["Name"]
+    if state in ("stopped", "stopping"):
+        print(f"starting the dev box ({state})", flush=True)
+        if state == "stopping":
+            ec2.get_waiter("instance_stopped").wait(InstanceIds=[iid])
+        ec2.start_instances(InstanceIds=[iid])
+        ec2.get_waiter("instance_running").wait(InstanceIds=[iid])
+    ssm = session().client("ssm")
+    for _ in range(60):
+        info = ssm.describe_instance_information(Filters=[{"Key": "InstanceIds", "Values": [iid]}])
+        if [i for i in info["InstanceInformationList"] if i["PingStatus"] == "Online"]:
+            return
+        time.sleep(5)
+    sys.exit("the dev box is running but Systems Manager can't reach it")
+
+
 def dev_sync(out: dict) -> str:
     """Puts this branch on the dev box at ~/branch: the same bundle, diff and untracked files as a job."""
     bucket = out["Bucket"]
@@ -418,15 +512,10 @@ def dev_sync(out: dict) -> str:
         code = code_bundle(Path(tmp))
         for f in sorted(Path(tmp).iterdir()):
             s3.upload_file(str(f), bucket, f"{key}/code/{f.name}")
-    new, sync = f"{DEV_CHECKOUT}.new", "/tmp/devsync"
-    script = "; ".join([      # one line: Run Command doesn't keep a script's newlines through the login shell
-        "set -e", f"rm -rf {new} {sync}", f"mkdir -p {sync}",
-        f"s5cmd --log error cp 's3://{bucket}/{key}/code/*' {sync}/",
-        f"git clone -q --no-checkout {sync}/code.bundle {new}",
-        f"git -C {new} checkout -q --detach {code['git_commit']}",
-        f"if [ -s {sync}/dirty.patch ]; then git -C {new} apply --binary {sync}/dirty.patch; fi",
-        f"if [ -s {sync}/untracked.tar ]; then tar xf {sync}/untracked.tar -C {new}; fi",
-        f"rm -rf {DEV_CHECKOUT}", f"mv {new} {DEV_CHECKOUT}", f"cd {DEV_CHECKOUT}", "uv sync --frozen -q"])
+    s3.upload_file(str(HERE / "box" / "devsync.sh"), bucket, f"{key}/devsync.sh")
+    # the script travels as a file: Run Command and the login shell would each re-quote an inline one
+    script = (f"s5cmd --log error cp 's3://{bucket}/{key}/devsync.sh' /tmp/devsync.sh && "
+              f"bash /tmp/devsync.sh s3://{bucket}/{key}/code {code['git_commit']} {DEV_CHECKOUT}")
     dev_run(out["DevBoxId"], script, cwd=None, quiet=True)
     print(f"dev box ~/branch at {code['git_commit'][:7]}{' (dirty)' if code['git_dirty'] else ''}")
     return code["git_commit"]
@@ -483,7 +572,10 @@ def main(argv=None) -> None:
         p = sub.add_parser(name, help=help_)
         p.add_argument("job", nargs="?" if name == "status" else None)
     sub.add_parser("seed-tools", help="put uv and ffmpeg for each architecture in the bucket")
-    sd = sub.add_parser("seed", help="upload the data root and caches (long the first time)")
+    fs = sub.add_parser("fetch-sources", help="fetch the public raw files the bucket lacks on a box")
+    fs.add_argument("--size", default="4xlarge", help="instance size (default: 4xlarge; the job is network-bound)")
+    fs.add_argument("--dry-run", action="store_true", help="only print the plan")
+    sd = sub.add_parser("seed", help="upload what has no public source, and the caches")
     sd.add_argument("--dry-run", action="store_true")
     dv = sub.add_parser("dev", help="the persistent dev box")
     dv.add_argument("action", choices=("start", "stop", "status", "shell", "sync", "run"))
@@ -505,7 +597,8 @@ def main(argv=None) -> None:
             sys.exit(0 if st.get("state") == "done" else 1)
     else:
         {"status": status, "wait": wait, "pull": pull, "log": log, "cancel": cancel, "interrupt": interrupt,
-         "seed-tools": seed_tools, "seed": seed, "dev": dev}[a.cmd](a)
+         "seed-tools": seed_tools, "seed": seed, "fetch-sources": fetch_sources,
+         "dev": dev}[a.cmd](a)
 
 
 if __name__ == "__main__":

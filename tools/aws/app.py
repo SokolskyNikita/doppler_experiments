@@ -3,11 +3,11 @@
 What it holds:
 - the bucket: the data root (data/), the seeded caches (cache/), the tools a box installs (tools/), job specs
   and code (jobs/), run folders (runs/) and the cache entries jobs add (cache-deltas/). Private, public
-  access blocked, TLS only, kept when the stack is deleted;
+  access blocked, TLS only, versioned (a replaced object is kept 30 days), kept when the stack is deleted;
 - a VPC with a public subnet in each of the four AZs, no NAT, and a free S3 gateway endpoint;
 - a security group with no inbound rules: the boxes are reached through Systems Manager only;
-- the boxes' role: Systems Manager, read on the bucket, and writes under jobs/, runs/ and cache-deltas/
-  only, so a job can't change data/, cache/ or tools/;
+- the boxes' role: Systems Manager, read on the bucket, and writes (no deletes) under jobs/, runs/,
+  cache-deltas/, data/raw/ and data/derived/, so a job can't touch cache/ or tools/;
 - a launch template per architecture (arm64 for c8g, c8gd, c7g; amd64 for c7a) on the stock Ubuntu 24.04
   image, whose user data is box/bootstrap.sh; `runs launch` starts an instant EC2 Fleet over both;
 - the dev box, a c8g.2xlarge on demand, stopped by an alarm after 30 min below 5 % CPU."""
@@ -48,8 +48,9 @@ class FleetStack(cdk.Stack):
             self, "Data", bucket_name=f"dopplertrack-{self.account}-{self.region}",
             block_public_access=s3.BlockPublicAccess.BLOCK_ALL, encryption=s3.BucketEncryption.S3_MANAGED,
             enforce_ssl=True, object_ownership=s3.ObjectOwnership.BUCKET_OWNER_ENFORCED,
-            removal_policy=cdk.RemovalPolicy.RETAIN,
-            lifecycle_rules=[s3.LifecycleRule(abort_incomplete_multipart_upload_after=cdk.Duration.days(2)),
+            removal_policy=cdk.RemovalPolicy.RETAIN, versioned=True,
+            lifecycle_rules=[s3.LifecycleRule(abort_incomplete_multipart_upload_after=cdk.Duration.days(2),
+                                              noncurrent_version_expiration=cdk.Duration.days(30)),
                              s3.LifecycleRule(prefix="jobs/", expiration=cdk.Duration.days(60)),
                              s3.LifecycleRule(prefix="dev/", expiration=cdk.Duration.days(7))])
 
@@ -65,7 +66,9 @@ class FleetStack(cdk.Stack):
                         managed_policies=[iam.ManagedPolicy.from_aws_managed_policy_name(
                             "AmazonSSMManagedInstanceCore")])
         bucket.grant_read(role)
-        for prefix in ("jobs/*", "runs/*", "cache-deltas/*"):
+        # data/raw/ and data/derived/ too, so a job can fetch a raw file from its source or build a derived one;
+        # the role has no delete, and the bucket keeps every replaced version for 30 days
+        for prefix in ("jobs/*", "runs/*", "cache-deltas/*", "data/raw/*", "data/derived/*"):
             bucket.grant_put(role, prefix)
 
         templates = {}

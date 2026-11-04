@@ -270,6 +270,7 @@ def main(argv=None) -> int:
     runs_before, cache_before = run_folders(data) - {spec["run"]}, cache_files(cache)
 
     env = {**os.environ, "DOPPLERTRACK_DATA": str(data), "DOPPLERTRACK_CACHE": str(cache), "RUN": str(run),
+           "DOPPLERTRACK_JOB": args.job,
            "UV_CACHE_DIR": str(SCRATCH / "uv-cache"), "PYTHONUNBUFFERED": "1"}
     env.pop("DOPPLERTRACK_JOBS", None)
     if spec.get("jobs"):

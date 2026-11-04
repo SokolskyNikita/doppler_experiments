@@ -7,14 +7,15 @@ exec > >(tee -a /var/log/dopplertrack-boot.log > /dev/console) 2>&1
 BUCKET=@@BUCKET@@
 IMDS=http://169.254.169.254/latest
 TOKEN=$(curl -sfX PUT "$IMDS/api/token" -H 'X-aws-ec2-metadata-token-ttl-seconds: 21600')
-export AWS_REGION=$(curl -sf -H "X-aws-ec2-metadata-token: $TOKEN" "$IMDS/meta-data/placement/region")
+AWS_REGION=$(curl -sf -H "X-aws-ec2-metadata-token: $TOKEN" "$IMDS/meta-data/placement/region")
+export AWS_REGION
 export HOME=/root DEBIAN_FRONTEND=noninteractive
 S5=s5cmd_2.3.0_Linux-arm64.tar.gz
 curl -sfL -o "/tmp/$S5" "https://github.com/peak/s5cmd/releases/download/v2.3.0/$S5"
 echo "1439f0d00ecedcd2a2f1f2c6749bbb0152b2257bf5086f29646ec8ae38798e24  /tmp/$S5" | sha256sum -c --quiet || exit 1
 tar xzf "/tmp/$S5" -C /usr/local/bin s5cmd
 # on the first deploy the box boots before `runs seed-tools` has filled tools/; tools.json goes up last
-for i in $(seq 1 120); do
+for _ in $(seq 1 120); do
   s5cmd --log error ls "s3://$BUCKET/tools/tools.json" >/dev/null 2>&1 && break
   sleep 30
 done

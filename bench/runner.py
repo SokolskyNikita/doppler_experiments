@@ -9,6 +9,7 @@ import contextlib
 import datetime
 import io
 import json
+import math
 import os
 import resource
 import subprocess
@@ -22,7 +23,7 @@ import numpy as np
 from dopplertrack.result import (CONVENTIONS_V1, KIND, SCHEMA_VERSION, RecordError, file_entry, read_record,
                                  unavailable, write_record)
 
-from .cases import REPO, blind_case, case_labels, case_profiles, latest_case, resolve
+from .cases import REPO, blind_case, case_labels, case_profiles, data_root, latest_case, resolve
 
 NO_VERDICT = "no verdict or abstention exists before Phase 4"
 NO_REGION = "no uncertainty region exists before Phase 4"
@@ -625,13 +626,46 @@ def _package_version() -> str:
 HASH_FILE = "result.json.sha256"
 
 
+@contextlib.contextmanager
+def private_cache(case: dict):
+    """For a private case, every cache (detections, window fits, CPA tables) under the data root's private/cache/
+    while it runs, and the shared root back afterwards; worker pools started inside inherit it."""
+    from .cases import is_private, private_cache_root
+    if not is_private(case):
+        yield
+        return
+    before = os.environ.get("DOPPLERTRACK_CACHE")
+    os.environ["DOPPLERTRACK_CACHE"] = str(private_cache_root())
+    try:
+        yield
+    finally:
+        if before is None:
+            os.environ.pop("DOPPLERTRACK_CACHE", None)
+        else:
+            os.environ["DOPPLERTRACK_CACHE"] = before
+
+
 def bench_case(case_id: str, case_dir: Path, execute=execute_case, labels=case_labels, cases_path=None,
-               log=print, code: dict | None = None) -> dict:
-    """Run one case blind, write result.json and its hash, and only then read the labels and score it."""
+               log=print, code: dict | None = None, reveal: bool = False) -> dict:
+    """Run one case blind, write result.json and its hash, and only then read the labels and score it. A private
+    case (bench/private.py) is resolved from $DOPPLERTRACK_DATA/private/, run with its caches there, and its record
+    written in the site's frame unless reveal, after a check that no position near the site is left in it."""
+    from .cases import is_private
     kw = {} if cases_path is None else {"path": cases_path}
     case = blind_case(case_id, **kw)
+    private = is_private(case)
+    if private:
+        from . import private as priv
+        case = priv.resolve_case(case)
     case_dir.mkdir(parents=True, exist_ok=True)
-    record = execute(case, case_dir, log=log, code=code or code_revision())
+    with private_cache(case):
+        record = execute(case, case_dir, log=log, code=code or code_revision())
+    if private and not reveal:
+        site = priv.load_site(case["site"])
+        record = priv.to_site_relative(record, case["site"], site, case_dir)
+        priv.assert_no_site(record, site)
+    elif private:
+        record["provenance"]["parameters"]["revealed"] = "absolute coordinates, by the owner's --reveal"
     sha = write_record(case_dir / "result.json", record)
     (case_dir / HASH_FILE).write_text(f"{sha}  result.json\n")
     meta = {k: case[k] for k in ("id", "version", "group", "set", "expected_outcome")}
@@ -677,12 +711,25 @@ def compare_case(case_dir: Path, meta: dict, read_labels) -> dict:
                  search_overrides=record["provenance"]["parameters"].get("search_overrides", {}))
     lab = read_labels()
     ref = lab["reference"]
+    relative = record.get("frame") == "site-relative"     # a private case: offsets from the site, the reference
+    if "site" in ref and not relative:                   # a revealed private record: the site, read in place
+        from .private import load_site
+        ref = load_site(ref["site"])
+
+    def err(item):
+        if relative:
+            return math.hypot(item["offset_m"]["east"], item["offset_m"]["north"])
+        return _distance_m(item["lat"], item["lon"], ref["lat"], ref["lon"])
     box = record["provenance"]["parameters"]["search"]["bbox"]
-    entry["box_centre_error_m"] = _distance_m((box[0] + box[1]) / 2, (box[2] + box[3]) / 2, ref["lat"], ref["lon"])
+    if relative:
+        s_, n_, w_, e_ = box["offset_box_m"]
+        entry["box_centre_error_m"] = math.hypot((w_ + e_) / 2, (s_ + n_) / 2)
+    else:
+        entry["box_centre_error_m"] = _distance_m((box[0] + box[1]) / 2, (box[2] + box[3]) / 2, ref["lat"], ref["lon"])
     cands = record["candidates"]
     pair = lab.get("true_pair")
     if cands:
-        entry["top_error_m"] = _distance_m(cands[0]["lat"], cands[0]["lon"], ref["lat"], ref["lon"])
+        entry["top_error_m"] = err(cands[0])
         entry["top_pair"] = cands[0]["flights"]
         entry["margin_pct"] = (100.0 * (cands[0]["score"] - cands[1]["score"]) / cands[1]["score"]
                                if len(cands) > 1 and cands[1]["score"] > 0 else unavailable("fewer than two flight pairs"))
@@ -697,8 +744,8 @@ def compare_case(case_dir: Path, meta: dict, read_labels) -> dict:
             entry["verdict_as_expected"] = (v["outcome"] == want["outcome"]
                                             and set(want["reason_codes"]) <= set(v["reason_codes"]))
     ref_ = record["refined"]
-    entry["refined_error_m"] = (_distance_m(ref_["lat"], ref_["lon"], ref["lat"], ref["lon"])
-                                if isinstance(ref_, dict) and "lat" in ref_ else unavailable("no refinement"))
+    entry["refined_error_m"] = (err(ref_) if isinstance(ref_, dict) and ("lat" in ref_ or "offset_m" in ref_)
+                                else unavailable("no refinement"))
     if pair:
         ranks = [c["rank"] for c in cands if c["flights"] == list(pair)]
         entry["true_pair_rank"] = ranks[0] if ranks else None
@@ -715,7 +762,8 @@ def compare_case(case_dir: Path, meta: dict, read_labels) -> dict:
             nearest = {}
             for stg in tf["stages"]:
                 m = (triples[f"{stg}__icao1"] == pair[0]) & (triples[f"{stg}__icao2"] == pair[1])
-                d = _distances_m(triples[f"{stg}__lat"][m], triples[f"{stg}__lon"][m], ref["lat"], ref["lon"])
+                d = (np.hypot(triples[f"{stg}__east"][m], triples[f"{stg}__north"][m]) if relative else
+                     _distances_m(triples[f"{stg}__lat"][m], triples[f"{stg}__lon"][m], ref["lat"], ref["lon"]))
                 nearest[stg] = float(d.min()) if len(d) else None
             # decided at the stage that reaches scoring; the earlier stages say where it was lost
             near = nearest.get("scored")
@@ -819,7 +867,7 @@ def overrides_tag(overrides: dict) -> str:
     return hashlib.sha256(json.dumps(overrides, sort_keys=True).encode()).hexdigest()[:8]
 
 
-def run_one(cid: str, run_dir: Path, execute, code: dict, log=print) -> dict:
+def run_one(cid: str, run_dir: Path, execute, code: dict, log=print, reveal: bool = False) -> dict:
     """One case into run_dir/<cid>/, with its log beside it; the scoreboard entry also goes to entry.json."""
     case_dir = run_dir / cid
     case_dir.mkdir(parents=True, exist_ok=True)
@@ -828,7 +876,7 @@ def run_one(cid: str, run_dir: Path, execute, code: dict, log=print) -> dict:
             print(msg, file=fh, flush=True)
             log(msg)
         w0 = time.perf_counter()
-        entry = bench_case(cid, case_dir, execute=execute, log=case_log, code=code)
+        entry = bench_case(cid, case_dir, execute=execute, log=case_log, code=code, reveal=reveal)
         log(f"{cid}: {entry['status']} in {time.perf_counter() - w0:.0f} s")
     tmp = case_dir / ".entry.json.tmp"
     tmp.write_text(json.dumps(entry, indent=1, sort_keys=True) + "\n")
@@ -878,7 +926,8 @@ def write_results(run_dir: Path, info: dict, case_ids: list[str], crashed: dict 
 
 def run_bench(case_ids: list[str], tier: str = "t2", run_dir: Path | None = None, log=print,
               revision: str | None = None, profile: str = "saved-fit", parallel: int = 1,
-              overrides: dict | None = None, shard: str | None = None, resume: bool = False) -> Path:
+              overrides: dict | None = None, shard: str | None = None, resume: bool = False,
+              reveal: bool = False) -> Path:
     """Run cases into a new run folder (or `run_dir`) and collect their scoreboard entries in results.json.
     revision: None runs this checkout in-process; any other commit-ish is exported, verified and run
     through its own CLI (bench/revisions.py). parallel > 1 runs that many cases at once, each in its own
@@ -893,8 +942,20 @@ def run_bench(case_ids: list[str], tier: str = "t2", run_dir: Path | None = None
         raise ValueError(f"{excluded} don't run under the {profile} profile (their cases' profiles field)")
     code, execute = _executor(revision, profile, log, overrides=overrides)
     commit = code["git_commit"]
+    from .cases import is_private
+    private = [c for c in case_ids if is_private(latest_case(c))]
+    if private and len(private) != len(case_ids):
+        raise ValueError(f"{private} are private and can't share a run folder with public cases")
+    if private and (revision is not None or parallel > 1):
+        raise ValueError("private cases run in-process from this checkout only")
     if resume and run_dir is None:
         raise ValueError("resume needs the stopped run's --run-dir")
+    if private and run_dir is not None and not Path(run_dir).resolve().is_relative_to(
+            (data_root() / "private").resolve()):
+        raise ValueError(f"a private case's run folder must be under {data_root() / 'private'}")
+    if private and run_dir is None:
+        from .private import new_private_run
+        run_dir = new_private_run(f"bench-{(commit if isinstance(commit, str) else 'nogit')[:7]}-{profile}-{tier}")
     if run_dir is None:
         tag = f"-o{overrides_tag(overrides)}" if overrides else ""
         sh = f"-s{shard.replace('/', 'of')}" if shard else ""
@@ -914,7 +975,7 @@ def run_bench(case_ids: list[str], tier: str = "t2", run_dir: Path | None = None
     if parallel <= 1:
         info_path.write_text(json.dumps(info, indent=1) + "\n")
         for cid in todo:
-            run_one(cid, run_dir, execute, code, log)
+            run_one(cid, run_dir, execute, code, log, reveal=reveal)
             write_results(run_dir, info, case_ids)
     else:
         # each case's own pools get an equal share of the cores, so N cases never start N full-size pools

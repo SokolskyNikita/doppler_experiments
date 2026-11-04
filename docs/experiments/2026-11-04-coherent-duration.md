@@ -2,7 +2,7 @@
 
 <!-- index
 question: Does aligning waveform cycles over 6 s or 18 s, rather than nine 2 s blocks or today's curve score, recover weak real flyovers at a fixed false-alarm rate when the detector also picks the flight?
-outcome: Pending: both verification gates failed narrowly (gate 1 by 0.2 dB on a 1 dB grid, gate 2 by 0.5 dB) and the Gumbel thresholds fit poorly; nothing else has run
+outcome: Pending: both gates failed narrowly on Gumbel thresholds that don't fit real background (KS 0.11-0.35); the one retune (empirical tail, 0.5 dB grid) reruns them
 -->
 
 ## Question and criterion
@@ -43,7 +43,22 @@ As set in [the proposal](../proposals/2026-11-04-coherent-duration.md), fixed be
   about 0.10. The background maxima have heavier tails than a Gumbel, from jets and birds in the Essex and AeroSonicDB
   audio. So each γ is an extrapolation that can't be trusted to a dB, and both gates' margins are smaller than that.
 
-## Status
+**A finding of its own: the Gumbel fails on real background maxima.**
+- On the verdict null's other-day traffic the same fit behaved: KS 0.09–0.19 at n = 50
+  ([verdict-null](2026-11-04-verdict-null.md)).
+- On this background audio it doesn't: KS 0.11–0.35 at n = 200.
+- So a null drawn from background audio needs an empirical tail, not a fitted extreme-value law.
 
-Under the proposal, a failed gate stops the test set until the gate is fixed. The one counted retune hasn't been
-spent. What to change is the PM's decision, recorded here when made.
+## The one counted retune (PM, 2026-11-04), written before its rerun
+
+Gate 1's miss is not accepted as rounding: a gate loosened after the result is no gate. The retune changes two
+things, and nothing else.
+- **(a) Thresholds from an empirical tail.** For each pass and method, the threshold is the empirical 1 − 1/200 point
+  of all 419 calibration segments' maxima (numpy's `higher` quantile, the second-highest of 419). It comes with a
+  1,000-resample bootstrap interval. The Gumbel fit is kept only as the KS diagnostic. This fixes the null estimator's
+  defect; it isn't a knob.
+- **(b) A 0.5 dB level grid,** from +6 to −20 dB, for resolution.
+- **Unchanged:** the methods, the search, the backgrounds and their scaling, the passes, the evaluation segments, both
+  gate criteria and the test rule.
+- **Then:** the gates rerun. If both pass, the settings freeze and the test set runs. If either fails, the record says
+  so, and nothing more is spent.

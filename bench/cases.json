@@ -4006,7 +4006,7 @@
     },
     {
      "path": "derived/eclipse/ESID_375/rec_full.npz",
-     "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+     "sha256": "c075659125dbe6689bf8978d612699a2ef9561cf06d9bc269bb78264f83c63da",
      "recipe": [
       [
        "python",
@@ -4469,7 +4469,7 @@
     },
     {
      "path": "derived/eclipse/ESID_710/rec_full.npz",
-     "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+     "sha256": "3a4580d77a0b471bc569896a0c768b4d17604bb1cff81f87b4e8fbc313e03137",
      "recipe": [
       [
        "python",
@@ -5212,7 +5212,7 @@
     },
     {
      "path": "derived/eclipse/ESID_937/rec_full.npz",
-     "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+     "sha256": "93e9dbeea9b00539adef29fb9fccc380c6f6e059768facf8bdd6deb2856e60d5",
      "recipe": [
       [
        "python",
@@ -6654,6 +6654,83 @@
    "profiles": [
     "locate"
    ]
+  },
+  {
+   "id": "seattle-home-20261104-ha-pilot-2",
+   "version": 1,
+   "group": "seattle-home-pilot",
+   "set": "development",
+   "private": true,
+   "site": "seattle-home",
+   "expected_outcome": "located_or_abstain",
+   "description": "the owner's home recorder, 2.32 h pilot session; a private case: its audio, site, flight data, search box and traffic notes are in $DOPPLERTRACK_DATA/private/ and never leave this Mac",
+   "runnable": {
+    "blocked": "waits for the owner's approval of a local run (PM, 2026-11-04); its spectrogram is built on this Mac then, from the recipe in its private file"
+   },
+   "source": {
+    "identifiers": {
+     "session": "20261104-ha-pilot-2",
+     "recorder": "samsung-a17/mic-recorder 0.3.0"
+    },
+    "acquisition": "the owner's own recorder (data root MANIFEST.md, private section); raw files hashed in private/manifest.json, not bench/manifest.json",
+    "raw": []
+   },
+   "start_time": {
+    "source": "the recorder's clock: the phone's ADC sample clock, mapped to UTC each minute from scrcpy timestamps against the NTP-synced Mac, less a 0.19 s latency from vibration tests; the first file's first sample (timeline.jsonl file_close)",
+    "utc": "2026-11-04T17:40:35.544Z",
+    "uncertainty_s": 1
+   },
+   "flight_data": {
+    "date": "2026-11-04",
+    "pod": "adsbfetch area (adsbx, adsbfi, adsblol)",
+    "archive_assets": []
+   },
+   "search": {
+    "harmonics": [
+     1,
+     1
+    ],
+    "spacing_m": 200,
+    "tol_s": 6.0,
+    "v_tol": 0.35,
+    "d_tol": [
+     0.4,
+     2.5
+    ],
+    "silence_d_m": 6000.0,
+    "max_range_m": 12000.0,
+    "dem": true,
+    "cpa_cache": "cpa/private/seattle-home-20261104-ha-pilot-2_200m_dem.npz"
+   },
+   "refine": {
+    "rank": 1,
+    "spacing_m": 50.0,
+    "half_m": 600.0
+   },
+   "events": {
+    "mode": "detect"
+   },
+   "profiles": [
+    "locate",
+    "raw-audio"
+   ],
+   "labels": {
+    "reference": {
+     "site": "seattle-home"
+    },
+    "true_pair": null,
+    "checked_by": "the owner's site file, read in place; no pass labelled",
+    "blind": false
+   },
+   "weather": {
+    "temperature_c": null,
+    "source": null,
+    "station": null,
+    "station_distance_km": null,
+    "observed_utc": null,
+    "aircraft_height_m": null
+   },
+   "built_with": "76402c0"
   }
  ]
 }

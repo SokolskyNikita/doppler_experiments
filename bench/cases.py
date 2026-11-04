@@ -38,6 +38,17 @@ def cache_root() -> Path:
     return Path(os.environ.get("DOPPLERTRACK_CACHE", Path.home() / ".cache" / "dopplertrack"))
 
 
+def is_private(case: dict) -> bool:
+    """A case of the owner's private recordings (docs/proposals/2026-11-04-private-cases.md): never off this Mac."""
+    return bool(case.get("private")) or "site" in case
+
+
+def private_cache_root() -> Path:
+    """Where a private case's caches live: under the data root's private/, never the shared cache root that `runs
+    seed` uploads, since a detection or window-fit entry computed from household audio carries no private marker."""
+    return data_root() / "private" / "cache"
+
+
 def resolve(path: str) -> Path:
     """A manifest path on this machine: raw/ and derived/ under the data root, cpa/ under the cache root,
     anything else relative to the repo."""
@@ -78,6 +89,13 @@ REQUIRED = ("id", "version", "group", "set", "expected_outcome", "description", 
             "labels.true_pair", "labels.checked_by", "built_with")
 
 
+# A private case keeps its audio, derived files, spectrogram, flight data and search box in its private file
+# (bench/private.py), so it needs everything else.
+PRIVATE_HELD = ("audio.", "derived", "spectrogram", "flight_data.traces", "flight_data.extraction_box", "search.bbox",
+                "labels.reference")
+REQUIRED_PRIVATE = tuple(f for f in REQUIRED if not f.startswith(PRIVATE_HELD)) + ("site", "labels.reference.site")
+
+
 # A case that can't run yet (its audio needs the gap-aware spectrogram, its flight data isn't fetched, or it
 # waits for a milestone) carries runnable = {"blocked": reason} and needs only what identifies it.
 REQUIRED_BLOCKED = ("id", "version", "group", "set", "expected_outcome", "description", "source.identifiers",
@@ -99,7 +117,8 @@ def validate_case(case: dict, manifest_files: dict[str, str]) -> None:
     runnable = is_runnable(case)
     if not runnable and not (isinstance(case.get("runnable"), dict) and str(case["runnable"].get("blocked", "")).strip()):
         problems.append(f"{where}: runnable must be true or {{\"blocked\": reason}}")
-    for dotted in REQUIRED if runnable else REQUIRED_BLOCKED:
+    private = "site" in case or bool(case.get("private"))
+    for dotted in (REQUIRED_PRIVATE if private else REQUIRED) if runnable else REQUIRED_BLOCKED:
         _need(case, dotted, problems, where)
     if case.get("set") not in SETS:
         problems.append(f"{where}: set must be one of {SETS}, not {case.get('set')!r}")
@@ -155,6 +174,18 @@ def validate_case(case: dict, manifest_files: dict[str, str]) -> None:
         problems.append(f"{where}: events.mode must be saved_fits or detect")
     if runnable and ev.get("mode") == "saved_fits" and not ev.get("files"):
         problems.append(f"{where}: saved_fits needs events.files")
+    if "site" in case or case.get("private"):
+        # a private case names its site and carries nothing that places it (docs/proposals/2026-11-04-private-cases.md)
+        if not (case.get("private") is True and isinstance(case.get("site"), str) and case["site"].strip()):
+            problems.append(f"{where}: a private case needs private: true and a site id")
+        ref = (case.get("labels") or {}).get("reference")
+        if ref != {"site": case.get("site")}:
+            problems.append(f"{where}: a private case's labels.reference must be {{\"site\": <its site>}}, no coordinate")
+        for key in ("audio", "derived", "spectrogram"):
+            if case.get(key):
+                problems.append(f"{where}: a private case keeps its {key} in its private file, not here")
+        if (case.get("search") or {}).get("bbox") is not None or (case.get("flight_data") or {}).get("traces"):
+            problems.append(f"{where}: a private case keeps its search box and flight data in its private file")
     profiles = case.get("profiles", list(PROFILE_NAMES))
     if not (isinstance(profiles, list) and profiles and set(profiles) <= set(PROFILE_NAMES)):
         problems.append(f"{where}: profiles must be a non-empty list of {PROFILE_NAMES}")
@@ -178,7 +209,7 @@ def validate_case(case: dict, manifest_files: dict[str, str]) -> None:
             problems.append(f"{where}: weather.aircraft_height_m is superseded by the per-flight sound speed")
     lab = case.get("labels") or {}
     ref = lab.get("reference")
-    if ref is not None and not (isinstance(ref, dict) and _num(ref.get("lat")) and _num(ref.get("lon"))):
+    if ref is not None and not private and not (isinstance(ref, dict) and _num(ref.get("lat")) and _num(ref.get("lon"))):
         problems.append(f"{where}: labels.reference needs numeric lat and lon")
     if problems:
         raise CaseError(problems)

@@ -27,6 +27,8 @@ def main(argv=None):
     r.add_argument("--parallel", type=int, default=1, help="cases to run at once, each in its own process (default: 1)")
     r.add_argument("--shard", metavar="I/N", help="run only every N-th case from the I-th (1-based, sorted ids), so N "
                    "boxes split one run; `bench merge` puts the shards together")
+    r.add_argument("--reveal", action="store_true", help="private cases only: write the records in absolute coordinates "
+                   "(the owner's choice, for a local look) instead of offsets from the site")
     r.add_argument("--resume", action="store_true", help="continue the stopped run in --run-dir: cases with an "
                    "entry.json are kept, the rest run (same clean commit and settings only)")
     r.add_argument("--weather", action="store_true", help="apply each case's station temperature (its weather block): "
@@ -100,7 +102,7 @@ def main(argv=None):
                                    revision=a.revision, profile=a.profile, parallel=a.parallel,
                                    overrides={**runner.parse_overrides(a.search_param),
                                               **({runner.WEATHER_KEY: True} if a.weather else {})}, shard=a.shard,
-                                   resume=a.resume)
+                                   resume=a.resume, reveal=a.reveal)
         print(run_dir)
     elif a.cmd == "merge":
         runner.merge_runs(a.out, a.sources)

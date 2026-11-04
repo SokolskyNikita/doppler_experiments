@@ -1,5 +1,10 @@
 # Phase 1 preparation regression
 
+<!-- index
+question: Do the detector's named records leave `detect`'s output unchanged?
+outcome: Yes: Oyster Bay's `detect` JSON is byte-identical before and after; 2 passed, 1 expected failure
+-->
+
 ## Question and changes
 
 Does replacing the detector's positional tuples with named records leave `detect`'s output unchanged?

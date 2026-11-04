@@ -1,5 +1,10 @@
 # Gap-aware spectrogram
 
+<!-- index
+question: Can the spectrogram keep a recording's timeline through gaps, and what are the Eclipse sites' gaps?
+outcome: Yes: frames over a gap are invalid, Oyster Bay is unchanged byte for byte, and a gap over the steep part weakens the fit. ESID 740's and 710's minute files abut; their only gaps are two missing-file holes a day
+-->
+
 ## Question
 
 PLAN Phase 1 item 8. Can the spectrogram keep a recording's timeline through gaps in the audio,

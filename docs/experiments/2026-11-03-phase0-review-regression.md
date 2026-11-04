@@ -1,5 +1,10 @@
 # Phase 0 review regression
 
+<!-- index
+question: Do the review fixes preserve CPA geometry while masking unsupported evidence?
+outcome: 66 offline tests pass; Oyster Bay has 2 passes and 1 expected failure; reception holes preserve CPA proposals and mask curve evidence
+-->
+
 ## Question and changes
 
 Do the review corrections preserve Oyster Bay's existing fit/detection checks while preventing

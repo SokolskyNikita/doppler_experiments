@@ -181,7 +181,15 @@
      }
     }
    },
-   "notes": "Saved-fit search scores drift from the committed docs/results tables in the fourth significant figure (top 27.1008 against 27.0993; 40,889 triples against 40,885) because of the Phase 0 trajectory evidence masks; ranks and coordinates are exact. The 2026-11-03 cache check at 2bf61cc already showed it (27.1036). Not a regression"
+   "notes": "Saved-fit search scores drift from the committed docs/results tables in the fourth significant figure (top 27.1008 against 27.0993; 40,889 triples against 40,885) because of the Phase 0 trajectory evidence masks; ranks and coordinates are exact. The 2026-11-03 cache check at 2bf61cc already showed it (27.1036). Not a regression",
+   "weather": {
+    "temperature_c": null,
+    "source": null,
+    "station": null,
+    "station_distance_km": null,
+    "observed_utc": null,
+    "aircraft_height_m": null
+   }
   },
   {
    "id": "eagle-cam-clip-18000s",
@@ -340,7 +348,15 @@
     "blind": false
    },
    "built_with": "1cb9c34",
-   "role": "seed case (PLAN 5.1)"
+   "role": "seed case (PLAN 5.1)",
+   "weather": {
+    "temperature_c": null,
+    "source": null,
+    "station": null,
+    "station_distance_km": null,
+    "observed_utc": null,
+    "aircraft_height_m": null
+   }
   },
   {
    "id": "oyster-bay-moved-wsw150",
@@ -519,7 +535,15 @@
     "blind": false
    },
    "built_with": "1cb9c34",
-   "role": "seed negative (PLAN 5.1): the truth is outside the box by construction"
+   "role": "seed negative (PLAN 5.1): the truth is outside the box by construction",
+   "weather": {
+    "temperature_c": null,
+    "source": null,
+    "station": null,
+    "station_distance_km": null,
+    "observed_utc": null,
+    "aircraft_height_m": null
+   }
   },
   {
    "id": "oyster-bay-hp150-aac32k",
@@ -696,7 +720,15 @@
    },
    "built_with": "1cb9c34",
    "role": "seed case (PLAN 5.1)",
-   "notes": "Saved-fit search scores drift from the committed docs/results tables in the fourth significant figure (top 27.1008 against 27.0993; 40,889 triples against 40,885) because of the Phase 0 trajectory evidence masks; ranks and coordinates are exact. The 2026-11-03 cache check at 2bf61cc already showed it (27.1036). Not a regression"
+   "notes": "Saved-fit search scores drift from the committed docs/results tables in the fourth significant figure (top 27.1008 against 27.0993; 40,889 triples against 40,885) because of the Phase 0 trajectory evidence masks; ranks and coordinates are exact. The 2026-11-03 cache check at 2bf61cc already showed it (27.1036). Not a regression",
+   "weather": {
+    "temperature_c": null,
+    "source": null,
+    "station": null,
+    "station_distance_km": null,
+    "observed_utc": null,
+    "aircraft_height_m": null
+   }
   },
   {
    "id": "oyster-bay-moved-north150",
@@ -874,7 +906,15 @@
     "blind": false
    },
    "built_with": "1cb9c34",
-   "role": "growth-list negative (PLAN 5.1 growth item 3: the right day with the box moved 150 km), sparse airspace: about 0.3x Oyster Bay's passes within 12 km. Not a seed case"
+   "role": "growth-list negative (PLAN 5.1 growth item 3: the right day with the box moved 150 km), sparse airspace: about 0.3x Oyster Bay's passes within 12 km. Not a seed case",
+   "weather": {
+    "temperature_c": null,
+    "source": null,
+    "station": null,
+    "station_distance_km": null,
+    "observed_utc": null,
+    "aircraft_height_m": null
+   }
   },
   {
    "id": "eclipse-esid375",
@@ -1006,7 +1046,15 @@
      ],
      "note": "cut 2026-11-04 by SDE-D with extraction metadata"
     }
-   ]
+   ],
+   "weather": {
+    "temperature_c": null,
+    "source": null,
+    "station": null,
+    "station_distance_km": null,
+    "observed_utc": null,
+    "aircraft_height_m": null
+   }
   },
   {
    "id": "eclipse-esid710",
@@ -1138,7 +1186,15 @@
      ],
      "note": "cut 2026-11-04 by SDE-D with extraction metadata"
     }
-   ]
+   ],
+   "weather": {
+    "temperature_c": null,
+    "source": null,
+    "station": null,
+    "station_distance_km": null,
+    "observed_utc": null,
+    "aircraft_height_m": null
+   }
   },
   {
    "id": "eclipse-esid740",
@@ -1270,7 +1326,15 @@
      ],
      "note": "cut 2026-11-04 by SDE-D with extraction metadata"
     }
-   ]
+   ],
+   "weather": {
+    "temperature_c": null,
+    "source": null,
+    "station": null,
+    "station_distance_km": null,
+    "observed_utc": null,
+    "aircraft_height_m": null
+   }
   },
   {
    "id": "eclipse-esid937",
@@ -1402,7 +1466,15 @@
      ],
      "note": "cut 2026-11-04 by SDE-D with extraction metadata"
     }
-   ]
+   ],
+   "weather": {
+    "temperature_c": null,
+    "source": null,
+    "station": null,
+    "station_distance_km": null,
+    "observed_utc": null,
+    "aircraft_height_m": null
+   }
   },
   {
    "id": "xenocanto-xc979185",
@@ -1462,7 +1534,15 @@
     "checked_by": "not yet labelled; data root MANIFEST.md lists the passes",
     "blind": true
    },
-   "built_with": "4088419"
+   "built_with": "4088419",
+   "weather": {
+    "temperature_c": null,
+    "source": null,
+    "station": null,
+    "station_distance_km": null,
+    "observed_utc": null,
+    "aircraft_height_m": null
+   }
   },
   {
    "id": "xenocanto-xc990819",
@@ -1522,7 +1602,15 @@
     "checked_by": "not yet labelled; data root MANIFEST.md lists the passes",
     "blind": true
    },
-   "built_with": "4088419"
+   "built_with": "4088419",
+   "weather": {
+    "temperature_c": null,
+    "source": null,
+    "station": null,
+    "station_distance_km": null,
+    "observed_utc": null,
+    "aircraft_height_m": null
+   }
   },
   {
    "id": "xenocanto-xc990820",
@@ -1582,7 +1670,15 @@
     "checked_by": "not yet labelled; data root MANIFEST.md lists the passes",
     "blind": true
    },
-   "built_with": "4088419"
+   "built_with": "4088419",
+   "weather": {
+    "temperature_c": null,
+    "source": null,
+    "station": null,
+    "station_distance_km": null,
+    "observed_utc": null,
+    "aircraft_height_m": null
+   }
   },
   {
    "id": "xenocanto-xc986433",
@@ -1642,7 +1738,15 @@
     "checked_by": "not yet labelled; data root MANIFEST.md lists the passes",
     "blind": true
    },
-   "built_with": "4088419"
+   "built_with": "4088419",
+   "weather": {
+    "temperature_c": null,
+    "source": null,
+    "station": null,
+    "station_distance_km": null,
+    "observed_utc": null,
+    "aircraft_height_m": null
+   }
   }
  ]
 }

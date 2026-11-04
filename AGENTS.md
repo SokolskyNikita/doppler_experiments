@@ -87,6 +87,10 @@ Doppler curves of propeller aircraft. `README.md` explains the method; `PLAN.md`
 - Record every experiment as `docs/experiments/<date>-<topic>.md`: the question, what ran on which recordings,
   the numbers, the outcome, and the script and run folder. Oyster Bay and the eagle cam are development data, not
   evaluation. PLAN.md keeps only the conclusions.
+- Right under a record's title, put its index block, `<!-- index`, `question: <one line>`, `outcome: <one line>`,
+  `-->`, then run `uv run python tools/data/experiments_index.py` to rebuild `docs/experiments/README.md`'s table. Never
+  edit the table by hand; after a merge that conflicts on it, rerun the script. `tools/check.sh` fails when the table and
+  the blocks disagree.
 
 ## Layout
 

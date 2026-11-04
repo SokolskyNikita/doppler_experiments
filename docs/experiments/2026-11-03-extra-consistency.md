@@ -1,5 +1,10 @@
 # Does a candidate explain the other flyovers? (2026-11-03)
 
+<!-- index
+question: Can the flyovers a search didn't use tell the true flight pair from wrong ones?
+outcome: A lead: with a ±15 s time gate, only the true pair explained any
+-->
+
 **Question.** Can the flyovers a search didn't use tell the true flight pair from wrong ones, as a basis for confidence (PLAN Phase 4)?
 
 **Setup, on Oyster Bay** (development data):

@@ -1,5 +1,10 @@
 # Model error of the straight-pass fit on Livermore, stage 1 (2026-11-04)
 
+<!-- index
+question: How much of the straight-pass fit's error on Livermore is model error, noise or the optimiser, and what is the information limit?
+outcome: Model error: a median 15.6 % in slant range from the trajectory curve alone, about 3× the Cramér–Rao bound (3.4–4.0 %, 63–74 m, provisional covariance); noise sits at the bound and the optimiser is exact. f0 drift of 0.5 % enters; temperature, interpolation and datum don't
+-->
+
 **Question** (PLAN Phase 2 item 2). How much of the fit error on real passes is model error, meaning a turning, climbing or accelerating aircraft fitted as a straight constant-speed pass? How much is measurement noise, and how much is the optimiser? Before that: how much does one pass's curve tell us at all?
 
 ## The information limit (read the rest against this)
@@ -124,7 +129,7 @@ On the flagged 11, every |Δ|/SD median is below 1 except drift ±2 % in v (1.8)
   - **The window.** It enters strongly, the wrong way: on real trajectories a longer window is worse, so windows should stay with the observed tone.
 - **What doesn't enter:** sound speed from the temperature, interpolation (linear, PCHIP or spline), the geoid datum and the recorder height all stay below the spread on the median pass.
 - **The textbook covariance can't be the spread.** On a wrong model it is about right (classical) or 1.5× wide (sandwich) only by accident. The bootstrap, or the bound for the straight-pass part, is what to report.
-- **Not yet run:** stage 3, Alaska, as an independent check of total error.
+- **Stage 3,** Alaska as an independent check of total error, is the section after stage 2.
 
   The whitening floor and window and synthesised waveforms are left for a later round.
 
@@ -159,5 +164,94 @@ On the flagged 11: A-render is 50.7 % (contrast) and 26.7 % (brightness), and wa
 - **So, as shipped, the pipeline can't use 20 % of these passes, and fits another 22 % on a truncated curve.** The band should follow the tone, or the harmonics should be searched (item 6).
 
 **Scripts:** `tools/experiments/2026-11-04/model_error_stage2.py`. **Outputs:** `runs/2026-11-04-model-error-stage2/stage2.csv` (one row per pass, input and objective, with `frac_curve_in_band` and any error).
+
+## Stage 3: Alaska, an independent check of total error
+
+**Setup.** The Alaska geophone crossings (Seppi, Tape & Fee 2025): seismic nodes along the Parks Highway, February–March 2019, vertical channel at 500 samples/s. There are no trajectories, only Flightradar24's CPA parameters, so stage 1's model-error split isn't possible here; this measures fit against reference.
+- **Fit:** `tracks.fit_event`, imported unchanged: contrast objective, one harmonic, over the FR24 CPA time ±60 s, on a 2.048 s Hann / 0.25 s spectrogram from the raw counts, in 40–240 Hz (below the 250 Hz Nyquist). Run at three sound speeds: c = 340.3 m/s (the package's 15 °C), the authors' fitted c for that crossing, and c from the measured air temperature, 331.3·√(1 + T/273.15).
+- **Temperature:** IEM ASOS, from the station nearest the crossing's node with a report within 1 h of the FR24 CPA time, using the report nearest in time (`raw/aux/metar/PA*_2019-02-12.csv`).
+  - Stations along the highway: Talkeetna PATK, McKinley Park PAIN and Nenana PANN report hourly; Chulitna PAEC reports about 5 times a day. IEM has nothing for Healy PAHV or Cantwell PATW after 2011–12.
+  - Over the 50: PATK 22, PAIN 13, PAEC 9, PANN 6. Distance median 26 km, up to 71 km where a nearer station had no report that hour. Node minus station elevation −227 to +313 m. Report median 18 min from CPA.
+  - T −18 to +6 °C, so c_T 320–335 m/s, median 327.4. The authors' fitted c averages 19 m/s below c_T (SD of the difference 10.6 m/s, correlation with c_T −0.22).
+  - This is ground temperature at a station, not along the path to an aircraft a few hundred metres up, and Alaskan winter inversions make the two differ; no lapse or inversion correction is applied.
+- **Reference:** FR24's slant range, √(horizontal distance² + (altitude − node elevation)²), and speed. The authors' own fitted speed and slant range sit beside it.
+- **Only speed, slant range and τ are compared;** f0 depends on which harmonic the fit locks to.
+- **Sample:** 50 of the authors' 789 non-jet fitted crossings. The first 24 are those a stopped full run had finished, which goes through the file in date order; the other 26 were drawn with seed 20261104 from the remainder. They cover 36 flights at 44 nodes on 22 days: 14 C185, 10 PA31, 8 PC12, 7 PA46 and 11 others. FR24 slant ranges are 624 m to 8.0 km, median 1.9 km; median speed is 83 m/s.
+
+**Numbers**, against FR24, median (IQR), and the share of crossings missing slant range by more than 20 %:
+
+| Fit | Slant range | over 20 % | Speed, median abs | τ, median abs |
+|---|---|---|---|---|
+| `fit_event`, c = 340.3 m/s | +1.2 %, abs 6.9 % (−6.7 to +6.5) | 20 % | 6.3 % (median +5.5 %) | 1.6 s |
+| `fit_event`, authors' c (median 310 m/s) | −8.2 %, abs 10.1 % | 24 % | 5.2 % | 1.7 s |
+| `fit_event`, station-temperature c (median 327 m/s) | −3.3 %, abs 6.8 % (−9.0 to +2.3) | 22 % | 3.2 % (median +1.2 %) | 1.6 s |
+| The authors' own fits | −9.3 %, abs 12.8 % | 22 % | 4.4 % | – |
+
+The c = 340.3 m/s and authors'-c rows are from the rerun of all three settings (`runs/2026-11-04-model-error-alaska-ctemp/`), and match the first run's to the last digit.
+
+**Outcome.**
+- **The first independent number for our fitter at close range.** On real passes at a median 1.9 km, `fit_event` at the package's sound speed misses slant range by a median 6.9 %, against the authors' own 12.8 %. That sits beside stage 2's 29 % on Livermore's farther, longer passes (median 2.2 km reference, ridges of about 30–170 s). The fitter does far better on these close crossings, fitted over ±60 s, than on Livermore's passes, many of which turn (stage 1). The Alaska straightness can't be checked: FR24's CPA parameters are all there is. That is consistent with stage 1's finding that model error, not the fitter's noise, drives the Livermore numbers, though it is a different microphone (a geophone), a different site and a different traffic mix.
+- **The authors' c makes the fit worse.** Their median 310 m/s, against the package's 340.3 m/s, moves slant range from 6.9 % to 10.1 % and its bias from +1.2 % to −8.2 %. Their c is fitted jointly with everything else, so it carries their model's error. That bears on stage 1's sound-speed perturbation: a c that is "right" for a jointly fitted model isn't automatically right for ours.
+- **The measured temperature fixes speed.** At c_T, the speed error falls from 6.3 % to 3.2 % and its bias from +5.5 % to +1.2 %. Slant range barely moves in absolute terms (6.9 % to 6.8 %), but its bias goes from +1.2 % to −3.3 %. At 340.3 m/s, then, the range looked unbiased because a c about 4 % too high cancelled a range that comes out about 3 % short at the right c. That short range, with speed right, is what's left for model error to explain.
+- **The fit absorbs none of a c error.** Changing c moves both speed and slant range by exactly the same fraction: d ln v / d ln c and d ln R / d ln c are 1.000 at the median over all 50 crossings (IQR 0.996–1.003 for v and 0.990–1.009 for R, between 340.3 m/s and c_T). The curve fixes v/c, through its asymptotes, and R/v, through how fast it crosses, so a c error of x % passes in full into speed and from there in full into range.
+- **Item 2 outcome: the pipeline should take a measured temperature.** The shipped pipeline has no sound-speed input: `speed_of_sound()` defaults to 15 °C (340.3 m/s), and every caller in `tracks.py`, `search.py`, `score.py`, `pipeline.py`, the CLI and the bench runner uses that default. Where a station temperature exists for the recording's hour, `speed_of_sound(T)` is the input it should take. On these crossings that would have removed a 4 % speed bias, and, since range scales with c, a 4 % range error the fit can't see.
+
+**A failed run, kept and marked: `runs/2026-11-04-model-error-alaska-narrow/`.** It was meant to fit all 789 in a narrow band placed on the authors' best-determined tone (0.85–1.15×; their f0 placed the band and never entered the comparison).
+- **The crash.** 655 crossings raised `ValueError: attempt to get argmax of an empty sequence`. `grid_search` searches f0 over (1.15·f_lo, 0.85·f_hi), which assumes the band holds a whole Doppler span. With f_hi/f_lo = 1.15/0.85 that range collapses to a point: 654 of the failures had no f0 candidate at all. The 134 that "ran" had exactly one, left by floating-point rounding. So `fit_event` needs f_hi/f_lo above about 1.35 or it crashes. This is also the real cause of stage 2's crash on R35, R08 and R51.
+- **The 134 that ran are a biased sample,** fitted with a single f0 candidate. Their c = 340.3 slant-range error is a median 20.3 % over all 134. On the 7 of them that are also in the wide-band 50, it is 45.7 % against the wide band's 18.4 % on the same 7. Read that only as "a single fixed f0 fits badly", not as a band comparison.
+- **A corrected rerun is queued, not started.** All 789 with the band at 0.70–1.50× the tone: f0 range 0.805–1.275×, wide enough for the span up to about 120 m/s at c = 310 m/s. It waits for an idle machine: `runs/2026-11-04-model-error-alaska-band070/command.sh`.
+
+**Scripts:** `tools/experiments/2026-11-04/alaska_to_npz.py` (the one-off obspy conversion), `model_error_alaska.py` (`--same-as` reruns an earlier run's crossings), `model_error_alaska_summary.py` (the table and the c slopes). **Outputs:** `runs/2026-11-04-alaska-npz/`; `runs/2026-11-04-alaska-weather/` (the station fetch); `runs/2026-11-04-model-error-alaska-ctemp/` (the 50 at all three settings, `summary.json`); `runs/2026-11-04-model-error-alaska/` (the wide-band 50 at two settings: `alaska.jsonl`, `alaska.csv`); `runs/2026-11-04-model-error-alaska-stopped/` (the first full run, stopped at about 150 crossings and never written); `runs/2026-11-04-model-error-alaska-narrow/` (failed, as above).
+
+## Heavier models: one extra parameter
+
+**Question.** Does a pass model with one more parameter cut stage 1's model error? The candidates:
+- **drift:** a linear f0 drift, f0(1 + η·u/T), with u the emission time from CPA and T the ridge span;
+- **accel:** a constant along-track acceleration, x = v·u + ½·a·u², so v is the speed at CPA.
+
+Each is fitted as a forward model in emission time, with f0 and f0·η in closed form. Bounds: a within ±3 m/s². η within ±5 % was meant as a bound too, but η is solved in closed form, so in the fits it is unbounded; the ±5 % applies only to its profile grid.
+
+**Criterion, fixed before running.** A model enters if, on curve A:
+- it cuts the primary passes' median |R − R*| from 229 m to at most 160 m;
+- it doesn't worsen the flagged passes' median;
+- its extra parameter is identified on at least two thirds of the primary passes.
+
+Identified means: on A plus one stage-1 noise replicate, the parameter's profile Δ = (RSS(p) − RSS_min)/(σ²·κ) stays at or below 3.84 only on an interval that is finite on both sides inside the bounds. σ² is the sub-5 s noise variance, and κ the pass's (bootstrap SD / classical SD)² of R from stage 1.
+
+The combination of both models was run once, as the agreed check, after neither passed alone.
+
+Each model was first checked on its own synthetic curves: f0 180 Hz, 65 m/s, 1.5 km, with η 2 %, a 1.2 m/s² or both. Each recovered all of them exactly (RSS around 10⁻¹²). The straight case matches `straight_pass_ls` to 8 × 10⁻⁵ Hz. Those curves also show what is at stake: a straight-pass fit misses their slant range by −11 % (2 % drift), −45 % (1.2 m/s²) and +18 % (both).
+
+**Numbers**, median |error| (on curve A the true η is 0, so a fitted η there is a nuisance term absorbing kinematic error, not drift):
+
+| Curve, passes | Model | Slant range | v | f0 | τ |
+|---|---|---|---|---|---|
+| A, primary 29 | straight | 229 m (15.6 %) | 3.0 % | 0.65 % | 0.93 s |
+| | drift | 750 m (30.0 %) | 13.2 % | 0.80 % | 1.55 s |
+| | accel | 231 m (18.1 %) | 7.2 % | 1.62 % | 2.38 s |
+| | both | 576 m (32.7 %) | 29.8 % | – | 4.57 s |
+| A, flagged 11 | straight | 193 m (15.3 %) | 11.0 % | 1.54 % | 1.28 s |
+| | drift | 882 m (62.9 %) | 30.3 % | 2.27 % | 1.93 s |
+| | accel | 334 m (28.8 %) | 18.7 % | 4.83 % | 3.64 s |
+| | both | 1,569 m (79.2 %) | 48.3 % | – | 4.55 s |
+| D, primary 29 | straight | 230 m (15.0 %) | 4.8 % | 0.83 % | 1.12 s |
+| | drift | 1,084 m (48.9 %) | 18.7 % | 0.93 % | 2.03 s |
+| | accel | 299 m (14.5 %) | 8.1 % | 2.46 % | 3.19 s |
+| | both | 1,136 m (48.6 %) | 27.3 % | – | 3.36 s |
+
+- **Better fits, worse slant range.** The heavier models fit the curve shape better: RSS against the straight fit's is 0.90 (drift), 0.83 (accel) and 0.71 (both) on A, and 0.95, 0.95 and 0.88 on D. Meanwhile slant range, speed and τ all get worse.
+- **Identifiability, drift:** 5 of 29 primary passes (1 of 11 flagged). η correlates with v and R at 0.98 and 0.95 over the bootstrap: it trades off with them.
+- **Identifiability, accel:** 16 of 29 primary passes (6 of 11 flagged), short of two thirds.
+- **The fitted acceleration isn't the aircraft's.** It is uncorrelated with the trajectories' own along-track acceleration within ±30 s of CPA (r = −0.01; median |a − a_traj| 0.22 m/s² against a median |a_traj| of 0.09).
+- **Drift read on D, the published ridge.** η̂ has a median of +3.8 % (IQR −4.5 to +10 %, partly beyond the ±5 % bound). Stage 1's half-fit differences on D imply drifts of a few tenths of a percent. So η̂ isn't measuring drift there either.
+- **Turns.** 10 of 29 primary passes and 6 of 11 flagged ones turn faster than 1°/s within ±30 s of CPA, with medians of 0.54 and 1.2°/s.
+
+**Outcome: neither model enters, nor does the combination.**
+- **Criterion 1 fails for both:** 750 m and 231 m against the 160 m target, and the combination gives 576 m.
+- **Criterion 3 fails for both:** 5 and 16 of 29 identified, against 20 needed.
+- **What the failure says.** With one more degree of freedom the fit lowers its residual by trading the new parameter against speed and distance. The information on R that the straight model had goes into explaining shape the extra parameter can't account for physically. So the model error isn't a drift or a steady acceleration.
+- **The flagged passes are mostly turns** (6 of 11 above 1°/s). That is the case for the three-parameter turn model next round: turn rate, plus the split of R into horizontal offset and height, plus the turn's sign. And for anything heavier, the criterion should be read on R, not on RSS.
+
+**Script:** `tools/experiments/2026-11-04/heavier_model.py`. **Outputs:** `runs/2026-11-04-heavier-model/` (`heavier_fits.csv`, `heavier_profiles.csv` with each profile's Δ values) and `runs/2026-11-04-heavier-model-both/`.
 
 **Scripts (stage 1):** `tools/experiments/2026-11-04/straight_pass_ls.py`, `model_error.py`, `model_error_summary.py`, `crb.py`. **Outputs:** `runs/2026-11-04-model-error-2/` (`fits.csv`, `perturbations.csv`, `halves.csv`, `noise.csv`, `summary.json`) and `runs/2026-11-04-crb-2/` (`crb.csv`, `crb_summary.json`; `runs/2026-11-04-crb/` used the invalid truncated covariance and is superseded). Weather: `raw/aux/metar/KLVK_*`, `RAOB_KOAK_*`.

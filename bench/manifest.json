@@ -1669,6 +1669,34 @@
    "licence": null
   },
   {
+   "path": "raw/aux/metar/PAEC_2019-02-12.csv",
+   "bytes": 6195,
+   "sha256": "3059c5ce8918749b57cdc76cc41d47eb7614cf5b60338d7bc70d27a1d36834bb",
+   "source": "Iowa Environmental Mesonet: ASOS/METAR and RAOB soundings",
+   "licence": null
+  },
+  {
+   "path": "raw/aux/metar/PAIN_2019-02-12.csv",
+   "bytes": 49117,
+   "sha256": "8f17bb384f97563d5d1c445836762b46b3dd22dd2417193b410f1ee4eefcfad9",
+   "source": "Iowa Environmental Mesonet: ASOS/METAR and RAOB soundings",
+   "licence": null
+  },
+  {
+   "path": "raw/aux/metar/PANN_2019-02-12.csv",
+   "bytes": 57948,
+   "sha256": "a5b35f0a81eabfbfe0c6133b8fcd73a579d04fcbbacf7ce2ec882646358f7d51",
+   "source": "Iowa Environmental Mesonet: ASOS/METAR and RAOB soundings",
+   "licence": null
+  },
+  {
+   "path": "raw/aux/metar/PATK_2019-02-12.csv",
+   "bytes": 57812,
+   "sha256": "d62c50230afa2f79ad2d759fe8f159a126817350ab471b34c9c6edaecd22f482",
+   "source": "Iowa Environmental Mesonet: ASOS/METAR and RAOB soundings",
+   "licence": null
+  },
+  {
    "path": "raw/aux/metar/RAOB_KOAK_2026-05-09.csv",
    "bytes": 23188,
    "sha256": "5387a3a9557df0a58f012ffd2016dc7fbd376c2659498e7490d3090692473b33",

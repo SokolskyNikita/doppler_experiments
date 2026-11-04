@@ -147,6 +147,23 @@ def validate_case(case: dict, manifest_files: dict[str, str]) -> None:
         problems.append(f"{where}: events.mode must be saved_fits or detect")
     if runnable and ev.get("mode") == "saved_fits" and not ev.get("files"):
         problems.append(f"{where}: saved_fits needs events.files")
+    w = case.get("weather")
+    if w is not None:
+        if not isinstance(w, dict):
+            problems.append(f"{where}: weather must be an object")
+        elif w.get("temperature_c") is not None:
+            if not _num(w["temperature_c"]) or w["temperature_c"] <= -273.15:
+                problems.append(f"{where}: weather.temperature_c must be a temperature in degrees C")
+            for k in ("source", "station"):
+                if not str(w.get(k) or "").strip():
+                    problems.append(f"{where}: weather.{k} is needed with a temperature")
+            if not (_num(w.get("station_distance_km")) and w["station_distance_km"] >= 0):
+                problems.append(f"{where}: weather.station_distance_km is needed with a temperature")
+            h = w.get("aircraft_height_m")
+            if h is not None and not (_num(h) and h >= 0):
+                problems.append(f"{where}: weather.aircraft_height_m must be metres above the ground")
+        elif w.get("aircraft_height_m") is not None:
+            problems.append(f"{where}: weather.aircraft_height_m needs a temperature")
     lab = case.get("labels") or {}
     ref = lab.get("reference")
     if ref is not None and not (isinstance(ref, dict) and _num(ref.get("lat")) and _num(ref.get("lon"))):

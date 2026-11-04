@@ -1,5 +1,10 @@
 # A comparable score for event choice
 
+<!-- index
+question: Does scoring each event pair in units of its own wrong guesses put event pairs on one scale (item 7, stage A)?
+outcome: Not met; stage A doesn't ship: the loudest event no longer carries its pairs, but the criterion isn't reached
+-->
+
 ## Question and criterion
 
 PLAN Phase 2, item 7, stage A. The [event-pairs](2026-11-04-event-pairs.md) test found that ranking `detect`'s

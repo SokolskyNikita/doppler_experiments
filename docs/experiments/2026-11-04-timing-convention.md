@@ -1,5 +1,10 @@
 # Timing convention
 
+<!-- index
+question: Does pairing on emission-CPA times with a like-for-like steepest-fall check let the true pair through from `detect`'s events at no more candidates?
+outcome: Yes at a 16 s gate and 4 s check: the true pair within 250 m on both recordings at about half today's count; kept as a development setting, not the default, since the committed brightness fits regress on Oyster Bay
+-->
+
 ## Question
 
 PLAN Phase 2, item 1 (E2). The search pairs two events by their fitted heard-CPA times, so every error

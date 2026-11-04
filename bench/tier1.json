@@ -7,27 +7,379 @@
    "labels": "bench/labels/oyster_bay-0000-1200.json",
    "set": "development",
    "group": "oyster-bay",
-   "spectrogram": {"path": "derived/oyster_bay/rec.npz", "sha256": "f996b61a2b596498d34e59af2e555446ef6ab879263e669868acb2b6221b531b"},
-   "reference_case": "oyster-bay"
+   "spectrogram": {
+    "path": "derived/oyster_bay/rec.npz",
+    "sha256": "f996b61a2b596498d34e59af2e555446ef6ab879263e669868acb2b6221b531b"
+   },
+   "reference_case": "oyster-bay",
+   "family": "oyster-bay"
   },
   {
    "id": "eagle-cam-3600-4800",
    "labels": "bench/labels/swfl_2024-12-28-3600-4800.json",
    "set": "development",
    "group": "eagle-cam",
-   "spectrogram": {"path": "derived/swfl/rec.npz", "sha256": "d9081beb6f641866010dd26ed6e0380848480008dcfb82b08209ffc6fe7b4888",
-                   "note": "the full 11.9 h stream's spectrogram, whose seconds are the label file's; no case covers this span"},
-   "reference_case": "eagle-cam-clip-18000s"
+   "spectrogram": {
+    "path": "derived/swfl/rec.npz",
+    "sha256": "d9081beb6f641866010dd26ed6e0380848480008dcfb82b08209ffc6fe7b4888",
+    "note": "the full 11.9 h stream's spectrogram, whose seconds are the label file's; no case covers this span"
+   },
+   "reference_case": "eagle-cam-clip-18000s",
+   "family": "eagle-cam"
   },
   {
    "id": "esid740-61200-62400",
    "labels": "bench/labels/ESID_740_2024-04-07-61200-62400.json",
    "set": "calibration",
    "group": "eclipse-esid740",
-   "spectrogram": {"path": "derived/eclipse/ESID_740/spec_2024-04-07_1640-1740.npz", "sha256": null,
-                   "note": "not built: a spectrogram of the 2024-04-07 minute files from 16:40 to 17:40 UTC with the folder-mode spectrogram, made when Phase 4 first runs this span"},
-   "reference_case": "eclipse-esid740"
+   "spectrogram": {
+    "path": "derived/eclipse/ESID_740/spec_2024-04-07_1640-1740.npz",
+    "sha256": null,
+    "note": "not built: a spectrogram of the 2024-04-07 minute files from 16:40 to 17:40 UTC with the folder-mode spectrogram, made when Phase 4 first runs this span"
+   },
+   "reference_case": "eclipse-esid740",
+   "family": "eclipse"
+  },
+  {
+   "id": "xc990819-background",
+   "labels": "bench/labels/XC990819_2025-04-20_0510-0000-5539.json",
+   "set": "development",
+   "group": "essex-2025-04-20",
+   "family": "essex",
+   "reference_case": null,
+   "derived": [
+    {
+     "path": "derived/background/XC990819_2025-04-20_0510.npz",
+     "sha256": "35099919e1793320c6706a6808d0378b04e8dd57bfb9914675a9df0a9595714d",
+     "recipe": [
+      [
+       "dopplertrack",
+       "spectrogram",
+       "{data}/raw/audio/xenocanto/XC990819_2025-04-20_0510.mp3",
+       "{out}"
+      ]
+     ],
+     "note": "xeno-canto CC BY-NC-SA: stays out of git, as does anything derived from it"
+    }
+   ],
+   "spectrogram": {
+    "path": "derived/background/XC990819_2025-04-20_0510.npz",
+    "sha256": "35099919e1793320c6706a6808d0378b04e8dd57bfb9914675a9df0a9595714d"
+   },
+   "note": "jets only: 'absent' means no propeller pass, and a jet detection is the E5 false alarm"
+  },
+  {
+   "id": "xc990820-background",
+   "labels": "bench/labels/XC990820_2025-04-20_0510-0000-3657.json",
+   "set": "development",
+   "group": "essex-2025-04-20",
+   "family": "essex",
+   "reference_case": null,
+   "derived": [
+    {
+     "path": "derived/background/XC990820_2025-04-20_0510.npz",
+     "sha256": "146b738582bacb41820d68570c804a4a8b50cdeb87c2d719010f7a5c1196f329",
+     "recipe": [
+      [
+       "dopplertrack",
+       "spectrogram",
+       "{data}/raw/audio/xenocanto/XC990820_2025-04-20_0510.mp3",
+       "{out}"
+      ]
+     ],
+     "note": "xeno-canto CC BY-NC-SA: stays out of git, as does anything derived from it"
+    }
+   ],
+   "spectrogram": {
+    "path": "derived/background/XC990820_2025-04-20_0510.npz",
+    "sha256": "146b738582bacb41820d68570c804a4a8b50cdeb87c2d719010f7a5c1196f329"
+   },
+   "note": "jets only: 'absent' means no propeller pass, and a jet detection is the E5 false alarm"
+  },
+  {
+   "id": "xc986433-background",
+   "labels": "bench/labels/XC986433_2025-04-07_0545-0000-2754.json",
+   "set": "development",
+   "group": "essex-2025-04-07",
+   "family": "essex",
+   "reference_case": null,
+   "derived": [
+    {
+     "path": "derived/background/XC986433_2025-04-07_0545.npz",
+     "sha256": "6f4240af3cfa7b1b96a965b70acffc16433a3f78e5d2d1932e7dc31039d94efd",
+     "recipe": [
+      [
+       "dopplertrack",
+       "spectrogram",
+       "{data}/raw/audio/xenocanto/XC986433_2025-04-07_0545.mp3",
+       "{out}"
+      ]
+     ],
+     "note": "xeno-canto CC BY-NC-SA: stays out of git, as does anything derived from it"
+    }
+   ],
+   "spectrogram": {
+    "path": "derived/background/XC986433_2025-04-07_0545.npz",
+    "sha256": "6f4240af3cfa7b1b96a965b70acffc16433a3f78e5d2d1932e7dc31039d94efd"
+   },
+   "note": "jets only: 'absent' means no propeller pass, and a jet detection is the E5 false alarm"
+  },
+  {
+   "id": "aerosonicdb-env-1",
+   "labels": "bench/labels/aerosonicdb_env_1-0000-3600.json",
+   "set": "development",
+   "group": "aerosonicdb",
+   "family": "aerosonicdb",
+   "reference_case": null,
+   "derived": [
+    {
+     "path": "derived/background/aerosonicdb_env_1.wav",
+     "sha256": "846ecdbc6022ce3e0e91f388b5e89178eec413ac79339e1f2cdda4ed83a76481",
+     "recipe": [
+      [
+       "python",
+       "-I",
+       "-c",
+       "import shutil, sys, zipfile; shutil.copyfileobj(zipfile.ZipFile(sys.argv[1]).open(sys.argv[2]), open(sys.argv[3], 'wb'))",
+       "{data}/raw/audio/aerosonicdb/zenodo-10215080/env_audio.zip",
+       "env_audio/1_AUDIO.wav",
+       "{out}"
+      ]
+     ],
+     "note": "the zip member as it is (22.05 kHz mono 16-bit, 3,600 s); AeroSonicDB CC BY-NC"
+    },
+    {
+     "path": "derived/background/aerosonicdb_env_1.npz",
+     "sha256": "117b9f436b501836aa4c7c956d076b33bfbbae0a7c520b6f57a2c9f486a8c60a",
+     "recipe": [
+      [
+       "dopplertrack",
+       "spectrogram",
+       "{data}/derived/background/aerosonicdb_env_1.wav",
+       "{out}"
+      ]
+     ]
+    }
+   ],
+   "spectrogram": {
+    "path": "derived/background/aerosonicdb_env_1.npz",
+    "sha256": "117b9f436b501836aa4c7c956d076b33bfbbae0a7c520b6f57a2c9f486a8c60a"
+   }
+  },
+  {
+   "id": "aerosonicdb-env-2",
+   "labels": "bench/labels/aerosonicdb_env_2-0000-3600.json",
+   "set": "development",
+   "group": "aerosonicdb",
+   "family": "aerosonicdb",
+   "reference_case": null,
+   "derived": [
+    {
+     "path": "derived/background/aerosonicdb_env_2.wav",
+     "sha256": "bbe8ba5116a38b4864911d7186db6f796877bdf27f0e94f689ea3f088c3d23e2",
+     "recipe": [
+      [
+       "python",
+       "-I",
+       "-c",
+       "import shutil, sys, zipfile; shutil.copyfileobj(zipfile.ZipFile(sys.argv[1]).open(sys.argv[2]), open(sys.argv[3], 'wb'))",
+       "{data}/raw/audio/aerosonicdb/zenodo-10215080/env_audio.zip",
+       "env_audio/2_AUDIO.wav",
+       "{out}"
+      ]
+     ],
+     "note": "the zip member as it is (22.05 kHz mono 16-bit, 3,600 s); AeroSonicDB CC BY-NC"
+    },
+    {
+     "path": "derived/background/aerosonicdb_env_2.npz",
+     "sha256": "b870e4697e2789c3a3035962526342523bd1e486aa5a48b283551ddd05cd1934",
+     "recipe": [
+      [
+       "dopplertrack",
+       "spectrogram",
+       "{data}/derived/background/aerosonicdb_env_2.wav",
+       "{out}"
+      ]
+     ]
+    }
+   ],
+   "spectrogram": {
+    "path": "derived/background/aerosonicdb_env_2.npz",
+    "sha256": "b870e4697e2789c3a3035962526342523bd1e486aa5a48b283551ddd05cd1934"
+   }
+  },
+  {
+   "id": "aerosonicdb-env-3",
+   "labels": "bench/labels/aerosonicdb_env_3-0000-3600.json",
+   "set": "development",
+   "group": "aerosonicdb",
+   "family": "aerosonicdb",
+   "reference_case": null,
+   "derived": [
+    {
+     "path": "derived/background/aerosonicdb_env_3.wav",
+     "sha256": "e8b1c42f2793fb5cd893ef31199b388547ec4e8b11f61bf4dc99fb82e7245e24",
+     "recipe": [
+      [
+       "python",
+       "-I",
+       "-c",
+       "import shutil, sys, zipfile; shutil.copyfileobj(zipfile.ZipFile(sys.argv[1]).open(sys.argv[2]), open(sys.argv[3], 'wb'))",
+       "{data}/raw/audio/aerosonicdb/zenodo-10215080/env_audio.zip",
+       "env_audio/3_AUDIO.wav",
+       "{out}"
+      ]
+     ],
+     "note": "the zip member as it is (22.05 kHz mono 16-bit, 3,600 s); AeroSonicDB CC BY-NC"
+    },
+    {
+     "path": "derived/background/aerosonicdb_env_3.npz",
+     "sha256": "9ddb7b0abfda2b30144f75d9041f984c2bf002323447e0692e79cd27d499105b",
+     "recipe": [
+      [
+       "dopplertrack",
+       "spectrogram",
+       "{data}/derived/background/aerosonicdb_env_3.wav",
+       "{out}"
+      ]
+     ]
+    }
+   ],
+   "spectrogram": {
+    "path": "derived/background/aerosonicdb_env_3.npz",
+    "sha256": "9ddb7b0abfda2b30144f75d9041f984c2bf002323447e0692e79cd27d499105b"
+   }
+  },
+  {
+   "id": "aerosonicdb-env-4",
+   "labels": "bench/labels/aerosonicdb_env_4-0000-3600.json",
+   "set": "development",
+   "group": "aerosonicdb",
+   "family": "aerosonicdb",
+   "reference_case": null,
+   "derived": [
+    {
+     "path": "derived/background/aerosonicdb_env_4.wav",
+     "sha256": "0942ce1378d6a29b1eee4ea8ebc84ebbe7e5f552ed80693f8fdfd47524f1decf",
+     "recipe": [
+      [
+       "python",
+       "-I",
+       "-c",
+       "import shutil, sys, zipfile; shutil.copyfileobj(zipfile.ZipFile(sys.argv[1]).open(sys.argv[2]), open(sys.argv[3], 'wb'))",
+       "{data}/raw/audio/aerosonicdb/zenodo-10215080/env_audio.zip",
+       "env_audio/4_AUDIO.wav",
+       "{out}"
+      ]
+     ],
+     "note": "the zip member as it is (22.05 kHz mono 16-bit, 3,600 s); AeroSonicDB CC BY-NC"
+    },
+    {
+     "path": "derived/background/aerosonicdb_env_4.npz",
+     "sha256": "a9a1fc5b05924ae8fa1415ce5377847d7d108eb952bcf174207d5e9d2520bf9a",
+     "recipe": [
+      [
+       "dopplertrack",
+       "spectrogram",
+       "{data}/derived/background/aerosonicdb_env_4.wav",
+       "{out}"
+      ]
+     ]
+    }
+   ],
+   "spectrogram": {
+    "path": "derived/background/aerosonicdb_env_4.npz",
+    "sha256": "a9a1fc5b05924ae8fa1415ce5377847d7d108eb952bcf174207d5e9d2520bf9a"
+   }
+  },
+  {
+   "id": "aerosonicdb-env-5",
+   "labels": "bench/labels/aerosonicdb_env_5-0000-3600.json",
+   "set": "development",
+   "group": "aerosonicdb",
+   "family": "aerosonicdb",
+   "reference_case": null,
+   "derived": [
+    {
+     "path": "derived/background/aerosonicdb_env_5.wav",
+     "sha256": "e8dcdd249bd1b33d90c9d48a79f3d4dcf2e60c567e4ac180f0e426d9c7342917",
+     "recipe": [
+      [
+       "python",
+       "-I",
+       "-c",
+       "import shutil, sys, zipfile; shutil.copyfileobj(zipfile.ZipFile(sys.argv[1]).open(sys.argv[2]), open(sys.argv[3], 'wb'))",
+       "{data}/raw/audio/aerosonicdb/zenodo-10215080/env_audio.zip",
+       "env_audio/5_AUDIO.wav",
+       "{out}"
+      ]
+     ],
+     "note": "the zip member as it is (22.05 kHz mono 16-bit, 3,600 s); AeroSonicDB CC BY-NC"
+    },
+    {
+     "path": "derived/background/aerosonicdb_env_5.npz",
+     "sha256": "a3c5e8043b5b01a6bc9f62f18883068351f22257c3cd430aa2fa073b7d03eff2",
+     "recipe": [
+      [
+       "dopplertrack",
+       "spectrogram",
+       "{data}/derived/background/aerosonicdb_env_5.wav",
+       "{out}"
+      ]
+     ]
+    }
+   ],
+   "spectrogram": {
+    "path": "derived/background/aerosonicdb_env_5.npz",
+    "sha256": "a3c5e8043b5b01a6bc9f62f18883068351f22257c3cd430aa2fa073b7d03eff2"
+   }
+  },
+  {
+   "id": "aerosonicdb-env-6",
+   "labels": "bench/labels/aerosonicdb_env_6-0000-3600.json",
+   "set": "development",
+   "group": "aerosonicdb",
+   "family": "aerosonicdb",
+   "reference_case": null,
+   "derived": [
+    {
+     "path": "derived/background/aerosonicdb_env_6.wav",
+     "sha256": "573a4d0e73a5c07d977fd25e7d5468bb4a42e6f67a67d7db409e6a9b2beb2710",
+     "recipe": [
+      [
+       "python",
+       "-I",
+       "-c",
+       "import shutil, sys, zipfile; shutil.copyfileobj(zipfile.ZipFile(sys.argv[1]).open(sys.argv[2]), open(sys.argv[3], 'wb'))",
+       "{data}/raw/audio/aerosonicdb/zenodo-10215080/env_audio.zip",
+       "env_audio/6_AUDIO.wav",
+       "{out}"
+      ]
+     ],
+     "note": "the zip member as it is (22.05 kHz mono 16-bit, 3,600 s); AeroSonicDB CC BY-NC"
+    },
+    {
+     "path": "derived/background/aerosonicdb_env_6.npz",
+     "sha256": "80c00d709d8e80af07fd79be26f86b700ad3b4a6a9e0794156fec9ccfda0017e",
+     "recipe": [
+      [
+       "dopplertrack",
+       "spectrogram",
+       "{data}/derived/background/aerosonicdb_env_6.wav",
+       "{out}"
+      ]
+     ]
+    }
+   ],
+   "spectrogram": {
+    "path": "derived/background/aerosonicdb_env_6.npz",
+    "sha256": "80c00d709d8e80af07fd79be26f86b700ad3b4a6a9e0794156fec9ccfda0017e"
+   }
   }
  ],
- "known_point": ["oyster-bay", "eagle-cam-clip-18000s", "oyster-bay-hp150-aac32k"]
+ "known_point": [
+  "oyster-bay",
+  "eagle-cam-clip-18000s",
+  "oyster-bay-hp150-aac32k"
+ ]
 }

@@ -1,5 +1,10 @@
 # adsbfetch as a flight-data source (2026-11-04)
 
+<!-- index
+question: Is the user's adsbfetch CLI (free tar1090 mirrors) a better flight-data source than our adsb.lol tars?
+outcome: Not as a replacement: denser tracks at CPA (gap ~10 s against ~20 s, 2–3× points), Oyster Bay unchanged, but the eagle cam flips to a wrong pair 14 km off on the mirrors' trajectories. 13 bugs found, 11 fixed
+-->
+
 **Question.** The user's `adsbfetch` CLI (/Users/nsokolsky/projects2/adsb_data_fetcher) reads tar1090 globe history from four networks: adsbx, which needs a session cookie the user supplies by hand, and three free mirrors, adsbfi, airplanes.live and adsb.lol. Three questions:
 1. Does it work?
 2. Is its data better than our adsb.lol day-tar cuts where we need it?
@@ -15,7 +20,10 @@ A fuller day-box count alone doesn't decide.
 - The fetcher's checkout was read and run, never edited.
 - `.env` and the captured curl files were never opened.
 - No adsbx data was fetched, with one exception: the fixed smoke script used the `.env` session for one request (part 1).
-- Every request went at the CLI's own pace: serial, 2 s apart.
+- Requests were serial, but **not all 2 s apart** (corrected later the same day). The CLI's throttle holds within one process only, and the scripts started one `trace` process per aircraft and source, so consecutive traces went out as fast as a process starts. Replays were one process each and kept the 2 s pace.
+  - This morning's runs have no request log. The windowed traces in `wtraces2/` (914 files, 03:53–04:04) imply about 0.7 s per request.
+  - In the afternoon's adsbx refetch, which has per-call manifests, 562 of 651 network requests came under 2 s apart (median 0.61 s).
+  - The free-mirror refetch was stopped at 14:19Z, after 206 of its first 409 network requests came under 2 s, and resumed with 2 s after every call.
 - Outputs went to run folders. While bug 13 was open, every source got its own `--cache-dir`; with 0.3.0 that's no longer needed.
 
 ## 1. Does it work
@@ -139,6 +147,101 @@ A fuller day-box count alone doesn't decide.
   - Fetched bodies live outside `raw/` and the manifest.
   - The mirrors' terms of use weren't checked; adsb.lol's are ODbL.
 - **adsbx comparison: ready to run.** It needs the user's fresh token in the fetcher's `.env`. It would repeat part 2's true-flight table and part 3's two cases with `--source adsbx`: about 15 trace requests and about 450 for the windowed sets.
+
+## 4. The refetch on 0.3.1, and adsbx
+
+**Question.** Does anything above change when every byte is fetched again with the audited release, and what does adsbx add?
+
+**Setup.**
+- **Version.** A copy of the frozen checkout, `$DOPPLERTRACK_CACHE/adsbfetch-snapshot-0.3.1+ae2519c6`, copied without `.env` and identical to the checkout by `diff -rq`. `--version` reports 0.3.1+ae2519c6, and its code fingerprint (sha256 of the sorted per-file sha256 list of its .py files) is 4354ce361d69, the same at the start and end of both runs.
+  - Its 348 unit tests pass from the copy. The 7 `test_docs` tests launch `ROOT/.venv/bin/adsbfetch`, so the copy carries one launcher there: the checkout's venv python on the copy's code.
+  - Every manifest row names that build.
+- **Fetch.** Into empty cache roots, with a `--manifest` per call and 2 s after every call. The CLI paces only within one process; the first 14 minutes of the free run weren't paced between calls, then it was stopped and resumed on its own cache.
+  - Free mirrors: the box-day replays on adsbfi, airplanes.live and adsb.lol; the windows rebuilt from them; every windowed hex's day trace on each mirror that has the day (adsb.lol has 2024-12-28 but not 2026-09-08); and the 12 true flights on all three.
+    - 1,113 calls: 1,458 network requests (1,352 ok, 106 absent, 0 failed) and 280 from cache, from 14:05:43 to 15:19:34Z.
+    - The replays include 343 requests to `globe.adsbexchange.com/db-current/*.js`, the aircraft-type tables `--details` loads. They are keyless and sent no session.
+  - adsbx: the 12 true flights, both box-day replays and the windowed traces (adsbx's own window plus 3 NY hexes from the free one). The session comes from the fetcher checkout's `.env`, read by the CLI from its working directory and written nowhere here.
+    - 489 calls: 652 network requests (651 ok, 1 absent) and 70 from cache, 14:07:50–14:18:33Z.
+    - 562 of 651 requests came under 2 s apart (median 0.61 s). It was left as is.
+- **Measures.** Defined in `adsbfetch_refetch_summary.py`.
+  - Window aircraft: propeller and unknown-type hexes seen in the source's replay during the recording ±30 min; for our cut, its traces of those types with a point in the box then.
+  - Trace points: every point of those aircraft's day traces inside the case box. Our cut is a box cut, so the mirrors' traces are clipped to the same box.
+  - CPA: the two true flights' points within ±60 s of CPA, summed, and the larger of their largest gaps.
+  - Only here: traced window aircraft with no trace at all in our cut. Only in cut: the cut's window aircraft the source didn't see in the box during the window at all.
+  - Type disagrees: aircraft the cut has as unknown type that the source types as a jet, so they fall out of its propeller window. Most of the cut's extra window aircraft are these.
+- **The unions.** Free: adsbfi + airplanes.live, as this morning. Free + adsb.lol: SWFL only. Four-mirror: all of them.
+
+**Numbers.** Per case, each source against our adsb.lol tar cut and against this morning's fetch of the same thing.
+
+NY, 2026-09-08 (our cut: 298 window aircraft, 409,701 box points, 28 points at CPA, largest gap 20.0 s):
+
+| Source | Window aircraft | vs cut | vs morning | Box points | vs cut | vs morning | CPA points | vs cut | Largest gap | Only here / only in cut (type disagrees) |
+|---|---|---|---|---|---|---|---|---|---|---|
+| adsbfi | 290 | −2.7 % | 0 % | 310,482 | −24.2 % | 0 % | 27 | −3.6 % | 19.9 s | 15 / 4 (21) |
+| airplanes.live | 295 | −1.0 % | 0 % | 472,190 | +15.3 % | 0 % | 35 | +25.0 % | 10.0 s | 17 / 2 (21) |
+| adsbx | 312 | +4.7 % | – | 420,156 | +2.6 % | – | 24 | −14.3 % | 20.0 s | 30 / 2 (21) |
+| free union | 300 | +0.7 % | 0 % | 707,393 | +72.7 % | 0 % | 61 | +117.9 % | 9.9 s | 22 / 2 (21) |
+| four-mirror union | 315 | +5.7 % | – | 993,102 | +142.4 % | – | 81 | +189.3 % | 9.9 s | 32 / 1 (21) |
+
+adsb.lol's web mirror has no 2026-09-08.
+
+SWFL, 2024-12-28 (our cut: 157 window aircraft, 45,780 box points, 18 points at CPA, largest gap 20.0 s):
+
+| Source | Window aircraft | vs cut | vs morning | Box points | vs cut | vs morning | CPA points | vs cut | Largest gap | Only here / only in cut (type disagrees) |
+|---|---|---|---|---|---|---|---|---|---|---|
+| adsbfi | 88 | −43.9 % | 0 % | 6,308 | −86.2 % | 0 % | 15 | −16.7 % | 374.5 s | 1 / 66 (4) |
+| airplanes.live | 156 | −0.6 % | 0 % | 61,395 | +34.1 % | 0 % | 16 | −11.1 % | 19.9 s | 2 / 1 (4) |
+| adsb.lol (web mirror) | 154 | −1.9 % | 0 % | 45,243 | −1.2 % | – | 18 | 0 % | 20.0 s | 1 / 0 (4) |
+| adsbx | 160 | +1.9 % | – | 66,695 | +45.7 % | – | 17 | −5.6 % | 19.9 s | 5 / 0 (4) |
+| free union | 156 | −0.6 % | 0 % | 67,107 | +46.6 % | 0 % | – | – | – | 2 / 1 (4) |
+| free union + adsb.lol | 157 | 0 % | – | 101,594 | +121.9 % | – | 49 | +172.2 % | 18.2 s | 2 / 0 (4) |
+| four-mirror union | 160 | +1.9 % | – | 160,430 | +250.4 % | – | 65 | +261.1 % | 18.2 s | 5 / 0 (4) |
+
+Part 2 has no row for the SWFL free union of two; its "mirror union" includes adsb.lol. Every CPA number that exists for this morning is unchanged (0 %).
+
+**Did the version matter? No.** Against this morning's copy of the same trace:
+- adsbfi: 426 traces compared, 0 changed, 0 % of points.
+- airplanes.live: 464 traces compared, 0 changed, 0 % of points.
+- adsb.lol: 2 compared, 0 changed. This morning fetched only the 2 SWFL true flights from it.
+- Comparison basis: the windowed traces and the true flights, on (time to the ms, position to 1e-6°, height to 0.1 m). The replays give the same row counts on all five mirror-days with data; the windows are identical. The rebuilt unions (NY 299, SWFL 156) and SWFL's per-mirror files are identical to this morning's, trace for trace: times, positions, heights and speeds.
+- Completeness is unchanged: 9 of 9 and 31 of 31, and the same two extra eagle-cam flights.
+
+**Reading the numbers.**
+- **Points are not information.** A union's point count grows with every network merged in, because their timestamps interleave. The SWFL union with adsb.lol has +122 % points but adds no aircraft, and adsb.lol's web mirror is the same network as our cut: −1.2 % points, 0 % at CPA.
+- **At CPA, airplanes.live is the densest single network in NY,** with a 10 s largest gap. Its SWFL CPA isn't denser than the cut's, though airplanes.live has the most points overall. adsbx is no denser at CPA than our cut on either case.
+- **Aircraft.** adsbx sees the most window aircraft: +4.7 % in NY and +1.9 % in SWFL. The four-mirror union has 32 NY aircraft our cut lacks, against 1 the other way.
+
+**Saved-fit searches on the refetch** (part 3's setup, fresh CPA cache names `cpa/adsbfetch/<case>_r031_*.npz`, one process). The record's rows from section 3 come first for comparison:
+
+| Case, traces | True pair rank | Flight pairs | Refined error | Margin | Top pair, if not the true one |
+|---|---|---|---|---|---|
+| oyster-bay, our cut (section 3) | 1 | 328 | 43.3 m | 4.9 % | |
+| oyster-bay, free union (section 3) | 1 | 55 | 43.3 m | 40.9 % | |
+| oyster-bay, free union, refetched | 1 | 55 | 43.3 m | 40.9 % | |
+| oyster-bay, adsbx | 1 | 44 | 43.3 m | 36.7 % | |
+| oyster-bay, four-mirror union | 1 | 58 | 43.3 m | 35.3 % | |
+| eagle-cam, our cut (section 3) | 1 | 607 | 877 m | 2.5 % | |
+| eagle-cam, free union (section 3) | 3 | 174 | 14,087 m | 5.7 % | a0e90b+a25807 |
+| eagle-cam, free union, refetched | 3 | 174 | 14,087 m | 5.7 % | a0e90b+a25807 |
+| eagle-cam, adsbx | 1 | 187 | 1,173 m | 4.1 % | |
+| eagle-cam, free union + adsb.lol | 1 | 182 | 1,824 m | 2.8 % | |
+| eagle-cam, four-mirror union | 1 | 230 | 1,906 m | 5.2 % | |
+
+- **Deterministic.** The refetched free unions reproduce section 3 exactly, as identical inputs should.
+- **Oyster Bay is unchanged on every source:** rank 1 at 43.3 m, margin 35–41 %.
+- **The eagle cam's flip is specific to adsbfi + airplanes.live.**
+  - adsbx alone puts the true pair back at rank 1: 10.56 against 10.14 for the same runner-up, a0e90b+a25807.
+  - So do both unions that include adsb.lol, the network of our cut (10.19 against 9.91; 10.06 against 9.56).
+  - The refined error grows from 877 m to 1.2–1.9 km.
+  - The margin stays small, 2.8–5.2 %.
+- **Section 3's reading stands, now from both sides.** The eagle cam's rank depends on which networks' tracks are used, and its margin is within the change a different track makes. adsbx doesn't settle it, any more than the free union unsettled it.
+
+**Scripts:** `tools/experiments/2026-11-04/adsbfetch_refetch_summary.py`; `adsbfetch_compare.py --adsbx`; the fetch and build scripts are in the run folders.
+
+**Outputs:**
+- `runs/2026-11-04-adsbfetch-refetch/`: `fetch.sh`, `command.sh`, `snapshot.txt`, `snapshot_unittest.log`, `manifests/`, `logs/`, `replay/`, `wtraces2/`, `traces2/`, `window_*.txt`, `build_npz.sh`, the `*_mirror_*.npz`, `compare_flights.*`, `completeness.json`, `headline.json`.
+- `runs/2026-11-04-adsbfetch-refetch-adsbx/`: the same for adsbx.
+- `runs/2026-11-04-adsbfetch-refetch-savedfit-2/`: the saved-fit runs (`-refetch-savedfit/` failed at argument parsing; nothing ran).
 
 **Scripts:**
 - `tools/data/adsbfetch_to_npz.py`, `tools/data/nnumber.py`;

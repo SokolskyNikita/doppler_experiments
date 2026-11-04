@@ -198,36 +198,41 @@ def _whiten(L: np.ndarray, valid: np.ndarray | None, hop_s: float, whiten_window
     return out
 
 
-def _band(sr, nperseg, fmin, fmax):
-    f = np.fft.rfftfreq(nperseg, 1 / sr)
+def _band(sr, nfft, fmin, fmax):
+    f = np.fft.rfftfreq(nfft, 1 / sr)
     band = (f >= fmin) & (f <= fmax)
     return f[band], band
 
 
-def _stft_db(seg, sr, nperseg, hop, band):
-    _, _, Z = ss.stft(seg, sr, nperseg=nperseg, noverlap=nperseg - hop, window="hann",
+def _stft_db(seg, sr, nperseg, hop, band, nfft=None):
+    _, _, Z = ss.stft(seg, sr, nperseg=nperseg, noverlap=nperseg - hop, window="hann", nfft=nfft,
                       boundary=None, padded=False)
     return (10 * np.log10(np.abs(Z[band]) ** 2 + 1e-20)).astype(np.float32)
 
 
 def compute_spectrogram(x: np.ndarray, sr: int, nperseg: int = 8192, hop_s: float = 0.25,
                         fmin: float = 40.0, fmax: float = 450.0,
-                        whiten_window_s: float | None = 600.0, chunk_frames: int = 16384) -> Spectrogram:
+                        whiten_window_s: float | None = 600.0, chunk_frames: int = 16384,
+                        nfft: int | None = None) -> Spectrogram:
     """High-resolution STFT in the low band, converted to dB and whitened.
 
     Whitening subtracts, per frequency bin, the running median over
     `whiten_window_s` (or the global median if None). This flattens mains
     hum and stationary machinery so only *changing* tones stand out.
+
+    The Hann window is `nperseg` samples long and is zero-padded to `nfft` (default nperseg), so
+    windows of different lengths can share one frequency grid; padding only interpolates the
+    spectrum, and the resolution stays sr / nperseg.
     """
     hop = max(1, int(round(hop_s * sr)))
     # frames k = 0 .. K-1 cover samples [k*hop, k*hop + nperseg); computed in chunks so a
     # many-hour recording never holds its full complex STFT in memory
     K = (len(x) - nperseg) // hop + 1
-    f, band = _band(sr, nperseg, fmin, fmax)
+    f, band = _band(sr, nfft or nperseg, fmin, fmax)
     parts = []
     for k0 in range(0, K, chunk_frames):
         k1 = min(k0 + chunk_frames, K)
-        parts.append(_stft_db(x[k0 * hop:(k1 - 1) * hop + nperseg], sr, nperseg, hop, band))
+        parts.append(_stft_db(x[k0 * hop:(k1 - 1) * hop + nperseg], sr, nperseg, hop, band, nfft))
     L = np.concatenate(parts, axis=1)
     t = (nperseg / 2 + np.arange(K) * hop) / sr
     L = _whiten(L, None, hop / sr, whiten_window_s)
@@ -305,13 +310,14 @@ def spectrogram_from_files(files, sr: int = 4000, start_utc: float | None = None
 
 def spectrogram_from_blocks(blocks, sr: int, start_utc: float | None = None, nperseg: int = 8192,
                             hop_s: float = 0.25, fmin: float = 40.0, fmax: float = 450.0,
-                            whiten_window_s: float | None = 600.0, chunk_frames: int = 16384) -> Spectrogram:
+                            whiten_window_s: float | None = 600.0, chunk_frames: int = 16384,
+                            nfft: int | None = None) -> Spectrogram:
     """compute_spectrogram over a sample stream given as (samples, is_audio) blocks in timeline
     order; a block with is_audio=False is a gap (its samples are ignored and every frame whose
     window overlaps it is invalid). Frames are computed in the same chunks as
     compute_spectrogram, so an all-audio stream gives the same frames."""
     hop = max(1, int(round(hop_s * sr)))
-    f, band = _band(sr, nperseg, fmin, fmax)
+    f, band = _band(sr, nfft or nperseg, fmin, fmax)
     parts, vparts = [], []
     buf, gap = [np.empty(0, np.float32)], [np.empty(0, bool)]     # samples not yet past a full chunk
     need = (chunk_frames - 1) * hop + nperseg                       # samples behind one chunk of frames
@@ -322,7 +328,7 @@ def spectrogram_from_blocks(blocks, sr: int, start_utc: float | None = None, npe
         while len(x) >= need or (final and len(x) >= nperseg):
             n = min(chunk_frames, (len(x) - nperseg) // hop + 1)
             seg = x[:(n - 1) * hop + nperseg]
-            parts.append(_stft_db(seg, sr, nperseg, hop, band))
+            parts.append(_stft_db(seg, sr, nperseg, hop, band, nfft))
             cg = np.concatenate([[0], np.cumsum(g[:len(seg)])])
             s0 = np.arange(n) * hop
             vparts.append(cg[s0 + nperseg] - cg[s0] == 0)

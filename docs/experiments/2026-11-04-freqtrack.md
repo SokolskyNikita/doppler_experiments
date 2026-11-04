@@ -1,5 +1,10 @@
 # Frequency tracks with an off state
 
+<!-- index
+question: Does a local tracker with an off state beat `ridge()` against the trajectory reference on the Livermore passes?
+outcome: Not met: run 1 had lower error (0.45 % against 0.48 %) and 2.8× fewer bridges but 17× more fragments; the one retune (run 2) failed all three. The off state keeps it on manoeuvring passes (0.84 % against 15 %); ssqueezepy locks onto other lines (14 %)
+-->
+
 ## Question
 
 PLAN Phase 2 item 3. Does a local tracker beat `tracks.ridge()` against the trajectory-derived

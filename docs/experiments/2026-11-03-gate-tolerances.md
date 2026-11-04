@@ -1,5 +1,10 @@
 # Wider search gates (2026-11-03)
 
+<!-- index
+question: Do wider search gates let the true pair through safely?
+outcome: No: at ±12 s a wrong pair wins on both recordings
+-->
+
 **Question.** Ideal-curve fits of real passes overestimate f0, which moves the fitted CPA time with it ([2026-11-03-event2-bias](2026-11-03-event2-bias.md)). Does widening the pairing gate (the time between the events) and the f0 sweep let the true pair through without letting wrong pairs win?
 
 **Change.** Two knobs: `--tol` (default ±6 s) and `--f0-tol` (default ±5 %). Their code is in tag `archive/gate-tolerances` (commit 174bc49). Development data.

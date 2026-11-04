@@ -37,6 +37,7 @@ KNOBS = {
     "association_dt_s": 10.0,    # a detection agrees with its associated flight within this heard-CPA difference
     "association_df": 0.10,      # and this fraction of f0
 }
+RISING = "rising line, no straight-pass model"
 COUNTED = ("clear", "overlapping")           # matched or missed
 EXCLUDED = ("uncertain", "masked")           # in neither count, nor are detections inside them
 
@@ -115,16 +116,23 @@ def execute_span(span: dict, out_dir: Path, code: dict, log=print, workers: int 
                                       harmonics=d["harmonics"], top=DETECT_TOP, window_s=d["window_s"], min_score=0.0,
                                       workers=workers)
             detections = [e.to_dict() for e in found if a <= e.t_cpa <= b]
-        tasks = []
+        slots, tasks = [], []
         m = KNOBS["fit_band_margin"]
         for w in windows:
             for j, (f_in, f_out) in enumerate(w["lines"]):
                 lo, hi = min(f_in, f_out) * (1 - m), max(f_in, f_out) * (1 + m)
-                tasks += [(w["window"], j, w["start"], w["end"], lo, hi, objective) for objective in params["objectives"]]
+                for objective in params["objectives"]:
+                    if rising([f_in, f_out]):
+                        slots.append({"window": w["window"], "line": j, "band_hz": [lo, hi], "objective": objective,
+                                      "fit": unavailable(RISING)})
+                    else:
+                        slots.append(None)
+                        tasks.append((w["window"], j, w["start"], w["end"], lo, hi, objective))
         with stage("window_fits"):
             from dopplertrack.parallel import ordered_map, resolve_jobs
             jobs = min(resolve_jobs(workers), max(len(tasks), 1))
-            fits = list(ordered_map(_fit_window, tasks, jobs, _set_fit_crop, (crop,)))
+            done = iter(list(ordered_map(_fit_window, tasks, jobs, _set_fit_crop, (crop,))))
+            fits = [x if x is not None else next(done) for x in slots]
     except Exception as exc:
         errors.append(f"{type(exc).__name__}: {exc}")
         log(f"ERROR: {type(exc).__name__}: {exc}")
@@ -166,6 +174,17 @@ def write_span(out_dir: Path, record: dict) -> str:
     return sha
 
 
+def rising(line) -> bool:
+    """A labelled line whose exit frequency is above its entry: no straight pass makes that."""
+    return float(line[1]) > float(line[0])
+
+
+def outside_model(w: dict) -> bool:
+    """A counted window none of whose lines a straight pass could make: it can't be a flyover, so it is
+    neither matched nor missed, and detections inside it count nowhere."""
+    return not any(not rising(line) for line in w["lines"])
+
+
 def _line_match(f0: float, lines: list[list[float]]) -> bool:
     tol = KNOBS["line_tolerance"]
     return any(min(line) * (1 - tol) <= f0 * k <= max(line) * (1 + tol)
@@ -183,19 +202,20 @@ def match(detections: list[dict], windows: list[dict], min_score: float = 0.0) -
     excluded = 0
     for d in dets:
         inside = [w for w in windows if w["start"] - slack <= d["t_cpa"] <= w["end"] + slack]
-        matches = [w for w in inside if w["class"] in COUNTED and _line_match(d["f0"], w["lines"])]
+        matches = [w for w in inside if w["class"] in COUNTED and not outside_model(w) and _line_match(d["f0"], w["lines"])]
         if matches:
             hit.update(w["index"] for w in matches)
-        elif any(w["class"] in EXCLUDED for w in inside):
+        elif any(w["class"] in EXCLUDED or (w["class"] in COUNTED and outside_model(w)) for w in inside):
             excluded += 1
         else:
             home = min(inside, key=lambda w: abs((w["start"] + w["end"]) / 2 - d["t_cpa"]))["class"] if inside else "outside"
             extra_by[home] = extra_by.get(home, 0) + 1
     out = {}
     for cls in COUNTED:
-        ws = [w for w in windows if w["class"] == cls]
+        ws = [w for w in windows if w["class"] == cls and not outside_model(w)]
         out[cls] = {"windows": len(ws), "matched": sum(w["index"] in hit for w in ws),
-                    "missed": sum(w["index"] not in hit for w in ws)}
+                    "missed": sum(w["index"] not in hit for w in ws),
+                    "outside_model": sum(1 for w in windows if w["class"] == cls and outside_model(w))}
     out["extra"] = {"total": sum(extra_by.values()), "by_window_class": extra_by}
     out["excluded_detections"] = excluded
     out["detections"] = len(dets)
@@ -332,6 +352,11 @@ def compare_span(out_dir: Path, read_labels, reference_context=None) -> dict:
 # The events are chosen blind and written with their hash first; the search at the reference runs in the
 # comparison step, because the reference is truth, and its table is truth-conditioned, never a blind result.
 EVENTS_FILE, EVENTS_HASH = "events.json", "events.json.sha256"
+KP_PROFILES = ("saved-fit", "raw-audio-windows", "raw-audio")
+KP_RULES = {"saved-fit": "the case's saved fits",
+            "raw-audio-windows": "detect on each saved event's window ± crop_margin_s; the best-scoring detection whose "
+                                 "heard CPA lies inside that window (Tier 1's cheap raw-audio rule)",
+            "raw-audio": "detect over the whole recording; its top two by score, earlier first (the raw-audio profile)"}
 KP_FILE, KP_HASH = "known_point.json", "known_point.json.sha256"
 
 
@@ -361,13 +386,30 @@ def case_events(case: dict, profile: str, out_dir: Path, code: dict, workers: in
 
     from .runner import PROFILES, pick_detected, saved_fit_dicts, search_harmonics
     assert "labels" not in case, "the known point's events must be chosen blind"
+    if profile not in KP_PROFILES:
+        raise ValueError(f"known-point profile must be one of {KP_PROFILES}")
     spec = resolve(case["spectrogram"])
     out = {"case": {"id": case["id"], "version": case["version"]}, "profile": profile, "code": code,
-           "harmonics": search_harmonics(case, profile), "inputs": [file_entry("spectrogram", spec)],
-           "detection_key": None}
+           "rule": KP_RULES[profile], "inputs": [file_entry("spectrogram", spec)], "detection_key": None,
+           "harmonics": search_harmonics(case, "saved-fit") if profile == "saved-fit" else [1, 1]}
     if profile == "saved-fit":
         out["events"] = saved_fit_dicts(case)[:2]
         out["inputs"] += [file_entry("saved_fits", resolve(p)) for p in case["events"]["files"]]
+    elif profile == "raw-audio-windows":
+        # detect around each saved event's window, so a cold run costs two short crops, not the recording
+        d, margin = PROFILES["raw-audio"]["detect"], KNOBS["crop_margin_s"]
+        sp = Spectrogram.load(spec)
+        out["events"], out["detection_key"] = [], []
+        for fit in saved_fit_dicts(case)[:2]:
+            crop = sp.crop(fit["t_start"] - margin, fit["t_end"] + margin)
+            params = dict(f_lo=d["band_hz"][0], f_hi=d["band_hz"][1], harmonics=d["harmonics"], top=DETECT_TOP,
+                          window_s=d["window_s"], min_score=0.0)
+            found = [e.to_dict() for e in cached_detections(crop, detect_events, workers=workers, **params)
+                     if fit["t_start"] <= e.t_cpa <= fit["t_end"]]
+            out["detection_key"].append(detection_key(crop, detect_events, **params))
+            if not found:
+                raise ValueError(f"detect found nothing inside the saved window {fit['t_start']:.0f}-{fit['t_end']:.0f} s")
+            out["events"].append(max(found, key=lambda e: e["score"]))
     else:
         d = PROFILES[profile]["detect"]
         sp = Spectrogram.load(spec)
@@ -421,7 +463,9 @@ def known_point(case: dict, out_dir: Path, reference: dict, true_pair, log=print
     second = pairs[1]["score"] if len(pairs) > 1 else None
     return {"status": "scored", "profile": ev["profile"], "pairs_at_point": len(pairs),
             "true_pair_rank_at_point": rank, "true_pair_first": rank == 1,
-            "margin_pct": (100 * (pairs[0]["score"] - second) / second) if rank == 1 and second else None}
+            "margin_pct": ((100 * (pairs[0]["score"] - second) / second) if second else
+                           unavailable(f"n/a: the true pair is the only one of {len(pairs)} pair(s) at the point"))
+                          if rank == 1 else None}
 
 
 def reference_context(span: dict, labels: dict):
@@ -474,7 +518,7 @@ def run_tier1(sets=("development",), run_dir: Path | None = None, log=print, wor
         write_span(out, execute_span(s, out, code, log=log, workers=workers))
         timings[f"span {s['id']}"] = time.perf_counter() - w
     for cid in doc["known_point"]:
-        for profile in ("saved-fit", "raw-audio"):
+        for profile in ("saved-fit", "raw-audio-windows"):
             w = time.perf_counter()
             case_events(blind_case(cid), profile, run_dir / "known_point" / cid / profile, code, workers=workers)
             timings[f"events {cid} {profile}"] = time.perf_counter() - w
@@ -490,7 +534,7 @@ def run_tier1(sets=("development",), run_dir: Path | None = None, log=print, wor
         case = latest_case(cid)
         lab = case_labels(cid, case["version"])
         del case["labels"]
-        for profile in ("saved-fit", "raw-audio"):
+        for profile in ("saved-fit", "raw-audio-windows"):
             w = time.perf_counter()
             e = known_point(case, run_dir / "known_point" / cid / profile, lab["reference"], lab.get("true_pair"), log)
             timings[f"known point {cid} {profile}"] = time.perf_counter() - w

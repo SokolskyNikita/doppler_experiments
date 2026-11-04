@@ -159,7 +159,8 @@ on two recordings, so it is a development setting until the Eclipse cases exist.
 - **Oyster Bay at raw-audio.** The true pair now reaches scoring at the truth but still ranks 8th–9th. Event
   2's biased fit (f0 +6 %) scores it low, which is items 4 and 7's problem, not the gate's.
 - **The eagle cam's margin almost doubles.**
-- **The WSW negative** loses its confident wrong answer: 13.2 % → 0.4 %.
+- **The WSW negative** loses its confident wrong answer: 13.2 % → 0.4 %. This is the first change measured
+  that makes a wrong answer less confident, and Phase 4's verdict will want it.
 - **The steepest clock anchor** (`raw-g16-t4-steepest`) changes ranks by one either way and margins by under
   1 point: no consistent effect, so the heard anchor stays.
 - **Unplaceable triples** at (16, 4) are 18 % on Oyster Bay and 34 % on the eagle cam. They pass to scoring

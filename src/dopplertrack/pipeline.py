@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import os
 import time
 
@@ -14,7 +15,7 @@ from .coverage import (DEFAULT_MAX_RANGE_M, ScanReport, extraction_metadata, pad
                        report_altitude_sources, report_candidate_gaps, report_coverage)
 from .doppler import ideal_curve, speed_of_sound
 from .parallel import ordered_map, resolve_jobs
-from .score import SF_FLAT_RATIO, EventWindow, locked_score, modelled_curve, steepest_fall
+from .score import SF_FLAT_RATIO, EventWindow, locked_score, modelled_curve, single_score, steepest_fall
 from .search import (Grid, Segment, build_segments, cpa_fingerprint, cpa_table, pair_candidates, save_cpa_table,
                      load_cpa_table, stage_triples)
 from .tracks import EventFit
@@ -160,6 +161,45 @@ def _set_score_state(state: dict):
     _SCORE_STATE.update(state)
 
 
+NULL_N = 1000          # CPA rows per event in the comparable score's null
+
+
+def _null_scores(task) -> list[float]:
+    """single_score of one event against a chunk of (observer ENU, segment, heard time) rows: each wrong
+    flight anchored on the event's heard CPA, as locked_score anchors event 1, with the same sweeps."""
+    obs, seg, t_heard = task
+    w, segs, c = _SCORE_STATE["w"], _SCORE_STATE["segs"], _SCORE_STATE["c"]
+    return [single_score(w, segs[int(k)], o, float(t), c=c) for o, k, t in zip(obs, seg, t_heard)]
+
+
+def event_null(w: EventWindow, cpa: pd.DataFrame, segs: list[Segment], enu: np.ndarray, c: float,
+               n: int = NULL_N, workers: int | None = None) -> dict:
+    """The comparable score's null for one event: its single_score against n (grid point, flight) rows drawn
+    uniformly, with replacement, from the CPA table, each anchored on the event. Nearly all are wrong
+    flights, so the median and 1.4826*MAD are the event's own floor and spread (Axelrad 2011 normalises
+    each satellite's correlogram this way before summing). The draw's seed comes from the event's fit,
+    so every search containing the event uses the same null."""
+    f = w.fit
+    seed = int(hashlib.sha256(repr((round(f.t_cpa, 6), round(f.f0, 6), round(f.v, 6), round(f.d, 3), w.harmonics))
+                              .encode()).hexdigest()[:16], 16)
+    idx = np.sort(np.random.default_rng(seed).integers(0, len(cpa), n))
+    rows = cpa.iloc[idx]
+    cols = [rows[k].to_numpy() for k in ("gidx", "seg", "t_heard")]
+    used = np.unique(cols[1])
+    tasks = [(enu[cols[0][a:a + SCORE_CHUNK]], cols[1][a:a + SCORE_CHUNK], cols[2][a:a + SCORE_CHUNK])
+             for a in range(0, n, SCORE_CHUNK)]
+    state = {"w": w, "segs": {int(k): segs[k] for k in used}, "c": c}
+    try:
+        s = np.array([x for part in ordered_map(_null_scores, tasks, min(resolve_jobs(workers), max(len(tasks), 1)),
+                                                _set_score_state, (state,)) for x in part])
+    finally:
+        _SCORE_STATE.clear()
+    med = float(np.median(s))
+    sigma = float(1.4826 * np.median(np.abs(s - med)))
+    return {"median": med, "sigma": sigma, "n": n, "seed": seed,
+            "sample_sha256": hashlib.sha256(np.ascontiguousarray(idx).tobytes()).hexdigest()}
+
+
 def _score_triples(task) -> list[tuple[tuple[float, float, float, float] | None, bool]]:
     """locked_score for a chunk of (observer ENU, segment 1, segment 2, heard time of segment 1, emission
     times of segments 1 and 2). Each result is (scores, unplaceable): scores is None for a triple the
@@ -204,7 +244,8 @@ def run_search(sp: Spectrogram, ev1: EventFit, ev2: EventFit, traces: list[Trace
                cpa_cache=None, trace_metadata=None, search_bbox=None,
                workers: int | None = None, time_convention: str = "heard", sf_tol_s: float | None = None,
                sf_smooth_s: float = 3.0, sf_window_s: float = 60.0, sf_flat_ratio: float = SF_FLAT_RATIO,
-               clock_anchor: str = "heard", triples: dict | None = None) -> tuple[pd.DataFrame, list[Segment]]:
+               clock_anchor: str = "heard", triples: dict | None = None,
+               comparable: bool = False) -> tuple[pd.DataFrame, list[Segment]]:
     """Rank grid points for a two-event recording.
 
     Timing (PLAN Phase 2, item 1); the defaults are the original behaviour:
@@ -215,6 +256,13 @@ def run_search(sp: Spectrogram, ev1: EventFit, ev2: EventFit, traces: list[Trace
       and sf_flat_ratio). A triple where either can't be placed skips the check and is counted unplaceable.
     - clock_anchor: "heard" maps unix to audio time so event 1's modelled heard CPA lands on its fit's;
       "steepest" so its modelled steepest fall lands on its fit's (heard where unplaceable).
+
+    Comparable score (PLAN Phase 2, item 7, stage A); off by default:
+    - comparable=True scores each event against its own null (event_null): z_k = (s_k - median_k) / sigma_k,
+      and ranks by Z = z1 + z2, so that scores from different event pairs are on one scale and a loud event
+      doesn't win by being loud. "score" then holds Z, "raw_score" the old s1 + s2, and res.attrs["null"]
+      each event's null (median, sigma, n, seed, sample hash). Event 2 is scored at event 1's shift, while
+      its null maximises over shifts, so z2 errs low.
 
     cpa_cache: optional .npz path. The (grid point, flight) CPA table depends only on the grid
     (with its elevations), the traces, max_range and the speed of sound, not on the events, and is
@@ -295,12 +343,21 @@ def run_search(sp: Spectrogram, ev1: EventFit, ev2: EventFit, traces: list[Trace
                 kept = np.array([sc is not None for sc, _ in scores], bool)
                 triples["steepest_fall"] = stage_triples(pairs[kept])
         cols = ["gidx", "lat", "lon", "seg1", "seg2", "icao1", "icao2", "t_heard1", "d1", "v1", "d2", "v2", "score", "s1", "s2", "shift"]
-        res = pd.DataFrame(out, columns=cols).sort_values("score", ascending=False).reset_index(drop=True)
+        res = pd.DataFrame(out, columns=cols)
+        if comparable:      # PLAN Phase 2 item 7, stage A: each event's score against its own null
+            nulls = [event_null(w, cpa, segs, grid.enu, c, workers=workers) for w in (w1, w2)]
+            res["raw_score"] = res["score"]
+            for k, nl in ((1, nulls[0]), (2, nulls[1])):
+                res[f"z{k}"] = (res[f"s{k}"] - nl["median"]) / nl["sigma"] if nl["sigma"] > 0 else np.nan
+            res["score"] = res["z1"] + res["z2"]
+        res = res.sort_values("score", ascending=False).reset_index(drop=True)
         funnel["scored"] = len(res)
     with _stage(stages, "gap_report"):
         report_candidate_gaps(traces, res, sp, ev1, max_range_m, c, log)
     res.attrs["stages"] = stages
     res.attrs["funnel"] = funnel
+    if comparable:
+        res.attrs["null"] = {"event1": nulls[0], "event2": nulls[1]}
     return res, segs
 
 

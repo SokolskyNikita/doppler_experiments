@@ -12,8 +12,15 @@ from dopplertrack.search import Grid
 from dopplertrack.terrain import Terrain
 from dopplertrack.tracks import EventFit
 
-args = [a for a in sys.argv[1:] if not a.startswith("--h1")]
-h1 = int(next((a.split("=")[1] for a in sys.argv[1:] if a.startswith("--h1=")), 1))
+args, h1 = [], 1
+argv = iter(sys.argv[1:])
+for a in argv:
+    if a == "--h1":
+        h1 = int(next(argv))
+    elif a.startswith("--h1="):
+        h1 = int(a.split("=", 1)[1])
+    else:
+        args.append(a)
 spec, traces_p, lat, lon = args[0], args[1], float(args[2]), float(args[3])
 sets = [s.split(":") for s in args[4:]]
 

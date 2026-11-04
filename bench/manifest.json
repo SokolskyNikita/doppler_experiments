@@ -104,413 +104,413 @@
    "path": "raw/audio/eclipse/ESID_375/2024_total_eclipse_data_data_dict.csv",
    "bytes": 4564,
    "sha256": "231e56f3d8c5e834cc48fa1c31406e0a35810590bb8275f639561f2294a3ea0a",
-   "source": "Eclipse Soundscapes on Zenodo; record per site in MANIFEST.md",
-   "licence": "CC BY 4.0"
+   "source": "https://zenodo.org/records/21708608",
+   "licence": "https://creativecommons.org/licenses/by/4.0/"
   },
   {
    "path": "raw/audio/eclipse/ESID_375/CONFIG_data_dict.csv",
    "bytes": 11631,
    "sha256": "5cb57d2d4c04718006429a2a79ab0d2eccbe8ccc8ac9a8f132b17b6464f98e65",
-   "source": "Eclipse Soundscapes on Zenodo; record per site in MANIFEST.md",
-   "licence": "CC BY 4.0"
+   "source": "https://zenodo.org/records/21708608",
+   "licence": "https://creativecommons.org/licenses/by/4.0/"
   },
   {
    "path": "raw/audio/eclipse/ESID_375/ESID_375_2024_04_07.zip",
    "bytes": 6400381090,
    "sha256": "4024edc4f01da14a11cd3dc97c5530bc9164cadf5a9611cab62c8b475a30556a",
-   "source": "Eclipse Soundscapes on Zenodo; record per site in MANIFEST.md",
-   "licence": "CC BY 4.0"
+   "source": "https://zenodo.org/records/21708608",
+   "licence": "https://creativecommons.org/licenses/by/4.0/"
   },
   {
    "path": "raw/audio/eclipse/ESID_375/License.txt",
    "bytes": 18657,
    "sha256": "9ba9550ad48438d0836ddab3da480b3b69ffa0aac7b7878b5a0039e7ab429411",
-   "source": "Eclipse Soundscapes on Zenodo; record per site in MANIFEST.md",
-   "licence": "CC BY 4.0"
+   "source": "https://zenodo.org/records/21708608",
+   "licence": "https://creativecommons.org/licenses/by/4.0/"
   },
   {
    "path": "raw/audio/eclipse/ESID_375/README.md",
    "bytes": 22130,
    "sha256": "9a6de81c10c469387051d4648db4197f09cdb35c56623a88c82731c472a41ef3",
-   "source": "Eclipse Soundscapes on Zenodo; record per site in MANIFEST.md",
-   "licence": "CC BY 4.0"
+   "source": "https://zenodo.org/records/21708608",
+   "licence": "https://creativecommons.org/licenses/by/4.0/"
   },
   {
    "path": "raw/audio/eclipse/ESID_375/WAV_data_dict.csv",
    "bytes": 1676,
    "sha256": "4cf673bdfdb9e55d56355b32812dd30b22926e0476743796d0d62be0b0c49000",
-   "source": "Eclipse Soundscapes on Zenodo; record per site in MANIFEST.md",
-   "licence": "CC BY 4.0"
+   "source": "https://zenodo.org/records/21708608",
+   "licence": "https://creativecommons.org/licenses/by/4.0/"
   },
   {
    "path": "raw/audio/eclipse/ESID_375/file_list.csv",
    "bytes": 320672,
    "sha256": "f5df9fb4fbaa48c117ebd4a4890f134cfed3ac6371adb6928389e3a9e945fe0b",
-   "source": "Eclipse Soundscapes on Zenodo; record per site in MANIFEST.md",
-   "licence": "CC BY 4.0"
+   "source": "https://zenodo.org/records/21708608",
+   "licence": "https://creativecommons.org/licenses/by/4.0/"
   },
   {
    "path": "raw/audio/eclipse/ESID_375/file_list_data_dict.csv",
    "bytes": 1110,
    "sha256": "f47b56a5c92229b5cc51cda9c88f5073b6fafc1af00b5f065dfaf5b28ddd0362",
-   "source": "Eclipse Soundscapes on Zenodo; record per site in MANIFEST.md",
-   "licence": "CC BY 4.0"
+   "source": "https://zenodo.org/records/21708608",
+   "licence": "https://creativecommons.org/licenses/by/4.0/"
   },
   {
    "path": "raw/audio/eclipse/ESID_375/related_identifiers.csv",
    "bytes": 417,
    "sha256": "d4d6687c45e7e36eaf4de480077f29e39276568b2c28064a5b61edaa1ba90e2a",
-   "source": "Eclipse Soundscapes on Zenodo; record per site in MANIFEST.md",
-   "licence": "CC BY 4.0"
+   "source": "https://zenodo.org/records/21708608",
+   "licence": "https://creativecommons.org/licenses/by/4.0/"
   },
   {
    "path": "raw/audio/eclipse/ESID_375/total_eclipse_data.csv",
    "bytes": 559,
    "sha256": "07be401ad725b76a16258d6d3265fbdf0fd41bf4ae288b4f728a988f5ec5a002",
-   "source": "Eclipse Soundscapes on Zenodo; record per site in MANIFEST.md",
-   "licence": "CC BY 4.0"
+   "source": "https://zenodo.org/records/21708608",
+   "licence": "https://creativecommons.org/licenses/by/4.0/"
   },
   {
    "path": "raw/audio/eclipse/ESID_375/zenodo_checksums.txt",
    "bytes": 588,
    "sha256": "c374332ce89a480dccdbd76c2e77cadcf70284164c9d3d7cbf4fc31e981ab865",
-   "source": "Eclipse Soundscapes on Zenodo; record per site in MANIFEST.md",
-   "licence": "CC BY 4.0"
+   "source": "https://zenodo.org/records/21708608",
+   "licence": "https://creativecommons.org/licenses/by/4.0/"
   },
   {
    "path": "raw/audio/eclipse/ESID_710/2024_total_eclipse_data_data_dict.csv",
    "bytes": 4564,
    "sha256": "231e56f3d8c5e834cc48fa1c31406e0a35810590bb8275f639561f2294a3ea0a",
-   "source": "Eclipse Soundscapes on Zenodo; record per site in MANIFEST.md",
-   "licence": "CC BY 4.0"
+   "source": "https://zenodo.org/records/21722091",
+   "licence": "https://creativecommons.org/licenses/by/4.0/"
   },
   {
    "path": "raw/audio/eclipse/ESID_710/CONFIG_data_dict.csv",
    "bytes": 11631,
    "sha256": "5cb57d2d4c04718006429a2a79ab0d2eccbe8ccc8ac9a8f132b17b6464f98e65",
-   "source": "Eclipse Soundscapes on Zenodo; record per site in MANIFEST.md",
-   "licence": "CC BY 4.0"
+   "source": "https://zenodo.org/records/21722091",
+   "licence": "https://creativecommons.org/licenses/by/4.0/"
   },
   {
    "path": "raw/audio/eclipse/ESID_710/ESID_710_2024_04_07.zip",
    "bytes": 5915720954,
    "sha256": "38591fdf510d076fba9f22175cee8186b6669169f00946e0d62f0ec7f7ae5717",
-   "source": "Eclipse Soundscapes on Zenodo; record per site in MANIFEST.md",
-   "licence": "CC BY 4.0"
+   "source": "https://zenodo.org/records/21722091",
+   "licence": "https://creativecommons.org/licenses/by/4.0/"
   },
   {
    "path": "raw/audio/eclipse/ESID_710/License.txt",
    "bytes": 18657,
    "sha256": "9ba9550ad48438d0836ddab3da480b3b69ffa0aac7b7878b5a0039e7ab429411",
-   "source": "Eclipse Soundscapes on Zenodo; record per site in MANIFEST.md",
-   "licence": "CC BY 4.0"
+   "source": "https://zenodo.org/records/21722091",
+   "licence": "https://creativecommons.org/licenses/by/4.0/"
   },
   {
    "path": "raw/audio/eclipse/ESID_710/README.md",
    "bytes": 22129,
    "sha256": "c882ddbae6178a7c4155176e6c3c7b27125a62233d9fca1027582ca491aca89d",
-   "source": "Eclipse Soundscapes on Zenodo; record per site in MANIFEST.md",
-   "licence": "CC BY 4.0"
+   "source": "https://zenodo.org/records/21722091",
+   "licence": "https://creativecommons.org/licenses/by/4.0/"
   },
   {
    "path": "raw/audio/eclipse/ESID_710/WAV_data_dict.csv",
    "bytes": 1676,
    "sha256": "4cf673bdfdb9e55d56355b32812dd30b22926e0476743796d0d62be0b0c49000",
-   "source": "Eclipse Soundscapes on Zenodo; record per site in MANIFEST.md",
-   "licence": "CC BY 4.0"
+   "source": "https://zenodo.org/records/21722091",
+   "licence": "https://creativecommons.org/licenses/by/4.0/"
   },
   {
    "path": "raw/audio/eclipse/ESID_710/file_list.csv",
    "bytes": 2202846,
    "sha256": "1ec133e40cedc120d785b8ce12f5bc4fa36c0ccf79328ef71b5c571874acb35a",
-   "source": "Eclipse Soundscapes on Zenodo; record per site in MANIFEST.md",
-   "licence": "CC BY 4.0"
+   "source": "https://zenodo.org/records/21722091",
+   "licence": "https://creativecommons.org/licenses/by/4.0/"
   },
   {
    "path": "raw/audio/eclipse/ESID_710/file_list_data_dict.csv",
    "bytes": 1110,
    "sha256": "f47b56a5c92229b5cc51cda9c88f5073b6fafc1af00b5f065dfaf5b28ddd0362",
-   "source": "Eclipse Soundscapes on Zenodo; record per site in MANIFEST.md",
-   "licence": "CC BY 4.0"
+   "source": "https://zenodo.org/records/21722091",
+   "licence": "https://creativecommons.org/licenses/by/4.0/"
   },
   {
    "path": "raw/audio/eclipse/ESID_710/total_eclipse_data.csv",
    "bytes": 628,
    "sha256": "e7dcecea79a8abbf4fbc2f58d969b388aee24d0729cdcec94f664cd3f6a88f05",
-   "source": "Eclipse Soundscapes on Zenodo; record per site in MANIFEST.md",
-   "licence": "CC BY 4.0"
+   "source": "https://zenodo.org/records/21722091",
+   "licence": "https://creativecommons.org/licenses/by/4.0/"
   },
   {
    "path": "raw/audio/eclipse/ESID_710/zenodo_checksums.txt",
    "bytes": 526,
    "sha256": "11eace8482cc24fdf2aeb8c3a15106dc2e19c0915c02f0a7338fa115bba87a77",
-   "source": "Eclipse Soundscapes on Zenodo; record per site in MANIFEST.md",
-   "licence": "CC BY 4.0"
+   "source": "https://zenodo.org/records/21722091",
+   "licence": "https://creativecommons.org/licenses/by/4.0/"
   },
   {
    "path": "raw/audio/eclipse/ESID_740/2024_total_eclipse_data_data_dict.csv",
    "bytes": 4564,
    "sha256": "231e56f3d8c5e834cc48fa1c31406e0a35810590bb8275f639561f2294a3ea0a",
-   "source": "Eclipse Soundscapes on Zenodo; record per site in MANIFEST.md",
-   "licence": "CC BY 4.0"
+   "source": "https://zenodo.org/records/21877430",
+   "licence": "https://creativecommons.org/licenses/by/4.0/"
   },
   {
    "path": "raw/audio/eclipse/ESID_740/CONFIG_data_dict.csv",
    "bytes": 11631,
    "sha256": "5cb57d2d4c04718006429a2a79ab0d2eccbe8ccc8ac9a8f132b17b6464f98e65",
-   "source": "Eclipse Soundscapes on Zenodo; record per site in MANIFEST.md",
-   "licence": "CC BY 4.0"
+   "source": "https://zenodo.org/records/21877430",
+   "licence": "https://creativecommons.org/licenses/by/4.0/"
   },
   {
    "path": "raw/audio/eclipse/ESID_740/ESID_740_2024_04_07.zip",
    "bytes": 6008307317,
    "sha256": "0d7bba2ef829e8fc30ed1db45def9deb961ad6e773066b655742450e1b9ab3bc",
-   "source": "Eclipse Soundscapes on Zenodo; record per site in MANIFEST.md",
-   "licence": "CC BY 4.0"
+   "source": "https://zenodo.org/records/21877430",
+   "licence": "https://creativecommons.org/licenses/by/4.0/"
   },
   {
    "path": "raw/audio/eclipse/ESID_740/License.txt",
    "bytes": 18657,
    "sha256": "9ba9550ad48438d0836ddab3da480b3b69ffa0aac7b7878b5a0039e7ab429411",
-   "source": "Eclipse Soundscapes on Zenodo; record per site in MANIFEST.md",
-   "licence": "CC BY 4.0"
+   "source": "https://zenodo.org/records/21877430",
+   "licence": "https://creativecommons.org/licenses/by/4.0/"
   },
   {
    "path": "raw/audio/eclipse/ESID_740/README.md",
    "bytes": 22125,
    "sha256": "5db1032a833bb51c78e1ab17ac1cccfa2cc5d7f3a407e4a8e1913f35cf235f37",
-   "source": "Eclipse Soundscapes on Zenodo; record per site in MANIFEST.md",
-   "licence": "CC BY 4.0"
+   "source": "https://zenodo.org/records/21877430",
+   "licence": "https://creativecommons.org/licenses/by/4.0/"
   },
   {
    "path": "raw/audio/eclipse/ESID_740/WAV_data_dict.csv",
    "bytes": 1676,
    "sha256": "4cf673bdfdb9e55d56355b32812dd30b22926e0476743796d0d62be0b0c49000",
-   "source": "Eclipse Soundscapes on Zenodo; record per site in MANIFEST.md",
-   "licence": "CC BY 4.0"
+   "source": "https://zenodo.org/records/21877430",
+   "licence": "https://creativecommons.org/licenses/by/4.0/"
   },
   {
    "path": "raw/audio/eclipse/ESID_740/file_list.csv",
    "bytes": 2490243,
    "sha256": "3641d8617ddd873b61d3124ecbcd59362238475d81445d2e7de04359b5704a3f",
-   "source": "Eclipse Soundscapes on Zenodo; record per site in MANIFEST.md",
-   "licence": "CC BY 4.0"
+   "source": "https://zenodo.org/records/21877430",
+   "licence": "https://creativecommons.org/licenses/by/4.0/"
   },
   {
    "path": "raw/audio/eclipse/ESID_740/file_list_data_dict.csv",
    "bytes": 1110,
    "sha256": "f47b56a5c92229b5cc51cda9c88f5073b6fafc1af00b5f065dfaf5b28ddd0362",
-   "source": "Eclipse Soundscapes on Zenodo; record per site in MANIFEST.md",
-   "licence": "CC BY 4.0"
+   "source": "https://zenodo.org/records/21877430",
+   "licence": "https://creativecommons.org/licenses/by/4.0/"
   },
   {
    "path": "raw/audio/eclipse/ESID_740/total_eclipse_data.csv",
    "bytes": 626,
    "sha256": "d49e6898b75e6b2a0d38cc3b1e8b9df482acbf8ad14f2b08d07632c96f68f3cf",
-   "source": "Eclipse Soundscapes on Zenodo; record per site in MANIFEST.md",
-   "licence": "CC BY 4.0"
+   "source": "https://zenodo.org/records/21877430",
+   "licence": "https://creativecommons.org/licenses/by/4.0/"
   },
   {
    "path": "raw/audio/eclipse/ESID_740/zenodo_checksums.txt",
    "bytes": 526,
    "sha256": "5ebce95d8aa35a885d98580d9d18c94aa116d0991c0d3eb096ab04e00aed8350",
-   "source": "Eclipse Soundscapes on Zenodo; record per site in MANIFEST.md",
-   "licence": "CC BY 4.0"
+   "source": "https://zenodo.org/records/21877430",
+   "licence": "https://creativecommons.org/licenses/by/4.0/"
   },
   {
    "path": "raw/audio/eclipse/ESID_937/2024_total_eclipse_data_data_dict.csv",
    "bytes": 4564,
    "sha256": "231e56f3d8c5e834cc48fa1c31406e0a35810590bb8275f639561f2294a3ea0a",
-   "source": "Eclipse Soundscapes on Zenodo; record per site in MANIFEST.md",
-   "licence": "CC BY 4.0"
+   "source": "https://zenodo.org/records/21829727",
+   "licence": "https://creativecommons.org/licenses/by/4.0/"
   },
   {
    "path": "raw/audio/eclipse/ESID_937/CONFIG_data_dict.csv",
    "bytes": 11631,
    "sha256": "5cb57d2d4c04718006429a2a79ab0d2eccbe8ccc8ac9a8f132b17b6464f98e65",
-   "source": "Eclipse Soundscapes on Zenodo; record per site in MANIFEST.md",
-   "licence": "CC BY 4.0"
+   "source": "https://zenodo.org/records/21829727",
+   "licence": "https://creativecommons.org/licenses/by/4.0/"
   },
   {
    "path": "raw/audio/eclipse/ESID_937/ESID_937_2024_04_07.zip",
    "bytes": 6076307462,
    "sha256": "2fec7e19f246436798cec929475e2bee7de213dd95010ccf26dc8ad8b62ebfcc",
-   "source": "Eclipse Soundscapes on Zenodo; record per site in MANIFEST.md",
-   "licence": "CC BY 4.0"
+   "source": "https://zenodo.org/records/21829727",
+   "licence": "https://creativecommons.org/licenses/by/4.0/"
   },
   {
    "path": "raw/audio/eclipse/ESID_937/License.txt",
    "bytes": 18657,
    "sha256": "9ba9550ad48438d0836ddab3da480b3b69ffa0aac7b7878b5a0039e7ab429411",
-   "source": "Eclipse Soundscapes on Zenodo; record per site in MANIFEST.md",
-   "licence": "CC BY 4.0"
+   "source": "https://zenodo.org/records/21829727",
+   "licence": "https://creativecommons.org/licenses/by/4.0/"
   },
   {
    "path": "raw/audio/eclipse/ESID_937/README.md",
    "bytes": 22125,
    "sha256": "47e1c5580f594804d17873bbe36aba3d9448b010eab4988b03a64029b28c1352",
-   "source": "Eclipse Soundscapes on Zenodo; record per site in MANIFEST.md",
-   "licence": "CC BY 4.0"
+   "source": "https://zenodo.org/records/21829727",
+   "licence": "https://creativecommons.org/licenses/by/4.0/"
   },
   {
    "path": "raw/audio/eclipse/ESID_937/WAV_data_dict.csv",
    "bytes": 1676,
    "sha256": "4cf673bdfdb9e55d56355b32812dd30b22926e0476743796d0d62be0b0c49000",
-   "source": "Eclipse Soundscapes on Zenodo; record per site in MANIFEST.md",
-   "licence": "CC BY 4.0"
+   "source": "https://zenodo.org/records/21829727",
+   "licence": "https://creativecommons.org/licenses/by/4.0/"
   },
   {
    "path": "raw/audio/eclipse/ESID_937/file_list.csv",
    "bytes": 8638,
    "sha256": "1ca7a4968585a1ba9e5685377397bb9f2fa317a88e78e99b688a855c1e0283ad",
-   "source": "Eclipse Soundscapes on Zenodo; record per site in MANIFEST.md",
-   "licence": "CC BY 4.0"
+   "source": "https://zenodo.org/records/21829727",
+   "licence": "https://creativecommons.org/licenses/by/4.0/"
   },
   {
    "path": "raw/audio/eclipse/ESID_937/file_list_data_dict.csv",
    "bytes": 1110,
    "sha256": "f47b56a5c92229b5cc51cda9c88f5073b6fafc1af00b5f065dfaf5b28ddd0362",
-   "source": "Eclipse Soundscapes on Zenodo; record per site in MANIFEST.md",
-   "licence": "CC BY 4.0"
+   "source": "https://zenodo.org/records/21829727",
+   "licence": "https://creativecommons.org/licenses/by/4.0/"
   },
   {
    "path": "raw/audio/eclipse/ESID_937/total_eclipse_data.csv",
    "bytes": 576,
    "sha256": "38d51350bb9b45918770ea858dfaf7a15b7b2f19e413b6624540d89a599eab04",
-   "source": "Eclipse Soundscapes on Zenodo; record per site in MANIFEST.md",
-   "licence": "CC BY 4.0"
+   "source": "https://zenodo.org/records/21829727",
+   "licence": "https://creativecommons.org/licenses/by/4.0/"
   },
   {
    "path": "raw/audio/eclipse/ESID_937/zenodo_checksums.txt",
    "bytes": 526,
    "sha256": "607f1cc76ca37d2bc401a809ac1f178e843b65025f76aa094e928f0d3674ddf7",
-   "source": "Eclipse Soundscapes on Zenodo; record per site in MANIFEST.md",
-   "licence": "CC BY 4.0"
+   "source": "https://zenodo.org/records/21829727",
+   "licence": "https://creativecommons.org/licenses/by/4.0/"
   },
   {
    "path": "raw/audio/eclipse/sites.csv",
    "bytes": 97755,
    "sha256": "d35897251afb0cf1c97c6080137dd8c4d0dab34492fab603c458e5e38159a9fd",
-   "source": "Eclipse Soundscapes on Zenodo; record per site in MANIFEST.md",
-   "licence": "CC BY 4.0"
+   "source": "Eclipse Soundscapes site list compiled from Zenodo",
+   "licence": null
   },
   {
    "path": "raw/audio/xenocanto/XC1008818_2025-06-15_1100.wav",
    "bytes": 69541472,
    "sha256": "4b8fc64276b03bc40694dac2cd033ee42217ccfb92b8138bedbf98ee8718f096",
-   "source": "xeno-canto.org API v3",
-   "licence": "CC BY-NC-SA 4.0 (one recording BY-NC-ND)"
+   "source": "https://xeno-canto.org/1008818",
+   "licence": "https://creativecommons.org/licenses/by-nc-sa/4.0/"
   },
   {
    "path": "raw/audio/xenocanto/XC892589_2024-03-30_1700.wav",
    "bytes": 94742078,
    "sha256": "7d299f2097218b31cbba0d7b7485106c684210f42b34be49a6f27d1cbaf8840e",
-   "source": "xeno-canto.org API v3",
-   "licence": "CC BY-NC-SA 4.0 (one recording BY-NC-ND)"
+   "source": "https://xeno-canto.org/892589",
+   "licence": "https://creativecommons.org/licenses/by-nc-sa/4.0/"
   },
   {
    "path": "raw/audio/xenocanto/XC979185_2025-03-10_0550.mp3",
    "bytes": 31367778,
    "sha256": "39c4272e90cce856104261e70683faba642a7220b64e9e43c4362e2e526dbdbc",
-   "source": "xeno-canto.org API v3",
-   "licence": "CC BY-NC-SA 4.0 (one recording BY-NC-ND)"
+   "source": "https://xeno-canto.org/979185",
+   "licence": "https://creativecommons.org/licenses/by-nc-sa/4.0/"
   },
   {
    "path": "raw/audio/xenocanto/XC982817_2025-03-24_1600.wav",
    "bytes": 53510376,
    "sha256": "03005115033c280d237ef85ae3038ac38baee9c34f47b2007add09cf48088093",
-   "source": "xeno-canto.org API v3",
-   "licence": "CC BY-NC-SA 4.0 (one recording BY-NC-ND)"
+   "source": "https://xeno-canto.org/982817",
+   "licence": "https://creativecommons.org/licenses/by-nc-sa/4.0/"
   },
   {
    "path": "raw/audio/xenocanto/XC986433_2025-04-07_0545.mp3",
    "bytes": 44078321,
    "sha256": "589f7966944c9baa2731460d016e6ccdf0fde8080d41cad564aadf3c75fcbc25",
-   "source": "xeno-canto.org API v3",
-   "licence": "CC BY-NC-SA 4.0 (one recording BY-NC-ND)"
+   "source": "https://xeno-canto.org/986433",
+   "licence": "https://creativecommons.org/licenses/by-nc-sa/4.0/"
   },
   {
    "path": "raw/audio/xenocanto/XC990819_2025-04-20_0510.mp3",
    "bytes": 88644496,
    "sha256": "1f1cbf5333af6725aa19d756bb8df6264a6c76754984cf0d7b8a6b9d916bfb1a",
-   "source": "xeno-canto.org API v3",
-   "licence": "CC BY-NC-SA 4.0 (one recording BY-NC-ND)"
+   "source": "https://xeno-canto.org/990819",
+   "licence": "https://creativecommons.org/licenses/by-nc-sa/4.0/"
   },
   {
    "path": "raw/audio/xenocanto/XC990820_2025-04-20_0510.mp3",
    "bytes": 58529085,
    "sha256": "2eab392ed6f88139c4969df15b89f14ea0441c9b6e1d8047644524c38adb5789",
-   "source": "xeno-canto.org API v3",
-   "licence": "CC BY-NC-SA 4.0 (one recording BY-NC-ND)"
+   "source": "https://xeno-canto.org/990820",
+   "licence": "https://creativecommons.org/licenses/by-nc-sa/4.0/"
   },
   {
    "path": "raw/audio/xenocanto/candidates.csv",
    "bytes": 97206,
    "sha256": "9632017244e16460d4423b8e9fb8564de60a10191a676dad25a3ee28b58589a0",
-   "source": "xeno-canto.org API v3",
-   "licence": "CC BY-NC-SA 4.0 (one recording BY-NC-ND)"
+   "source": "xeno-canto.org API v3 search results",
+   "licence": null
   },
   {
    "path": "raw/audio/xenocanto/candidates_all.csv",
    "bytes": 2654612,
    "sha256": "cd6904baa7214748958f1bab97612759cc5c0904bcbab13fd3181aa2698dde6d",
-   "source": "xeno-canto.org API v3",
-   "licence": "CC BY-NC-SA 4.0 (one recording BY-NC-ND)"
+   "source": "xeno-canto.org API v3 search results",
+   "licence": null
   },
   {
    "path": "raw/audio/xenocanto/raw.json",
    "bytes": 9549688,
    "sha256": "dc00404fd9d7aa712667fac8808a500f6ddd098d6b6319e5ba76f684ae12df56",
-   "source": "xeno-canto.org API v3",
-   "licence": "CC BY-NC-SA 4.0 (one recording BY-NC-ND)"
+   "source": "xeno-canto.org API v3 search results",
+   "licence": null
   },
   {
    "path": "raw/audio/xenocanto/selected.json",
    "bytes": 7291,
    "sha256": "c41ef63b64ccb5d8ee0031f23793e1765a2bbeb0bbfa47cfc396aca5801ff1b0",
-   "source": "xeno-canto.org API v3",
-   "licence": "CC BY-NC-SA 4.0 (one recording BY-NC-ND)"
+   "source": "xeno-canto.org API v3 search results",
+   "licence": null
   },
   {
    "path": "raw/audio/youtube/oyster_bay.m4a",
    "bytes": 58224994,
    "sha256": "4fee89ade0a1f5e6e48eaec33499f710ded907e3ab483c7e6d3f064da86537cd",
-   "source": "youtu.be/4CxVxuMVkMc (colsto)",
+   "source": "https://youtu.be/4CxVxuMVkMc (colsto)",
    "licence": null
   },
   {
    "path": "raw/audio/youtube/oyster_bay.webm",
    "bytes": 45780657,
    "sha256": "6884324b4fb9babbc89b10de71f283dd338766a15d2fbd1aeedb52216276692d",
-   "source": "youtu.be/4CxVxuMVkMc (colsto)",
+   "source": "https://youtu.be/4CxVxuMVkMc (colsto)",
    "licence": null
   },
   {
    "path": "raw/audio/youtube/oyster_bay.ytdlp.log",
    "bytes": 4570,
    "sha256": "075c66cb1d1233f14d36cd74c417c22595249465286827becad0c95ed8b1d10e",
-   "source": "youtu.be/4CxVxuMVkMc (colsto)",
+   "source": "https://youtu.be/4CxVxuMVkMc (colsto)",
    "licence": null
   },
   {
    "path": "raw/audio/youtube/swfl_2024-12-28.info.json",
    "bytes": 189528,
    "sha256": "532a1ce8d2e1bedbcb6f137616438d5d36a2fda1c06c75bef8724c81165f5e48",
-   "source": "youtu.be/zs2o5Rhlp5w (SWFL Eagle Cam #3)",
+   "source": "https://youtu.be/zs2o5Rhlp5w (SWFL Eagle Cam #3)",
    "licence": null
   },
   {
    "path": "raw/audio/youtube/swfl_2024-12-28.webm",
    "bytes": 767630821,
    "sha256": "58dd4c1259598c85579d1aba1311d18651f70501c2df822104cacb54b4a0ddc0",
-   "source": "youtu.be/zs2o5Rhlp5w (SWFL Eagle Cam #3)",
+   "source": "https://youtu.be/zs2o5Rhlp5w (SWFL Eagle Cam #3)",
    "licence": null
   },
   {
    "path": "raw/audio/youtube/swfl_2024-12-28.ytdlp.log",
    "bytes": 62746,
    "sha256": "ba602fa88c1d1a5a169dc4ea7bbe8c61d183479ede5d52b00579e8ce4fd541c8",
-   "source": "youtu.be/zs2o5Rhlp5w (SWFL Eagle Cam #3)",
+   "source": "https://youtu.be/zs2o5Rhlp5w (SWFL Eagle Cam #3)",
    "licence": null
   },
   {

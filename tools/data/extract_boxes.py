@@ -1,5 +1,8 @@
 """One pass over a local (possibly split) adsb.lol day tar, writing prop traces for several boxes.
 
+Refuses to start if any output already exists, and writes each file under a temporary name before
+renaming it into place, so an interrupted run never leaves a half-written box behind.
+
 usage: extract_boxes.py DAY_DIR OUT_DIR name=LATMIN,LATMAX,LONMIN,LONMAX [...]
 """
 import io
@@ -36,6 +39,17 @@ boxes = {}
 for arg in sys.argv[3:]:
     name, v = arg.split("=")
     boxes[name] = tuple(float(x) for x in v.split(","))
+outs = [out_dir / f"{name}{suffix}.npz" for name in boxes for suffix in ("", "_all") if suffix == "" or os.environ.get("KEEP_ALL")]
+if taken := [str(p) for p in outs if p.exists()]:
+    sys.exit("refusing to overwrite: " + ", ".join(taken))
+
+
+def publish(traces, path):
+    tmp = path.with_name(f".{path.stem}.{os.getpid()}.tmp.npz")
+    save_traces(traces, tmp)
+    os.replace(tmp, path)
+
+
 union = (min(b[0] for b in boxes.values()), max(b[1] for b in boxes.values()),
          min(b[2] for b in boxes.values()), max(b[3] for b in boxes.values()))
 parts = sorted(p for p in day_dir.iterdir() if ".tar" in p.name)
@@ -48,8 +62,8 @@ out_dir.mkdir(parents=True, exist_ok=True)
 for name, b in boxes.items():
     tr = [t for t in hits if in_bbox(t, b)]
     prop = [t for t in tr if types.is_prop(t.typ)]
-    save_traces(prop, out_dir / f"{name}.npz")
+    publish(prop, out_dir / f"{name}.npz")
     if os.environ.get("KEEP_ALL"):
-        save_traces(tr, out_dir / f"{name}_all.npz")
+        publish(tr, out_dir / f"{name}_all.npz")
     print(f"{name} {b}: {len(tr)} traces, {len(prop)} prop -> {out_dir / (name + '.npz')}", flush=True)
 print(f"done in {time.time() - t0:.0f} s", flush=True)

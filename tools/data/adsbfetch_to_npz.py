@@ -40,6 +40,7 @@ DEDUPE_S = 0.05
 
 
 def trace_url(origin, hex_, day):
+    """The trace file's URL; a "~" address keeps its tilde in the file name (trace_full_~2a1633.json)."""
     return f"{origin}/globe_history/{day:%Y/%m/%d}/traces/{hex_[-2:]}/trace_full_{hex_}.json"
 
 
@@ -126,7 +127,7 @@ def main():
             hex_ = (rows[0]["hex"] if rows else (m.group(1) if m else None))
             if hex_ is None:
                 continue
-            hex_ = hex_.lower().lstrip("~")
+            hex_ = hex_.lower()        # a non-ICAO (TIS-B) address keeps its "~", as in our tar cuts
             per_hex.setdefault(hex_, [])
             body = Path(a.cache) / hashlib.sha256(trace_url(ORIGINS[source], hex_, day).encode()).hexdigest()
             if rows and "ts_epoch" in rows[0]:         # the fixed CLI's rows carry everything we read
@@ -141,6 +142,8 @@ def main():
                     per_hex[hex_].append(tr)
             elif rows:
                 per_hex[hex_].append(from_rows(rows, hex_)); n_lossy += 1
+    for h in [h for h, v in per_hex.items() if not v and "~" + h in per_hex]:
+        del per_hex[h]       # an empty file names its aircraft without the "~" its other source's rows carry
     types = AircraftTypes()
     merged = [merge(v) for v in per_hex.values() if v]
     kept = [tr for tr in merged if types.is_prop(tr.typ)] if a.prop_only else merged

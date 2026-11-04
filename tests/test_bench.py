@@ -1,0 +1,120 @@
+"""The case manifest and the runner's hash-before-truth rule (PLAN.md 5.1, 5.5). No data needed."""
+import copy
+import json
+import sys
+from pathlib import Path
+
+import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from bench import cases, runner  # noqa: E402
+from dopplertrack.result import dumps  # noqa: E402
+from test_result import example_record  # noqa: E402
+
+
+def test_committed_manifest_is_valid():
+    doc = cases.load_cases()
+    assert {c["set"] for c in doc["cases"]} == {"development"}
+    assert len({c["id"] for c in doc["cases"]}) == 4
+
+
+def _case():
+    return copy.deepcopy(cases.load_cases()["cases"][0])
+
+
+@pytest.mark.parametrize("field", ["source", "uncertainty_s"])
+def test_a_case_without_a_start_time_source_or_uncertainty_is_refused(field):
+    case = _case()
+    del case["start_time"][field]
+    with pytest.raises(cases.CaseError, match=f"start_time.{field}"):
+        cases.validate_case(case, cases.manifest_files())
+
+
+@pytest.mark.parametrize("value", [0, -5, float("nan"), "12 h"])
+def test_start_time_uncertainty_must_be_positive_seconds(value):
+    case = _case()
+    case["start_time"]["uncertainty_s"] = value
+    with pytest.raises(cases.CaseError, match="uncertainty_s"):
+        cases.validate_case(case, cases.manifest_files())
+
+
+def test_unknown_start_time_is_allowed_with_an_explicit_uncertainty():
+    case = _case()
+    case["start_time"] = {"source": "unknown", "utc": "2026-09-08T12:00:00Z", "uncertainty_s": 43200}
+    cases.validate_case(case, cases.manifest_files())
+
+
+def test_set_and_raw_hash_links_are_checked():
+    case = _case()
+    case["set"] = "training"
+    case["source"]["raw"][0]["sha256"] = "0" * 64
+    with pytest.raises(cases.CaseError) as exc:
+        cases.validate_case(case, cases.manifest_files())
+    assert any("set must be" in p for p in exc.value.problems)
+    assert any("differs from its bench/manifest.json entry" in p for p in exc.value.problems)
+
+
+def test_blind_case_has_no_labels():
+    assert "labels" not in cases.blind_case("oyster-bay")
+    assert cases.case_labels("oyster-bay", 1)["true_pair"] == ["a1dfeb", "ace391"]
+
+
+@pytest.fixture
+def one_case(tmp_path):
+    case = _case()
+    case["id"] = "synthetic"
+    path = tmp_path / "cases.json"
+    path.write_text(json.dumps({"schema": 1, "cases": [case]}))
+    return path
+
+
+def _fake_execute(case, case_dir, log=print):
+    assert "labels" not in case
+    return example_record()
+
+
+def test_the_record_and_its_hash_are_written_before_any_label_is_read(tmp_path, one_case):
+    seen = []
+
+    def labels(case_id, version, path):
+        # the comparison may read the truth only once the record and its hash are on disk and agree
+        sha = (tmp_path / "out" / runner.HASH_FILE).read_text().split()[0]
+        assert cases.sha256_file(tmp_path / "out" / "result.json") == sha
+        seen.append(case_id)
+        return cases.case_labels(case_id, version, path)
+
+    entry = runner.bench_case("synthetic", tmp_path / "out", execute=_fake_execute, labels=labels, cases_path=one_case)
+    assert seen == ["synthetic"]
+    assert entry["status"] == "scored" and entry["true_pair_rank"] == 1
+    assert entry["true_pair_survived"] == {"speed_distance_time_gates": True, "silence_filter": True}
+    assert entry["top_error_m"] < 200 and entry["margin_pct"] == pytest.approx(100 * (27.1 - 25.8) / 25.8)
+
+
+def test_a_record_changed_after_its_hash_is_discarded_without_reading_the_truth(tmp_path, one_case):
+    runner.bench_case("synthetic", tmp_path / "out", execute=_fake_execute, cases_path=one_case)
+    rec = json.loads((tmp_path / "out" / "result.json").read_text())
+    rec["candidates"][0]["lat"], rec["candidates"][0]["lon"] = 40.876466, -73.524951
+    (tmp_path / "out" / "result.json").write_bytes(dumps(rec))
+
+    def labels():
+        raise AssertionError("labels read for a record that changed after its hash")
+
+    meta = {"id": "synthetic", "version": 1, "group": "g", "set": "development", "expected_outcome": "located"}
+    entry = runner.compare_case(tmp_path / "out", meta, labels)
+    assert entry["status"] == "discarded" and "hash" in entry["reason"]
+
+
+def test_a_record_without_its_hash_is_discarded(tmp_path, one_case):
+    runner.bench_case("synthetic", tmp_path / "out", execute=_fake_execute, cases_path=one_case)
+    (tmp_path / "out" / runner.HASH_FILE).unlink()
+    meta = {"id": "synthetic", "version": 1, "group": "g", "set": "development", "expected_outcome": "located"}
+    assert runner.compare_case(tmp_path / "out", meta, lambda: {})["status"] == "discarded"
+
+
+def test_compare_runs_prints_both_runs(tmp_path, one_case):
+    for name in ("a", "b"):
+        entry = runner.bench_case("synthetic", tmp_path / name / "synthetic", execute=_fake_execute, cases_path=one_case)
+        (tmp_path / name / "results.json").write_text(json.dumps({"git_commit": name * 9, "cases": [entry]}))
+    out = runner.compare_runs(tmp_path / "a", tmp_path / "b")
+    assert "synthetic" in out and "record identical" not in out.splitlines()[0]
+    assert "true_pair_rank" in out and "+0.0" in out

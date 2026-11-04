@@ -46,6 +46,11 @@ flyovers from background at any threshold:
 
 ## 3. The band
 
+*Amended before any run:* `detect`'s band is the fundamental band. Today's raw-audio profile searches 60–300 Hz
+fundamentals on the 40–450 Hz image, so the bands are B0 = 60–300 Hz on the 40–450 Hz image (today), B1 = 60–900 Hz
+on a 40–1000 Hz image, and B2 = 60–300 and 300–900 Hz searched apart. The gate's low passes are those with
+f0 ≤ 300 Hz. The original draft's 40–450 and 450–900 read the image's range as the search band.
+
 - **B0, today:** 40–450 Hz.
 - **B1:** 40–900 Hz in one search, on a spectrogram to 1 kHz (PLAN item 6: 40–450 makes 8 of 40 Livermore passes
   invisible and truncates 9 more; rest frequencies go up to 868 Hz). It tests more hypotheses, so it needs a

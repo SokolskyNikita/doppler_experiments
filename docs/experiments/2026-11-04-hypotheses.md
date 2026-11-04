@@ -60,4 +60,12 @@ One retune at most after the first run, counted.
 
 ## Results
 
+**A run stopped before it was read.** The first A1/A3 rerun (`runs/2026-11-04-hypotheses-pairs/`, from
+`a50edfa`) was stopped two searches in and never read. An outside review found that the per-hypothesis-pair
+joins kept each triple once, with the first pair's event-1 hypothesis. That hypothesis's heard CPA is the
+clock the triple is scored at, so its score depended on hypothesis order. The null also scored wrong
+flights over a narrower f0 sweep than the candidates got, which biases Z upward. Both are fixed in
+`93a5c4d` (a test reproduces the first), and A1/A3 were rerun from it. The B1/B2 run (`a50edfa`) doesn't
+score triples, so neither fix touches it, and it stands.
+
 Pending.

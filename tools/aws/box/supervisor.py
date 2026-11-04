@@ -265,6 +265,11 @@ def memory_gb() -> tuple[float, float]:
     return kb["MemTotal"] / 1e6, (kb["MemTotal"] - kb["MemAvailable"]) / 1e6
 
 
+def rehearsal_verdict(state: str) -> str:
+    """A rehearsal is ok if the command ran to its cut-off without failing, or finished; failed otherwise."""
+    return "rehearsal-ok" if state in ("done", "timeout") else "rehearsal-failed"
+
+
 def kill_group(proc: subprocess.Popen) -> None:
     """SIGTERM to the command's process group, SIGKILL after TERM_GRACE_S."""
     try:
@@ -302,7 +307,8 @@ def main(argv=None) -> int:
         deltas = job.stage("caches", pull_caches, args.bucket, spec.get("caches", []), cache, work)
         seed_cache_root(args.bucket, cache)
     except Exception:
-        job.report(state="failed", error=traceback.format_exc(limit=5))
+        job.report(state="rehearsal-failed" if spec.get("rehearsal_minutes") else "failed",
+                   stage_failed=job.status.get("stage"), error=traceback.format_exc(limit=5))
         s5("cp", "/var/log/dopplertrack-boot.log", f"{job.prefix}/boot.log", check=False)
         return 1
 
@@ -339,8 +345,9 @@ def main(argv=None) -> int:
     env.pop("DOPPLERTRACK_JOBS", None)
     if spec.get("jobs"):
         env["DOPPLERTRACK_JOBS"] = str(spec["jobs"])
-    deadline = time.time() + 3600 * float(spec.get("max_hours", 12))
-    checkpoint_s = 60 * float(spec.get("checkpoint_minutes", 10))
+    rehearsal = spec.get("rehearsal_minutes")      # `runs launch --rehearse`: the dev box, cut off after this long
+    deadline = time.time() + (60 * float(rehearsal) if rehearsal else 3600 * float(spec.get("max_hours", 12)))
+    checkpoint_s = float("inf") if rehearsal else 60 * float(spec.get("checkpoint_minutes", 10))
     t_start = time.time()
     with open(run / "command.log", "ab") as log:
         proc = subprocess.Popen(["bash", "-c", spec["command"]], cwd=repo, env=env, stdout=log,
@@ -372,6 +379,8 @@ def main(argv=None) -> int:
     code = proc.returncode
     if state == "done" and code != 0:
         state = "failed"
+    if rehearsal:
+        state = rehearsal_verdict(state)
     try:    # the command may have added to run.json (bench run --run-dir does), so merge into what is there
         info = {**info, **json.loads((run / "run.json").read_text())}
     except (OSError, ValueError):
@@ -381,6 +390,11 @@ def main(argv=None) -> int:
     (run / "run.json").write_text(json.dumps(info, indent=1) + "\n")
 
     made = sorted(run_folders(runs_dir) - runs_before)
+    if rehearsal:       # nothing comes back from a rehearsal but its verdict and the log's tail
+        tail = (run / "command.log").read_bytes()[-20000:].decode(errors="replace")
+        job.report(state=state, exit_code=code, wall_s=wall, log_tail=tail, finished=now(),
+                   mem_total_gb=round(mem_total, 1), mem_peak_gb=round(mem_peak, 1))
+        return 0
     upload_runs(args.bucket, runs_dir, made)
     added = [] if spec.get("private") else new_cache_entries(cache_before, cache_files(cache), spec.get("caches", []))
     delta = None

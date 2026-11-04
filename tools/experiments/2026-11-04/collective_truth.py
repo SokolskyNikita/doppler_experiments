@@ -10,7 +10,8 @@ fine stage on the true coarse cell's 100 points plus the reference point itself,
   residual shift +-8 s free), without the vote, so a window's best flight there is whatever its own evidence prefers.
 Per window: the best flight, its f0 and z, and the true pair's own best z.
 
-Unit truth2 adds pair_detail: the true flights' segments, coverage and the find test's brightness per window.
+Unit truth2 adds pair_detail: the true flights' segments, coverage and the find test's brightness per window; truth3 adds
+coarse_variants: the true coarse cell's Z under four coarse samplers (today, dense, a 3x3 sub-grid, a 1 km grid).
 
 usage: uv run python tools/experiments/2026-11-04/collective_truth.py [RUN] [--shard K/N] [--resume DIR ...] [--inputs]
 """
@@ -28,7 +29,7 @@ import shards  # noqa: E402
 from bench import cases, runner  # noqa: E402
 from collective_run import DETECT  # noqa: E402
 
-UNITS = ["oyster-bay--truth2"]
+UNITS = ["oyster-bay--truth3"]
 
 
 def per_window(rows, wins, segs, pair):
@@ -103,6 +104,38 @@ def pair_detail(case, sp, wins, views, nulls, segs, obs, c, b_true, sweep, pair)
     return out
 
 
+VARIANTS = {  # coarse samplers to score the true cell with: (sweep, sub-grid points per side)
+    "today": (dict(shift_s=14.0, shift_step=2.0, f0_span=0.27, f0_step=0.02, n=60), 1),
+    "dense": (dict(shift_s=14.0, shift_step=1.0, f0_span=0.27, f0_step=0.01, n=120), 1),
+    "subgrid3": (dict(shift_s=8.0, shift_step=2.0, f0_span=0.27, f0_step=0.02, n=60), 3),
+    "grid1km": (dict(shift_s=14.0, shift_step=2.0, f0_span=0.27, f0_step=0.02, n=60), 2),
+}
+
+
+def coarse_variants(sp, wins, cpa_c, coarse, segs, gi, elevation, c, rng):
+    """The true coarse cell's Z under each coarse sampler: the cell's maximum over its sub-points (1 = the centre, 2 =
+    the four 1 km points, 3 = the nine 667 m points), each variant with its own whole-box window nulls."""
+    from dopplertrack import collective as col
+    from dopplertrack.search import Grid, cpa_table
+    out = {}
+    la0, lo0 = float(coarse.lat[gi]), float(coarse.lon[gi])
+    for name, (sw_kw, k) in VARIANTS.items():
+        sw = col.Sweep(**sw_kw)
+        views = [col.LogView(w, sp, sw.n) for w in wins]
+        nulls = col.window_nulls(views, wins, cpa_c, segs, coarse.enu, c, sw)
+        offs = (np.arange(k) - (k - 1) / 2) * (col.COARSE_M / k)
+        LA, LO = np.meshgrid(la0 + offs / 111320.0, lo0 + offs / (111320.0 * np.cos(np.radians(la0))), indexing="ij")
+        lat, lon = LA.ravel(), LO.ravel()
+        el = elevation(lat, lon) if elevation else np.zeros_like(lat)
+        g = Grid.points(lat, lon, np.where(np.isfinite(el), el, 0.0), lat0=coarse.lat0, lon0=coarse.lon0)
+        cpa = cpa_table(g, segs, max_range_m=rng, c=c)
+        cand = col.candidates(cpa, wins)
+        pts = col.point_scores(col.collective_scores(cand, cpa, views, nulls, segs, g.enu, c, sw), len(wins))
+        out[name] = dict(points=len(g), Z=float(pts.Z.max()) if len(pts) else 0.0,
+                         per_point=[float(pts.Z[pts.gidx == i].max()) if (pts.gidx == i).any() else 0.0 for i in range(len(g))])
+    return out
+
+
 def run_unit(cid):
     from dopplertrack import collective as col
     from dopplertrack.adsb import join_days
@@ -163,8 +196,9 @@ def run_unit(cid):
     true = dict(b_true=b_true, windows=wt, Z_sum=float(sum(max(w["best"]["z"], 0.0) for w in wt if w["best"])),
                 Z_pair=float(sum(max(v or 0.0, 0.0) for w in wt for v in w["pair_z"].values())))
     detail = pair_detail(case, sp, wins, views_f, nulls_f, segs, fine.enu[g_ref], c, b_true, sw_f, pair)
+    variants = coarse_variants(sp, wins, cpa_c, coarse, segs, gi, elevation, c, rng)
     return dict(case=cid, reference=ref, true_pair=pair, true_cell=dict(lat=float(coarse.lat[gi]), lon=float(coarse.lon[gi]), d_m=float(d[gi])),
-                windows=[w.__dict__ for w in wins], clock_free=free, true_clock=true, pair_detail=detail,
+                windows=[w.__dict__ for w in wins], clock_free=free, true_clock=true, pair_detail=detail, coarse_variants=variants,
                 nulls=[{k: n[k] for k in ("median", "sigma")} for n in nulls_f])
 
 

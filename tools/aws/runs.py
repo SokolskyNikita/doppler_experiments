@@ -32,6 +32,7 @@ import sys
 import tarfile
 import tempfile
 import time
+import uuid
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -429,7 +430,11 @@ def status(a) -> None:
 
 def fleet(a) -> None:
     """Every project box running now, by region, with its job and hourly price; the jobs whose launch failed
-    for capacity or quota in the last day; and the hourly total."""
+    for capacity or quota in the last day; and the hourly total. With --util, how much CPU each box uses."""
+    if getattr(a, "util", False):
+        sys.path.insert(0, str(HERE))
+        import fleet_util
+        return fleet_util.main(a)
     total, rows, launches = 0.0, [], {}
     for region in (r for r in JOB_REGIONS if deployed(r)):
         ec2 = session(region).client("ec2")
@@ -736,11 +741,19 @@ def dev(a) -> None:
     elif a.action == "sync":
         dev_sync(out)
     elif a.action == "run":
-        dev_sync(out)
-        dev_run(iid, " ".join(a.command))
+        # each run gets its own checkout, removed when its command ends: callers never see each other's branch
+        name = f"{datetime.datetime.now():%Y%m%d-%H%M%S}-{uuid.uuid4().hex[:8]}"
+        dest = f"{DEV_RUNS}/{name}"
+        dev_sync(out, dest, name)
+        t0 = time.time()
+        try:
+            dev_run(iid, f"{' '.join(a.command)}; rc=$?; cd / && rm -rf {dest}; exit $rc", cwd=dest)
+        finally:
+            print(f"dev box: {time.time() - t0:.0f} s in {dest}", file=sys.stderr)
 
 
-DEV_CHECKOUT = "/home/ubuntu/branch"
+DEV_CHECKOUT = "/home/ubuntu/branch"     # `runs dev sync`'s, for interactive work
+DEV_RUNS = "/home/ubuntu/runs"           # one checkout per `runs dev run`
 
 
 def dev_ready(ec2, iid: str) -> None:
@@ -761,21 +774,23 @@ def dev_ready(ec2, iid: str) -> None:
     sys.exit("the dev box is running but Systems Manager can't reach it")
 
 
-def dev_sync(out: dict) -> str:
-    """Puts this branch on the dev box at ~/branch: the same bundle, diff and untracked files as a job."""
+def dev_sync(out: dict, dest: str = DEV_CHECKOUT, name: str | None = None) -> str:
+    """Puts this branch on the dev box at dest (~/branch by default): the same bundle, diff and untracked files
+    as a job."""
     bucket = out["Bucket"]
     s3 = session().client("s3")
-    key = f"dev/{datetime.datetime.now():%Y%m%d-%H%M%S}"
+    key = f"dev/{name or datetime.datetime.now().strftime('%Y%m%d-%H%M%S') + '-' + uuid.uuid4().hex[:8]}"
     with tempfile.TemporaryDirectory() as tmp:
         code = code_bundle(Path(tmp))
         for f in sorted(Path(tmp).iterdir()):
             s3.upload_file(str(f), bucket, f"{key}/code/{f.name}")
     s3.upload_file(str(HERE / "box" / "devsync.sh"), bucket, f"{key}/devsync.sh")
     # the script travels as a file: Run Command and the login shell would each re-quote an inline one
-    script = (f"s5cmd --log error cp 's3://{bucket}/{key}/devsync.sh' /tmp/devsync.sh && "
-              f"bash /tmp/devsync.sh s3://{bucket}/{key}/code {code['git_commit']} {DEV_CHECKOUT}")
+    sh = f"/tmp/devsync-{key.split('/')[-1]}.sh"
+    script = (f"s5cmd --log error cp 's3://{bucket}/{key}/devsync.sh' {sh} && "
+              f"bash {sh} s3://{bucket}/{key}/code {code['git_commit']} {dest}")
     dev_run(out["DevBoxId"], script, cwd=None, quiet=True)
-    print(f"dev box ~/branch at {code['git_commit'][:7]}{' (dirty)' if code['git_dirty'] else ''}")
+    print(f"dev box {dest} at {code['git_commit'][:7]}{' (dirty)' if code['git_dirty'] else ''}", file=sys.stderr)
     return code["git_commit"]
 
 
@@ -784,6 +799,7 @@ def dev_run(iid: str, command: str, cwd: str | None = DEV_CHECKOUT, quiet: bool 
     through Systems Manager, and prints its output."""
     ssm = session().client("ssm")
     inner = f"cd {cwd} && {command}" if cwd else command
+    inner = f"export UV_PYTHON=3.12.15 UV_PYTHON_PREFERENCE=only-managed; {inner}"   # as the job boxes do
     wrapped = f"sudo -iu ubuntu bash -lc {shlex_quote(inner)}"
     cmd = ssm.send_command(InstanceIds=[iid], DocumentName="AWS-RunShellScript",
                            Parameters={"commands": [wrapped], "executionTimeout": ["7200"]},
@@ -847,7 +863,10 @@ def main(argv=None) -> None:
                         ("cancel", "terminate a job's box"), ("interrupt", "send a job's spot box a real interruption")):
         p = sub.add_parser(name, help=help_)
         p.add_argument("job", nargs="?" if name == "status" else None)
-    sub.add_parser("fleet", help="every box running now, by region, with its price, and failed launches")
+    fl = sub.add_parser("fleet", help="every box running now, by region, with its price, and failed launches")
+    fl.add_argument("--util", action="store_true", help="each box's CPU use and idle vCPU-hours (fleet_util.py)")
+    fl.add_argument("--history", action="store_true", help="with --util: every job today, over its whole run")
+    fl.add_argument("--watch", type=float, metavar="MIN", help="with --util: a snapshot every MIN minutes into a run folder")
     sub.add_parser("seed-tools", help="put uv and ffmpeg for each architecture in the bucket")
     fs = sub.add_parser("fetch-sources", help="fetch the public raw files the bucket lacks on a box")
     fs.add_argument("--size", default="4xlarge", help="instance size (default: 4xlarge; the job is network-bound)")

@@ -28,6 +28,7 @@ Thumbs.db
 *.csv
 !tests/data/*
 !docs/results/*
+!tests/fixtures/records/**/*.npz
 /data/
 /cache/
 /results/

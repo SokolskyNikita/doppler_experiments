@@ -210,7 +210,8 @@ Median against FR24, with 95 % bootstrap intervals over crossings (`intervals.js
 | `fit_event`, station temperature (median 328 m/s) | −5.0 % (−6.3 to −3.9) | 12.1 % (10.9–13.4) | 33 % | −0.4 % (−0.8 to +0.1) | 3.6 % (3.2–4.0) |
 | The authors' own fits | −10.3 % (−11.7 to −9.2) | 14.5 % (13.6–15.5) | 34 % | −6.2 % | 6.7 % |
 
-- **The 50's ordering holds on all 788.** The station temperature takes the speed bias to zero within its interval (−0.4 %), against +3.4 % at 15 °C. The 15 °C slant range's small bias is again a cancellation of a c too high against a range that comes out short (−5.0 % at the right c). The authors' c is the worst of the three.
+- **The 50's ordering holds on all 788.** The station temperature takes the speed bias to zero within its interval (−0.4 %), against +3.4 % at 15 °C, as the physics predicts.
+- **But the correct c makes the slant-range bias worse,** from −1.4 % to −5.0 %. That is the same symptom as Oyster Bay's margin under the per-flight path ([case-weather](2026-11-04-case-weather.md)), and it belongs in the same open question. The 15 °C slant range's small bias is again a cancellation of a c too high against a range that comes out short (−5.0 % at the right c). The authors' c is the worst of the three.
 - **The fit still passes a c error through unattenuated.** d ln v / d ln c and d ln R / d ln c are 1.000 at the median.
 - **The spread is wider than on the 50** (12 % against 7 % median abs). This is a narrower band on a larger, more varied sample; the 50 used the full 40–240 Hz. The stage 3 numbers above are the 50 at the wide band, and these are the whole set at the narrow band.
 - **The narrow band no longer costs fits.** 0.70–1.50 × the tone gave no weak fit on any crossing (item 6).

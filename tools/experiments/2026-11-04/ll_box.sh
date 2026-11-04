@@ -7,7 +7,7 @@
 #   passes SRC  this box's Livermore passes and development events at SRC's pick (--shards n splits them)
 #   merge SRC   the summary over the pass units collected into runs/SRC
 #   all         every step on this one box
-# Each step's inputs come over with `runs launch --input runs/SRC`. RETUNE=retune1 in the command selects ll_roc.py's
+# Each step's inputs come over with `runs launch --input-run runs/SRC`. RETUNE=retune1 in the command selects ll_roc.py's
 # retune for the constants (and so for every later step, which reads them).
 #
 # usage: ll_box.sh roc | pick SRC | passes SRC | merge SRC | all          (in $RUN, which the box sets)
@@ -19,7 +19,7 @@ SRC=${2:-}
 
 from_src() {
     [ -n "$SRC" ] || { echo "$STEP needs SRC" >&2; exit 2; }
-    [ -d "$DOPPLERTRACK_DATA/runs/$SRC" ] || { echo "no runs/$SRC on this box: launch with --input runs/$SRC" >&2; exit 2; }
+    [ -d "$DOPPLERTRACK_DATA/runs/$SRC" ] || { echo "no runs/$SRC on this box: launch with --input-run runs/$SRC" >&2; exit 2; }
     python3 "$D/copy_new.py" "$DOPPLERTRACK_DATA/runs/$SRC" "$RUN"
 }
 

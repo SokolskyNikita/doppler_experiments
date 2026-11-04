@@ -1,6 +1,6 @@
 #!/bin/sh
 # Copies the unit files of pulled round-3 jobs (runs pull) into one new run folder, without replacing a file
-# already there, for ll_box.sh's pick or merge step to read through `runs launch --input runs/<that folder>`.
+# already there, for ll_box.sh's pick or merge step to read through `runs launch --input-run runs/<that folder>`.
 # Copying only; nothing is computed here.
 #
 # usage: ll_collect.sh TOPIC JOB ...          (prints the new folder's name)

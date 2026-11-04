@@ -1,5 +1,10 @@
 # Choosing the two search events by search score (2026-11-04)
 
+<!-- index
+question: Does the search's own score pick the right two events from detect's top five?
+outcome: No: on the eagle cam the true pair ranks 5th of 10, behind pairs with the loudest detection, so event choice needs item 7's joint hypotheses
+-->
+
 ## Question
 
 On the eagle-cam clip the two true flyovers are already among detect's top five (its ranks 2 and 5, within

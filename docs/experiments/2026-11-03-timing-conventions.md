@@ -1,5 +1,10 @@
 # Which event time to pair on (2026-11-03)
 
+<!-- index
+question: Which event time should pairing compare?
+outcome: A lead: like-for-like steepest-fall times agree within 0.5–2.7 s for the contrast and `detect` fits on both recordings, though not for every fit
+-->
+
 **Question.** The search pairs two events by comparing their fitted *heard*-CPA times with the CPA table's `t_heard`. The fitted heard-CPA time is t_cpa = t_cpa_emit + d/c. For a straight, constant-speed pass, the heard frequency falls fastest at the emission-CPA instant, and passes f0 (the heard CPA) d/c later (Ferguson & Lo 2000, eqs. 3–4). So the heard-CPA gap inherits every error in the fitted distance, while the emission-CPA gap (`t_cpa_emit` against the table's `t_emit`) doesn't. Which convention puts the true pair closer?
 
 **Change.** None to the code. At each true location: the true flights' gaps under each convention, and the gap error of each saved pair of fits. Development data.

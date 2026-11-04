@@ -55,9 +55,9 @@ def _fake_detect(sp, f_lo, f_hi, top=10, workers=None, progress=None):
 
 def test_detections_follow_spectrogram_params_and_detector_source(tmp_path, monkeypatch):
     mod = tmp_path / "fake_detector_mod.py"
-    mod.write_text("THRESHOLD = 1\n")
+    mod.write_text("THRESHOLD = 1\n\ndef detect():\n    return THRESHOLD\n")
     monkeypatch.syspath_prepend(str(tmp_path))
-    monkeypatch.setattr(cache, "DETECTOR_MODULES", ("fake_detector_mod",))
+    monkeypatch.setattr(cache, "DETECTOR_CODE", {"fake_detector_mod": ("detect",)})
     _fake_detect.calls = 0
     sp = Spectrogram(np.arange(5) * 0.5, np.array([50.0, 51.0]), np.ones((2, 5), np.float32))
 
@@ -69,7 +69,7 @@ def test_detections_follow_spectrogram_params_and_detector_source(tmp_path, monk
     detect(sp, top=5); assert _fake_detect.calls == 2
     other = Spectrogram(sp.t, sp.f, sp.S, np.array([1, 1, 0, 1, 1], bool))              # only the mask differs
     detect(other); assert _fake_detect.calls == 3
-    mod.write_text("THRESHOLD = 2\n")                                                    # the detector's source changes
+    mod.write_text("THRESHOLD = 2\n\ndef detect():\n    return THRESHOLD\n")             # a constant the detector reads changes
     detect(sp); assert _fake_detect.calls == 4
     detect(sp); assert _fake_detect.calls == 4
 

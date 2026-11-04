@@ -1,5 +1,10 @@
 # Benchmark seed cases (2026-11-04)
 
+<!-- index
+question: Does the benchmark runner reproduce the saved-fit results, and what do the seed cases give?
+outcome: Yes: Oyster Bay 1st of 328, 123 m / 43 m, 4.9 %, locations bit-identical; the eagle-cam clip matches the full recording; both moved-box negatives return wrong answers (north 148 km off by 3.2 %, WSW 182 km off by 10.7 %) with margins above the true positives'
+-->
+
 ## Question
 
 Does the new benchmark runner (PLAN Phase 1 items 2–3) reproduce PLAN section 2's saved-fit results through

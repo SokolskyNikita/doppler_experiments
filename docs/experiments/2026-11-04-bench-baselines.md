@@ -1,5 +1,10 @@
 # Benchmark baselines at upstream a16b700 (2026-11-04)
 
+<!-- index
+question: What do the seed cases give at upstream a16b700, from saved fits and from raw audio, and does the current code match?
+outcome: Identical on both profiles. Saved fits reproduce the published results; raw audio locates no positive: Oyster Bay's fit is biased (true pair 10th), and the eagle cam's second event is the wrong flyover
+-->
+
 ## Question
 
 PLAN Phase 1 item 4: what do the four seed cases give at upstream a16b700, from saved fits and from raw audio,

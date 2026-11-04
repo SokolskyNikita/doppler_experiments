@@ -7,7 +7,10 @@ node, FR24 CPA time, fitted speed, fitted slant range, source frequency, fitted 
 speed, overtones, standard deviations) with its DPZ waveform in derived/alaska/:
   spectrogram  2.048 s Hann every 0.25 s, 40-240 Hz (Nyquist 250 Hz), from the raw counts
   fit          tracks.fit_event, contrast objective, one harmonic, over the FR24 CPA time +-60 s, at
-               c = 340.3 m/s (the package's 15 C) and at the authors' fitted c for that crossing, in a band:
+               c = 340.3 m/s (the package's 15 C), at the authors' fitted c for that crossing, and at c from the
+               measured air temperature (331.3 sqrt(1 + T/273.15)): T from the nearest ASOS station (IEM,
+               raw/aux/metar/<station>_2019-02-12.csv) with a report within 1 h of the FR24 CPA time, the report
+               nearest in time; in a band:
                --band wide is 40-240 Hz; --band narrow is --band-factors (default 0.85-1.15) x the authors'
                best-determined fitted tone in 40-240 Hz (smallest fitted SD; their table has no amplitudes),
                which only places the search and never enters the comparison. The band must hold a pass's own
@@ -24,11 +27,13 @@ import csv
 import json
 import os
 from concurrent.futures import ProcessPoolExecutor
+from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
 
 from dopplertrack.audio import compute_spectrogram
+from dopplertrack.geo import haversine_m
 from dopplertrack.doppler import speed_of_sound
 from dopplertrack.tracks import fit_event
 
@@ -37,16 +42,38 @@ Z = DATA / "raw/seismic/alaska-ze2019/zenodo-16997158"
 NPZ = DATA / "derived/alaska"
 C15 = speed_of_sound(15.0)
 HALF = 60.0
+STATIONS = ("PAEC", "PAIN", "PANN", "PATK")       # IEM's archive for Healy (PAHV) and Cantwell (PATW) ends before 2019
+MAX_DT = 3600.0
+
+
+def station_temps():
+    out = {}
+    for s in STATIONS:
+        rows = [r for r in csv.DictReader(open(DATA / f"raw/aux/metar/{s}_2019-02-12.csv")) if r["tmpc"] not in ("M", "")]
+        t = np.array([datetime.strptime(r["valid"], "%Y-%m-%d %H:%M").replace(tzinfo=timezone.utc).timestamp() for r in rows])
+        out[s] = dict(lat=float(rows[0]["lat"]), lon=float(rows[0]["lon"]), elev=float(rows[0]["elevation"]), t=t,
+                      T=np.array([float(r["tmpc"]) for r in rows]))
+    return out
+
+
+def temperature(temps, lat, lon, t):
+    """The nearest station with a report within MAX_DT of t: (station, distance m, elevation m, dt s, T C)."""
+    for d, s in sorted((haversine_m(lat, lon, v["lat"], v["lon"]), s) for s, v in temps.items()):
+        v = temps[s]; k = int(np.argmin(np.abs(v["t"] - t)))
+        if abs(v["t"][k] - t) <= MAX_DT:
+            return s, float(d), v["elev"], float(v["t"][k] - t), float(v["T"][k])
+    return None
 
 
 def crossings():
     nodes = {}
     for row in csv.reader(open(Z / "parkshwy_nodes.txt"), delimiter="|"):
         if row[0] == "ZE":
-            nodes[row[1]] = float(row[4])
+            nodes[row[1]] = (float(row[2]), float(row[3]), float(row[4]))
     fr24 = {}
     for r in csv.reader(open(Z / "node_crossings_db_UTM.txt")):
         fr24[(r[1], r[9])] = dict(dist_h=float(r[4]), t_cpa=float(r[5]), alt=float(r[6]), speed=float(r[7]), type=r[10])
+    temps = station_temps()
     files = {}
     for f in NPZ.glob("*.npz"):
         node = f.name.split("_")[0]
@@ -64,8 +91,13 @@ def crossings():
         ref = fr24.get((flight, node))
         if ref is None or node not in nodes:
             continue
+        lat, lon, elev = nodes[node]
+        st = temperature(temps, lat, lon, t_fr)
+        tc = dict(zip(("T_station", "T_dist_m", "T_station_elev", "T_dt_s", "T_c"), st)) if st else {}
+        if st:
+            tc["c_temp"] = speed_of_sound(st[4])
         out.append(dict(date=date, flight=flight, node=node, type=ref["type"], t_fr24=t_fr, v_fr24=ref["speed"],
-                        R_fr24=float(np.hypot(ref["dist_h"], ref["alt"] - nodes[node])), alt=ref["alt"], elev=nodes[node],
+                        R_fr24=float(np.hypot(ref["dist_h"], ref["alt"] - elev)), alt=ref["alt"], elev=elev, **tc,
                         dist_h=ref["dist_h"], v_authors=v_a, R_authors=abs(d_a), t_authors=t_a, c_authors=c_a,
                         band_tone=band_tone, band_tone_basis="smallest fitted SD in 40-240 Hz" if inband else "nearest 100 Hz in 40-240 Hz",
                         files=[str(f) for f in files.get(node, [])]))
@@ -92,7 +124,11 @@ def one(x):
     else:
         lo, hi = 40.0, 240.0
     x.update(band=band, f_lo=lo, f_hi=hi)
-    for tag, c in (("c15", C15), ("cauth", x["c_authors"])):
+    settings = (("c15", C15), ("cauth", x["c_authors"]), ("ctemp", x.get("c_temp")))
+    for tag, c in settings:
+        if c is None:
+            x[f"error_{tag}"] = "no station temperature within 1 h"
+            continue
         try:
             fe = fit_event(sp, tc - HALF, tc + HALF, lo, hi, c=c, objective="contrast")
             x.update({f"v_{tag}": fe.v, f"R_{tag}": fe.d, f"tau_{tag}": fe.t_cpa_emit + t0 + a / sr, f"f0_{tag}": fe.f0,
@@ -109,6 +145,7 @@ def main():
                     help="narrow band as multiples of the authors' tone; must hold the Doppler span, about 0.75-1.45 at 100 m/s")
     ap.add_argument("--sample", type=int, help="a seeded random subset of this size; crossings already done count first")
     ap.add_argument("--seed", type=int, default=20261104)
+    ap.add_argument("--same-as", type=Path, help="an earlier run's alaska.jsonl: fit exactly its crossings")
     a = ap.parse_args()
     xs = crossings()
     for x in xs:
@@ -116,6 +153,9 @@ def main():
         x["band_lo"], x["band_hi"] = a.band_factors
     part = Path(a.run) / "alaska.jsonl"       # one row per finished crossing, so a stopped run resumes
     done = {(r["flight"], r["node"]) for r in map(json.loads, open(part))} if part.exists() else set()
+    if a.same_as:
+        keep = {(r["flight"], r["node"]) for r in map(json.loads, open(a.same_as))}
+        xs = [x for x in xs if (x["flight"], x["node"]) in keep]
     if a.sample:
         rest = [x for x in xs if (x["flight"], x["node"]) not in done]
         pick = np.random.default_rng(a.seed).choice(len(rest), size=max(0, a.sample - len(done)), replace=False)

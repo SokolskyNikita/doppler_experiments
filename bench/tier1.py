@@ -73,7 +73,7 @@ def load_tier1(path=TIER1) -> dict:
     doc = json.loads(Path(path).read_text())
     problems = []
     for s in doc.get("spans", []):
-        for k in ("id", "labels", "set", "group", "spectrogram", "reference_case"):
+        for k in ("id", "labels", "set", "group", "family", "spectrogram", "reference_case"):
             if k not in s:
                 problems.append(f"span {s.get('id', '?')}: {k} is missing")
         if s.get("set") not in ("development", "calibration", "evaluation"):
@@ -132,7 +132,8 @@ def execute_span(span: dict, out_dir: Path, code: dict, log=print, workers: int 
         with stage("window_fits"):
             from dopplertrack.parallel import ordered_map, resolve_jobs
             jobs = min(resolve_jobs(workers), max(len(tasks), 1))
-            done = iter(list(ordered_map(_fit_window, tasks, jobs, _set_fit_crop, (crop,))))
+            from dopplertrack.cache import spectrogram_sha256
+            done = iter(list(ordered_map(_fit_window, tasks, jobs, _set_fit_crop, (crop, spectrogram_sha256(crop)))))
             fits = [x if x is not None else next(done) for x in slots]
     except Exception as exc:
         errors.append(f"{type(exc).__name__}: {exc}")
@@ -149,18 +150,32 @@ def execute_span(span: dict, out_dir: Path, code: dict, log=print, workers: int 
 _FIT_CROP = {}
 
 
-def _set_fit_crop(crop):
-    _FIT_CROP["sp"] = crop
+def _set_fit_crop(crop, crop_sha256):
+    _FIT_CROP.update(sp=crop, sha256=crop_sha256)
 
 
 def _fit_window(task) -> dict:
-    """One labelled line fitted in its window and band; a line the fitter can't follow is a missing fit."""
+    """One labelled line fitted in its window and band; a line the fitter can't follow is a missing fit. Cached
+    on the crop's contents, the window, the band, the objective and fit_event's source, under the cache rules."""
+    import scipy
+
+    from dopplertrack.cache import DETECTOR_CODE, cached, code_sha256
     from dopplertrack.tracks import fit_event
     window, line, t0, t1, lo, hi, objective = task
-    try:
-        fit = fit_event(_FIT_CROP["sp"], t0, t1, lo, hi, objective=objective).to_dict()
-    except Exception as exc:
-        fit = unavailable(f"{type(exc).__name__}: {exc}")
+
+    def produce():
+        try:
+            return fit_event(_FIT_CROP["sp"], t0, t1, lo, hi, objective=objective).to_dict()
+        except Exception as exc:
+            return unavailable(f"{type(exc).__name__}: {exc}")
+    parts = {"spectrogram": _FIT_CROP["sha256"], "window_s": [t0, t1], "band_hz": [lo, hi], "objective": objective,
+             "producer": "tracks.fit_event", "code": code_sha256(DETECTOR_CODE),
+             "versions": {"numpy": np.__version__, "scipy": scipy.__version__}}
+    fit = cached("window_fits", parts, produce)
+    if "unavailable" not in fit and fit.get("weak"):
+        fit = unavailable(f"fit_event's weak fit: {fit['weak']}")
+    elif "unavailable" not in fit and not all(np.isfinite(v) for v in fit.values() if not isinstance(v, str)):
+        fit = unavailable("fit_event returned a non-finite fit: no curve to follow in this window and band")
     return {"window": window, "line": line, "band_hz": [lo, hi], "objective": objective, "fit": fit}
 
 
@@ -240,6 +255,35 @@ def match(detections: list[dict], windows: list[dict], min_score: float = 0.0) -
     return out
 
 
+def countable_hours(span: tuple[float, float], windows: list[dict]) -> float:
+    """The audio that can hold a false alarm: the span less its uncertain, masked and outside-model windows."""
+    gone = sorted((max(w["start"], span[0]), min(w["end"], span[1])) for w in windows
+                  if w["class"] in EXCLUDED or (w["class"] in COUNTED and outside_model(w)))
+    lost, reach = 0.0, span[0]
+    for a, b in gone:
+        a = max(a, reach)
+        if b > a:
+            lost += b - a
+            reach = b
+    return max(span[1] - span[0] - lost, 0.0) / 3600.0
+
+
+def pooled_curve(units: list[tuple[list[dict], list[dict], float]]) -> list[dict]:
+    """The false-alarm table over several spans: at each detection score taken as the threshold, the summed
+    matches, misses and extras, and extras per countable hour of all of them. Matched and missed are None
+    when the pool has no counted window."""
+    hours = sum(h for _, _, h in units)
+    counted = any(w["class"] in COUNTED and not outside_model(w) for _, ws, _ in units for w in ws)
+    rows = []
+    for s in sorted({0.0, *(d["score"] for dets, _, _ in units for d in dets)}):
+        ms = [match(dets, ws, s) for dets, ws, _ in units]
+        extra = sum(m["extra"]["total"] for m in ms)
+        rows.append({"min_score": s, "extra": extra, "extra_per_hour": extra / hours if hours else None,
+                     "matched": sum(m[c]["matched"] for m in ms for c in COUNTED) if counted else None,
+                     "missed": sum(m[c]["missed"] for m in ms for c in COUNTED) if counted else None})
+    return rows
+
+
 def threshold_curve(detections: list[dict], windows: list[dict], hours: float) -> list[dict]:
     """The match counts at each detection score taken as the threshold: the false-alarm curve, as a table."""
     rows = []
@@ -247,7 +291,7 @@ def threshold_curve(detections: list[dict], windows: list[dict], hours: float) -
         m = match(detections, windows, s)
         rows.append({"min_score": s, "matched": sum(m[c]["matched"] for c in COUNTED),
                      "missed": sum(m[c]["missed"] for c in COUNTED), "extra": m["extra"]["total"],
-                     "extra_per_hour": m["extra"]["total"] / hours})
+                     "extra_per_hour": m["extra"]["total"] / hours if hours else None})
     return rows
 
 
@@ -353,10 +397,12 @@ def compare_span(out_dir: Path, read_labels, reference_context=None) -> dict:
     windows = [{"index": i, "class": w["class"], "start": float(w["start"]), "end": float(w["end"]),
                 "lines": w["lines"]} for i, w in enumerate(labels["windows"])]
     dets = record["detections"] if isinstance(record["detections"], list) else []
-    hours = (record["span"]["end"] - record["span"]["start"]) / 3600.0
+    hours = countable_hours((record["span"]["start"], record["span"]["end"]), windows)
     entry["detection"] = match(dets, windows)
-    entry["detection"]["extra_per_hour"] = entry["detection"]["extra"]["total"] / hours
+    entry["detection"].update(countable_hours=hours, span_hours=(record["span"]["end"] - record["span"]["start"]) / 3600,
+                              extra_per_hour=entry["detection"]["extra"]["total"] / hours if hours else None)
     entry["detection_curve"] = threshold_curve(dets, windows, hours)
+    entry["_pool"] = (dets, windows, hours)          # for run_tier1's pooled curves; not written
     if reference_context is None:
         entry["fits"] = entry["association"] = unavailable("no trajectory reference was given for this span")
     else:
@@ -402,7 +448,7 @@ def case_events(case: dict, profile: str, out_dir: Path, code: dict, workers: in
     from dopplertrack.result import file_entry
     from dopplertrack.tracks import detect_events
 
-    from .runner import PROFILES, pick_detected, saved_fit_dicts, search_harmonics
+    from .runner import PROFILES, pick_detected, saved_fit_dicts, search_harmonics, sound_speed
     assert "labels" not in case, "the known point's events must be chosen blind"
     if profile not in KP_PROFILES:
         raise ValueError(f"known-point profile must be one of {KP_PROFILES}")
@@ -422,7 +468,8 @@ def case_events(case: dict, profile: str, out_dir: Path, code: dict, workers: in
             crop = sp.crop(fit["t_start"] - margin, fit["t_end"] + margin)
             params = dict(f_lo=d["band_hz"][0], f_hi=d["band_hz"][1], harmonics=d["harmonics"], top=DETECT_TOP,
                           window_s=d["window_s"], min_score=0.0)
-            found = [e.to_dict() for e in cached_detections(crop, detect_events, workers=workers, **params)
+            found = [e.to_dict() for e in cached_detections(crop, detect_events, workers=workers, **params,
+                                                            **sound_speed(case)[0])
                      if fit["t_start"] <= e.t_cpa <= fit["t_end"]]
             out["detection_key"].append(detection_key(crop, detect_events, **params))
             if not found:
@@ -434,7 +481,7 @@ def case_events(case: dict, profile: str, out_dir: Path, code: dict, workers: in
         params = dict(f_lo=d["band_hz"][0], f_hi=d["band_hz"][1], harmonics=d["harmonics"], top=d["top"],
                       window_s=d["window_s"])
         out["events"] = pick_detected([e.to_dict() for e in cached_detections(sp, detect_events, workers=workers,
-                                                                                **params)])
+                                                                                **params, **sound_speed(case)[0])])
         out["detection_key"] = detection_key(sp, detect_events, **params)
     out_dir.mkdir(parents=True, exist_ok=True)
     _write_hashed(out_dir / EVENTS_FILE, out)
@@ -451,7 +498,7 @@ def known_point(case: dict, out_dir: Path, reference: dict, true_pair, log=print
     from dopplertrack.terrain import Terrain
     from dopplertrack.tracks import EventFit
 
-    from .runner import trace_paths
+    from .runner import sound_speed, trace_paths
     try:
         ev = _read_hashed(out_dir / EVENTS_FILE)
     except (OSError, IndexError, RecordError, ValueError) as exc:
@@ -466,7 +513,7 @@ def known_point(case: dict, out_dir: Path, reference: dict, true_pair, log=print
     res, _ = pipeline.run_search(sp, ev1, ev2, traces, grid, harmonics=tuple(ev["harmonics"][:2]), tol_s=s["tol_s"],
                                  v_tol=s["v_tol"], d_tol=tuple(s["d_tol"]), silence_d_m=s["silence_d_m"],
                                  max_range_m=s["max_range_m"], progress=False, trace_metadata=meta,
-                                 search_bbox=(lat, lat, lon, lon), workers=1)
+                                 search_bbox=(lat, lat, lon, lon), workers=1, **sound_speed(case)[0])
     best = res.sort_values("score", ascending=False, kind="stable").drop_duplicates(["icao1", "icao2"])
     pairs = [{"flights": [str(r.icao1), str(r.icao2)], "score": float(r.score), "event_scores": [float(r.s1), float(r.s2)],
               "shift_s": float(r.shift)} for r in best.itertuples()]
@@ -490,21 +537,31 @@ def reference_context(span: dict, labels: dict):
     """For the comparison step only: the span's flight data, observer and clock, from its reference case's
     labels and the label file's own clock (both truth)."""
     from dopplertrack.adsb import join_days
-    from dopplertrack.doppler import speed_of_sound
     from dopplertrack.terrain import Terrain
 
     from .cases import case_labels, latest_case
-    from .runner import trace_paths
+    from .runner import sound_speed, trace_paths
     case = latest_case(span["reference_case"])
     ref = case_labels(case["id"], case["version"])["reference"]
     lat, lon = float(ref["lat"]), float(ref["lon"])
     elev = float(Terrain().elevation(np.array([lat]), np.array([lon]))[0]) if case["search"]["dem"] else 0.0
     traces, _ = join_days(trace_paths(case))
     t0 = datetime.datetime.fromisoformat(labels["recording"]["t0_utc"].replace("Z", "+00:00")).timestamp()
-    return traces, np.array([0.0, 0.0, elev]), lat, lon, t0, speed_of_sound()
+    return traces, np.array([0.0, 0.0, elev]), lat, lon, t0, sound_speed(case)[1]["c_m_s"]
 
 
+BACKGROUND_FAMILIES = ("essex", "aerosonicdb")      # recordings with nothing to find (PLAN 5.1 negatives)
 BUDGET_S = 180.0      # PLAN 5.4: Tier 1 under 3 min; a span or case joins only if the whole run stays under it
+
+
+def build_spans(sets=("development",), log=print) -> list[str]:
+    """Make each missing derived file of the spans in these sets from its recipe, and check every hash."""
+    from .cases import build
+    bad = []
+    for s in load_tier1()["spans"]:
+        if s["set"] in sets and s.get("derived"):
+            bad += build(s, log=log)
+    return bad
 
 
 def run_tier1(sets=("development",), run_dir: Path | None = None, log=print, workers: int | None = None) -> Path:
@@ -544,9 +601,18 @@ def run_tier1(sets=("development",), run_dir: Path | None = None, log=print, wor
     span_entries = []
     for s in ready:
         labels = json.loads(resolve(s["labels"]).read_text())
-        span_entries.append({**compare_span(run_dir / "spans" / s["id"], lambda labels=labels: labels,
-                                            lambda s=s, labels=labels: reference_context(s, labels)),
-                             "set": s["set"], "group": s["group"]})
+        ref = (lambda s=s, labels=labels: reference_context(s, labels)) if s.get("reference_case") else None
+        span_entries.append({**compare_span(run_dir / "spans" / s["id"], lambda labels=labels: labels, ref),
+                             "set": s["set"], "group": s["group"], "family": s["family"]})
+    # pooled false-alarm tables: per group, per family, and over the background families together
+    pools, units = {}, {e["span"]: e.pop("_pool") for e in span_entries if "_pool" in e}
+    for kind, key in (("group", "group"), ("family", "family")):
+        for name in sorted({e[key] for e in span_entries}):
+            members = [e["span"] for e in span_entries if e[key] == name and e["span"] in units]
+            pools[f"{kind} {name}"] = {"spans": members, "curve": pooled_curve([units[m] for m in members])}
+    background = [e["span"] for e in span_entries if e["family"] in BACKGROUND_FAMILIES and e["span"] in units]
+    if background:
+        pools["background"] = {"spans": background, "curve": pooled_curve([units[m] for m in background])}
     kp_entries = []
     for cid in doc["known_point"]:
         case = latest_case(cid)
@@ -560,7 +626,7 @@ def run_tier1(sets=("development",), run_dir: Path | None = None, log=print, wor
     wall = time.perf_counter() - t0
     results = {"schema": 1, "tier": "t1", "code": code, "knobs": KNOBS, "sets": list(sets),
                "created": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
-               "spans": span_entries, "known_point": kp_entries, "skipped": skipped,
+               "spans": span_entries, "pooled": pools, "known_point": kp_entries, "skipped": skipped,
                "timings_s": {k: round(v, 2) for k, v in timings.items()}, "wall_s": round(wall, 2),
                "within_budget": wall < BUDGET_S, "budget_s": BUDGET_S}
     (run_dir / "results.json").write_text(json.dumps(results, indent=1, sort_keys=True) + "\n")

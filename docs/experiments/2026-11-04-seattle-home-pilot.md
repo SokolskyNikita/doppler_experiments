@@ -379,8 +379,24 @@ again with the top within 300 m of the site, the failure is sampling. If not, it
 The method's fix would choose among pairs after each pair's top is refined, not on the coarse grid. That is
 recorded here, not built.
 
-**8 and 12 km:** run as the owner asked, at 200 m. They are reported, not judged: they fall outside the pre-registered
-rule, and they carry the same sampling limit.
+**8 and 12 km (runs 10 and 11), reported, not judged.** They ran at 200 m, as the owner asked, outside the
+pre-registered rule, with the same off-node placement:
+
+| Box | Run | CPA records | Top candidate from the site | Score | Residual shift | Refined from the site |
+|---|---|---|---|---|---|---|
+| 4 km | 9 | 134,641 | 482 m | 5.13 | −6.0 s | 294 m |
+| 8 km | 10 | 499,475 | 480 m | 5.03 | −6.0 s | 238 m |
+| 12 km | 11 | 1,091,510 | 477 m | 4.64 | −6.0 s | 273 m |
+
+- **Same answer at every size:** the same event pair (the 1.8 and 0.8 km pistons) wins at the same node.
+- **No better candidate anywhere:** in each box that node beat the best of all ten event-pair searches, so no
+  candidate anywhere in a box of up to 12 km (about 3,600 nodes) scored higher.
+- **Score drift:** the top score falls with the box, because the comparable z's null is drawn from a CPA table that
+  grows with the grid. Scores at different box sizes are not comparable.
+- **What stops a pass:** across nine times the area, the 200 m sampling of run 7's sharper pair (run 12 tests it). No
+  wrong location wins.
+- **20 km:** the next size, once adsb.lol's 2026-11-04 archive is out. It needs a `fetch-day --keep-jets` cut of a wide
+  public Puget Sound box and a private case pointing at it.
 
 ### The box series: criterion, written before any run
 
@@ -439,8 +455,11 @@ So far, from runs 4, 5 and 7:
 
 - Run 9, the box series' first size: 4 km with the site off the grid fails the criterion. Its top is 482 m away, on
   a different event pair with a broader surface. Run 7's sharp pair can't score above it on a 200 m grid that misses
-  its peak. So the judged series stops at 4 km. Run 10 (50 m spacing) tests whether sampling is the cause, and 8 and
-  12 km are reported, not judged.
+  its peak. So the judged series stops at 4 km.
+- Runs 10 and 11 (8 and 12 km, reported, not judged): the same node, 480 and 477 m from the site, wins every box.
+  No location in a 12 km box scores higher.
+- Run 12 (4 km at 50 m spacing, not yet read) tests whether the 200 m sampling is all that stands between that and a
+  pass. 20 km waits for the archive.
 
 ## Files
 

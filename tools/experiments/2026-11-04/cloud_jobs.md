@@ -251,6 +251,44 @@ its search, so it never builds its table.
 
 All five launch at once, one box per case or Tier 1 unit: `tools/experiments/2026-11-04/sde_b_cloud.sh launch`, then `... collect` pulls, merges the shards, compares (silence off against on; legacy against margin-padded cut) and renders the reports. Job 3 runs at the commit before the case bump, from a worktree, so it needs no wait.
 
+### Handoff (SDE-B, 2026-11-05): the Seattle home pilot
+
+**Runs on the fleet.** All are pulled with `tools/aws/runs pull <name>` into `$DOPPLERTRACK_DATA/private/runs/<name>/`
+and written up in [the pilot record](../../../docs/experiments/2026-11-04-seattle-home-pilot.md):
+- **Run 10** (`2026-11-04-seattle-home-pilot-10`, `locate-silence-off-box8km/`) and **run 11** (`-11`,
+  `locate-silence-off-box12km/`): the box series at 8 and 12 km, outside the judged rule. Pulled and written: the top
+  is 480 and 477 m from the site, with no better candidate anywhere in the box.
+- **Run 12** (`-12`, `locate-silence-off-box4km-sp50m/`, launched at 30bd0e6): the off-node 4 km box at 50 m spacing,
+  which tests whether 200 m sampling is why run 9 missed. Not yet read. To write it:
+  - from `result.json`: the top candidate's and the refined point's distance from the site, the winning event pair
+    (`pair_rules[0]`; is it run 7's events 2+3?), and the residual shift;
+  - from `funnel_triples.npz` (`scored__east/north/score`): the margin to the best node outside 300 m.
+  - If the top is within 300 m, the run 9 failure is sampling.
+- **20 km:** not launched. It needs adsb.lol's 2026-11-04 archive (expected about 03:30Z on 11-05), a
+  `dopplertrack fetch-day 2026-11-04 OUT --keep-jets --bbox ...` cut on a fleet box, and a private case (or a traces
+  override) pointing at it. The site must have at least 22 km of coverage on every side.
+
+**Private-case rules.**
+- **Allow list:** only files the owner names go to the bucket and fleet, and the list is
+  `$DOPPLERTRACK_DATA/private/seattle-pilot-approved.txt`.
+- **Private runs and cache:** `runs launch --private` sets `$RUN` and the cache under the box's `private/`, and pulls
+  into `private/runs/`.
+- **Site-relative records:** `bench run` on a private case writes records in the site's frame (`offset_m`), and
+  `assert_no_site` refuses any leak. Logs and `summary.txt` print `locate`'s point as an offset.
+- **Kept out of git:** no coordinate, per-flight time or range, or flight-and-time table goes into git or a record.
+- **Launching:** `tools/experiments/2026-11-04/seattle_pilot_launch.sh <allow list> [all|broadband|locate|bandtest]
+  [--session ID] [--silence off] [--box KM] [--spacing M]`, with `RUNS_EXTRA="--check"` to dry-run. It ships exactly
+  the approved files.
+
+**Half-built:**
+- The 20 km box: the flight-data cut and its case.
+- The method fix written in the record, choosing among event pairs after refining each pair's top, is not built.
+- The silence filter's density-conditional default is decided in the record but not built in `locate`.
+- The full-band band test is fully prepared (`session_spectrogram.py --fmax`, both checks' `--fmax/--spectrogram`,
+  `tools/data/home_session_case.py`, the `bandtest` mode) and waits for a full-band session and the owner's file list.
+
+**Next step:** read run 12 into the record's Locate section and Outcome, then the 20 km box if run 12 passes.
+
 ## SDE-A
 
 # SDE-A's jobs for the fleet (item 7 stages A and B, item 1's sweep)

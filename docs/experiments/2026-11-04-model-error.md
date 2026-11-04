@@ -254,4 +254,47 @@ Each model was first checked on its own synthetic curves: f0 180 Hz, 65 m/s, 1.5
 
 **Script:** `tools/experiments/2026-11-04/heavier_model.py`. **Outputs:** `runs/2026-11-04-heavier-model/` (`heavier_fits.csv`, `heavier_profiles.csv` with each profile's Δ values) and `runs/2026-11-04-heavier-model-both/`.
 
+## The turn model: three parameters (design, written before any run)
+
+**Question.** Does a constant-rate level turn cut the straight fit's model error on the passes that turn? Per the heavier-models section above, 16 of the 40 Livermore passes turn faster than 1°/s within ±30 s of CPA.
+
+**Model.** A forward model in emission time u, heard at t = τ + u + r(u)/c, with f = f0 / (1 + ṙ/c).
+- **Path.** At u = 0 the aircraft is at horizontal offset d from the microphone and height h, heading at right angles to the line to the microphone. That point is a horizontal CPA for any turn rate. Its position is x = (v/ω) sin ωu, y = d + s·(v/ω)(1 − cos ωu), z = h.
+- **Parameters.** f0 (closed form), τ, v and R = √(d² + h²), as in the straight fit, plus three new ones:
+  - ω ∈ [0, 6]°/s, the turn rate;
+  - φ = atan(h/d) ∈ [0°, 90°], the split of R into offset and height;
+  - s = ±1, the turn's sign: +1 turns away from the microphone, −1 toward it.
+- **The sign is a discrete selection.** Each pass is fitted on both branches, and the fit is the branch with the lower RSS.
+- **Reduces to the straight pass.** At ω = 0 the model is the straight pass exactly, and φ is unidentified by construction.
+- **The compared R is the fitted path's true minimum distance,** min over u of r(u), the same quantity as the trajectory reference R*.
+- **Starts:** the straight fit × ω ∈ {0.5, 1.5, 3}°/s × φ ∈ {15°, 45°, 75°}, on each branch.
+
+**Checks first.** Synthetic arcs, f0 180 Hz, 65 m/s, 1.5 km, with ω 0, 1 and 3°/s, φ 20° and 60°, and both signs. Each must be recovered exactly. ω = 0 must match `straight_pass_ls`. Each also records what a straight fit misses on it.
+
+**The straight fit's baseline on curve A** (`runs/2026-11-04-heavier-model/heavier_fits.csv`, straight on A), median |R − R*|:
+- the 16 turning passes: 287 m (18.0 %);
+- the 24 non-turning passes: 165 m (12.4 %);
+- the primary 29: 229 m (15.6 %).
+
+**Expectation, written before the criterion.**
+- Real help on the turning passes, but not a cure: Livermore's turns aren't constant-rate, and φ can trade with R the way η traded with v and R. A guess: a third off the turning passes' median.
+- The non-turning passes unchanged, with ω̂ near 0 and φ unidentified.
+- The primary 29 near the 160 m target, probably just above it.
+- ω identified on most turning passes, because a turn makes approach and recede asymmetric, which a straight pass can't produce. φ identified only on the fast turns.
+
+**Criterion, fixed before running.** The model enters if, on curve A, all of these hold:
+1. On the 16 turning passes, median |R − R*| ≤ 201 m (30 % below 287 m).
+2. On the 24 non-turning passes, median |R − R*| ≤ 182 m (no more than 10 % above 165 m).
+3. On the primary 29, median |R − R*| ≤ 160 m.
+4. The signed turn rate s·ω is identified on at least 11 of the 16 turning passes. The rule is the same as for the one-parameter round: on A plus one stage-1 noise replicate, Δ = (RSS − RSS_min)/(σ²κ) ≤ 3.84 only on an interval finite on both sides inside ±6°/s, with σ² and κ as before.
+5. On at least 11 of the 16 turning passes, the chosen s matches the trajectory's turn direction relative to the microphone, and s·ω̂ has the sign of the trajectory's mean turn rate over ±30 s. Across the turning passes, the correlation of s·ω̂ with that rate is at least 0.5.
+
+Never judged on the residual: RSS ratios are reported only. Curve D (the published ridge) is reported beside A and isn't in the criterion.
+
+**The bound beside it.** The Cramér–Rao bound of R under the six-parameter model at the fitted point, with the pass's own ridge noise as in `crb.py`, set beside the straight model's bound. Where s·ω's interval includes 0, φ's Fisher information is singular, so the bound there is taken with φ fixed and says so.
+
+**The trade-off watch.** φ against R, as η was watched: the profile of φ, and over the bootstrap the correlations of φ and s·ω with v and R.
+
+**Compute.** synth, fit and profile run here at two workers. The bootstraps wait for the cloud fleet: 200 moving-block replicates (2 s blocks of the sub-5 s residuals) per pass, refitting both branches. Every unit writes its own jsonl line, every replicate's seed comes from (pass, replicate), and a stopped or split run resumes and merges to the same numbers.
+
 **Scripts (stage 1):** `tools/experiments/2026-11-04/straight_pass_ls.py`, `model_error.py`, `model_error_summary.py`, `crb.py`. **Outputs:** `runs/2026-11-04-model-error-2/` (`fits.csv`, `perturbations.csv`, `halves.csv`, `noise.csv`, `summary.json`) and `runs/2026-11-04-crb-2/` (`crb.csv`, `crb_summary.json`; `runs/2026-11-04-crb/` used the invalid truncated covariance and is superseded). Weather: `raw/aux/metar/KLVK_*`, `RAOB_KOAK_*`.

@@ -227,6 +227,33 @@ Every driver runs on `shards.py`:
 
 Splitting a job across boxes can't bring it under its longest unit.
 
+Each job's `decision:` line names the PLAN decision it informs and what each outcome changes. The jobs are listed
+in the PM's order (2026-11-04); a job whose outcomes change no decision isn't launched.
+- **Stage A comparable score** — decision: whether event choice is the Phase 3 blocker (item 7, stage A).
+  - A1 and A3 met at today's code: ranking a recording's event pairs by Z is the event choice Phase 3 builds on.
+  - Not met: event choice stays the blocker, and the next lever is stage B's joint hypotheses.
+- **B1/B2** — decision: whether the score's input, the fit, is the blocker (item 7, stage B).
+  - B1 still failing at today's code: the fit's bias, not event choice, is what Phase 3 waits on. The levers are
+    item 2's turn model, item 8, or a track that stays on the pass (item 3).
+  - B1 met: hypotheses replace the speed and distance gates.
+- **Stage B A1/A3** — decision: whether stage B's hypotheses ship for event choice.
+  - A1 met: Z with hypotheses picks the eagle cam's true pair, which counts for adopting them, though B1 alone still
+    blocks that.
+  - Not met: they don't ship for event choice.
+  - Inside the null's noise: the N run below decides it.
+- **Item 1's timing sweep** — decision: whether the (16 s, 4 s) emission setting still holds at today's code, after
+  the changes since `51f59ce`.
+  - Holds: it stays the development setting that a default change would cite.
+  - Doesn't hold: item 1's setting reopens.
+- **N = 250,000 null (stage B, `--null-n`)** — decision: whether A1 can be decided at all by the null's size.
+  - It is read only if A1 is inside the null's noise and needs N ≤ 250,000, under the record's rule; otherwise it is
+    a number nobody acts on, and it isn't read.
+  - Decided: that is A1's result.
+  - Still inside the noise: the record says the test can't decide, and a lower-variance scale estimate becomes the
+    later method change.
+- **Event pairs by raw score** — decision: none of its own. Stage A's earlier run already compared Z with the raw
+  score, so it isn't launched.
+
 **Inputs** (from each driver's `--inputs`):
 - **Pairs jobs.** The three cases, plus each case's `detected.json` in
   `runs/2026-11-04-bench-5314396-raw-audio-t2/`. Cache kinds: `terrarium`. CPA tables:

@@ -32,6 +32,9 @@ SHARDS_B=${SHARDS_B:-10} SHARDS_N=${SHARDS_N:-30} SHARDS_A=${SHARDS_A:-5} SHARDS
 SHARDS_SWEEP=${SHARDS_SWEEP:-15}
 SIZE_B=${SIZE_B:-16xlarge} SIZE_N=${SIZE_N:-16xlarge} SIZE_A=${SIZE_A:-16xlarge} SIZE_B12=${SIZE_B12:-16xlarge}
 SIZE_SWEEP=${SIZE_SWEEP:-16xlarge}
+# added to every launch: runs tries spot in us-west-2, us-west-1 and us-east-2 in turn, and on demand only with this;
+# RUNS_FLAGS="--fallback-on-demand --only-shard K" relaunches the shard K a launch reported missing
+RUNS_FLAGS=${RUNS_FLAGS---fallback-on-demand}
 WPS_B=${WPS_B:-16} WPS_N=${WPS_N:-64} WPS_A=${WPS_A:-16}
 # each pairs job's own settings; a merge must repeat them exactly (they are part of its units' parameters)
 ARGS_B="--hypotheses --workers-per-search $WPS_B"
@@ -48,7 +51,7 @@ pinned() {
 launch() {        # topic shards extra-runs-flags inputs-command -- command; a failure is reported, not fatal
     local topic=$1 shards=$2 flags=$3 inputs=$4; shift 4
     # shellcheck disable=SC2086
-    $RUNS launch "$topic" --shards "$shards" $flags --inputs-from "$inputs" -- "$@" || echo "LAUNCH FAILED: $topic"
+    $RUNS launch "$topic" --shards "$shards" $flags $RUNS_FLAGS --inputs-from "$inputs" -- "$@" || echo "LAUNCH FAILED: $topic"
 }
 
 case "${1:-}" in

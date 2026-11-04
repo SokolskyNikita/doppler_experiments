@@ -152,6 +152,13 @@ background is only a handful of null sigmas.
     reboot at 26 of 30 searches, and `-3` for the move to the AWS fleet at 2 of 30.
   - It runs on the fleet from `claude/sde-stageb-pairs-45d0bd8` at `6f0ce38`: `45d0bd8`'s code, plus shard support,
     the kept nulls and `null_n`, whose default is 1,000.
+  - **A gap in its provenance.** It launched on 2026-11-04 as jobs `2026-11-04-hypotheses-pairs-s1of8` to `-s8of8`,
+    on 8 spot 8xlarge boxes in us-west-1, before `runs` was on `dev`.
+    - The `runs` that launched it was SDE-E's uncommitted `tools/aws` at `0cbc405`, copied into a scratch worktree
+      of `dev` at `9b1b684`.
+    - That `runs` shipped the pinned checkout with `--repo`, so the boxes ran `6f0ce38`, which each shard's run.json
+      records.
+    - No committed `runs` launched it.
 
 ## Prepared before the A1/A3 result
 

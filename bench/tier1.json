@@ -50,7 +50,7 @@
    "derived": [
     {
      "path": "derived/background/XC990819_2025-04-20_0510.npz",
-     "sha256": null,
+     "sha256": "35099919e1793320c6706a6808d0378b04e8dd57bfb9914675a9df0a9595714d",
      "recipe": [
       [
        "dopplertrack",
@@ -64,7 +64,7 @@
    ],
    "spectrogram": {
     "path": "derived/background/XC990819_2025-04-20_0510.npz",
-    "sha256": null
+    "sha256": "35099919e1793320c6706a6808d0378b04e8dd57bfb9914675a9df0a9595714d"
    },
    "note": "jets only: 'absent' means no propeller pass, and a jet detection is the E5 false alarm"
   },
@@ -78,7 +78,7 @@
    "derived": [
     {
      "path": "derived/background/XC990820_2025-04-20_0510.npz",
-     "sha256": null,
+     "sha256": "146b738582bacb41820d68570c804a4a8b50cdeb87c2d719010f7a5c1196f329",
      "recipe": [
       [
        "dopplertrack",
@@ -92,7 +92,7 @@
    ],
    "spectrogram": {
     "path": "derived/background/XC990820_2025-04-20_0510.npz",
-    "sha256": null
+    "sha256": "146b738582bacb41820d68570c804a4a8b50cdeb87c2d719010f7a5c1196f329"
    },
    "note": "jets only: 'absent' means no propeller pass, and a jet detection is the E5 false alarm"
   },
@@ -106,7 +106,7 @@
    "derived": [
     {
      "path": "derived/background/XC986433_2025-04-07_0545.npz",
-     "sha256": null,
+     "sha256": "6f4240af3cfa7b1b96a965b70acffc16433a3f78e5d2d1932e7dc31039d94efd",
      "recipe": [
       [
        "dopplertrack",
@@ -120,7 +120,7 @@
    ],
    "spectrogram": {
     "path": "derived/background/XC986433_2025-04-07_0545.npz",
-    "sha256": null
+    "sha256": "6f4240af3cfa7b1b96a965b70acffc16433a3f78e5d2d1932e7dc31039d94efd"
    },
    "note": "jets only: 'absent' means no propeller pass, and a jet detection is the E5 false alarm"
   },
@@ -134,7 +134,7 @@
    "derived": [
     {
      "path": "derived/background/aerosonicdb_env_1.wav",
-     "sha256": null,
+     "sha256": "846ecdbc6022ce3e0e91f388b5e89178eec413ac79339e1f2cdda4ed83a76481",
      "recipe": [
       [
        "python",
@@ -150,7 +150,7 @@
     },
     {
      "path": "derived/background/aerosonicdb_env_1.npz",
-     "sha256": null,
+     "sha256": "117b9f436b501836aa4c7c956d076b33bfbbae0a7c520b6f57a2c9f486a8c60a",
      "recipe": [
       [
        "dopplertrack",
@@ -163,7 +163,7 @@
    ],
    "spectrogram": {
     "path": "derived/background/aerosonicdb_env_1.npz",
-    "sha256": null
+    "sha256": "117b9f436b501836aa4c7c956d076b33bfbbae0a7c520b6f57a2c9f486a8c60a"
    }
   },
   {
@@ -176,7 +176,7 @@
    "derived": [
     {
      "path": "derived/background/aerosonicdb_env_2.wav",
-     "sha256": null,
+     "sha256": "bbe8ba5116a38b4864911d7186db6f796877bdf27f0e94f689ea3f088c3d23e2",
      "recipe": [
       [
        "python",
@@ -192,7 +192,7 @@
     },
     {
      "path": "derived/background/aerosonicdb_env_2.npz",
-     "sha256": null,
+     "sha256": "b870e4697e2789c3a3035962526342523bd1e486aa5a48b283551ddd05cd1934",
      "recipe": [
       [
        "dopplertrack",
@@ -205,7 +205,7 @@
    ],
    "spectrogram": {
     "path": "derived/background/aerosonicdb_env_2.npz",
-    "sha256": null
+    "sha256": "b870e4697e2789c3a3035962526342523bd1e486aa5a48b283551ddd05cd1934"
    }
   },
   {
@@ -218,7 +218,7 @@
    "derived": [
     {
      "path": "derived/background/aerosonicdb_env_3.wav",
-     "sha256": null,
+     "sha256": "e8b1c42f2793fb5cd893ef31199b388547ec4e8b11f61bf4dc99fb82e7245e24",
      "recipe": [
       [
        "python",
@@ -234,7 +234,7 @@
     },
     {
      "path": "derived/background/aerosonicdb_env_3.npz",
-     "sha256": null,
+     "sha256": "9ddb7b0abfda2b30144f75d9041f984c2bf002323447e0692e79cd27d499105b",
      "recipe": [
       [
        "dopplertrack",
@@ -247,7 +247,7 @@
    ],
    "spectrogram": {
     "path": "derived/background/aerosonicdb_env_3.npz",
-    "sha256": null
+    "sha256": "9ddb7b0abfda2b30144f75d9041f984c2bf002323447e0692e79cd27d499105b"
    }
   },
   {
@@ -260,7 +260,7 @@
    "derived": [
     {
      "path": "derived/background/aerosonicdb_env_4.wav",
-     "sha256": null,
+     "sha256": "0942ce1378d6a29b1eee4ea8ebc84ebbe7e5f552ed80693f8fdfd47524f1decf",
      "recipe": [
       [
        "python",
@@ -276,7 +276,7 @@
     },
     {
      "path": "derived/background/aerosonicdb_env_4.npz",
-     "sha256": null,
+     "sha256": "a9a1fc5b05924ae8fa1415ce5377847d7d108eb952bcf174207d5e9d2520bf9a",
      "recipe": [
       [
        "dopplertrack",
@@ -289,7 +289,7 @@
    ],
    "spectrogram": {
     "path": "derived/background/aerosonicdb_env_4.npz",
-    "sha256": null
+    "sha256": "a9a1fc5b05924ae8fa1415ce5377847d7d108eb952bcf174207d5e9d2520bf9a"
    }
   },
   {
@@ -302,7 +302,7 @@
    "derived": [
     {
      "path": "derived/background/aerosonicdb_env_5.wav",
-     "sha256": null,
+     "sha256": "e8dcdd249bd1b33d90c9d48a79f3d4dcf2e60c567e4ac180f0e426d9c7342917",
      "recipe": [
       [
        "python",
@@ -318,7 +318,7 @@
     },
     {
      "path": "derived/background/aerosonicdb_env_5.npz",
-     "sha256": null,
+     "sha256": "a3c5e8043b5b01a6bc9f62f18883068351f22257c3cd430aa2fa073b7d03eff2",
      "recipe": [
       [
        "dopplertrack",
@@ -331,7 +331,7 @@
    ],
    "spectrogram": {
     "path": "derived/background/aerosonicdb_env_5.npz",
-    "sha256": null
+    "sha256": "a3c5e8043b5b01a6bc9f62f18883068351f22257c3cd430aa2fa073b7d03eff2"
    }
   },
   {
@@ -344,7 +344,7 @@
    "derived": [
     {
      "path": "derived/background/aerosonicdb_env_6.wav",
-     "sha256": null,
+     "sha256": "573a4d0e73a5c07d977fd25e7d5468bb4a42e6f67a67d7db409e6a9b2beb2710",
      "recipe": [
       [
        "python",
@@ -360,7 +360,7 @@
     },
     {
      "path": "derived/background/aerosonicdb_env_6.npz",
-     "sha256": null,
+     "sha256": "80c00d709d8e80af07fd79be26f86b700ad3b4a6a9e0794156fec9ccfda0017e",
      "recipe": [
       [
        "dopplertrack",
@@ -373,7 +373,7 @@
    ],
    "spectrogram": {
     "path": "derived/background/aerosonicdb_env_6.npz",
-    "sha256": null
+    "sha256": "80c00d709d8e80af07fd79be26f86b700ad3b4a6a9e0794156fec9ccfda0017e"
    }
   }
  ],

@@ -106,3 +106,41 @@ score triples, so neither fix touches it, and it stands.
 
 The A1/A3 rerun from `45d0bd8` stands as the comparable-score result regardless. If the retune passes B1
 and B2, A1/A3 run once more on the widened hypotheses, and both are reported.
+
+**B1 and B2 after the retune** (`runs/2026-11-04-hypotheses-b1b2-2/`, `758d739`): **B1 not met on any case; B2 met.**
+
+| Case, event | hypotheses left | B1 | admitted rows / today's gates |
+|---|---|---|---|
+| Oyster Bay, 1 | ls (v 61–124, k weak) | **no**: true 136.8 m/s | 6,139,050 / 16,722,629 |
+| Oyster Bay, 2 | ls (v 82–97, k 2.72–5.18) | **no**: true 103.5 m/s | 987,751 / 13,292,417 |
+| degraded, 1 | ls (v 61–124, k weak) | **no** | 6,019,573 / 16,692,860 |
+| degraded, 2 | none informative, so the gate | yes, via the gate | 13,300,417 / 13,300,417 |
+| eagle cam, 1 | none informative, so the gate | yes, via the gate | 6,912,926 / 6,912,926 |
+| eagle cam, 2 | ls (v 23–63, k weak) | **no**: true 102.8 m/s | 2,535,057 / 11,186,276 |
+
+**The expectation failed, and for a reason the derivation missed.** Multiplying the brightness threshold by 9
+(2 × 9 = 18 null sigmas) made it wider than the brightness objective's dynamic range. No fit_event profile fell
+that far within its bounds, so every fit_event hypothesis came out weak in v, k and τ together. The
+weak-hypothesis rule then dropped them all. Only the LS hypotheses were left, and they sit on `ridge()`'s
+track: on the wrong line for Oyster Bay event 2 (as in item 4) and the eagle cam's event 2, and k-weak with v
+ranges short of the truth for event 1. The factor was right for the LS threshold's scale, which measures
+noise about a fit of the residuals, but not for a brightness score, whose fall from the optimum to the
+background is only a handful of null sigmas.
+
+## Outcome
+
+**Stage B is not met, with no further change**, as agreed before the retune.
+- **The first run:** the sensitivity ranges sat on the biased fit (E1) and missed Oyster Bay event 2's truth.
+  Elsewhere they admitted 20–60× fewer rows than today, and they kept every true flight except Oyster Bay
+  event 2's.
+- **The retune:** it widened the ranges for model error, but the factor pushed the brightness threshold past
+  that objective's range, and the weak-hypothesis rule then removed the one source that had held the truth.
+- **What it shows.**
+  - Hypotheses from one fit's neighbourhood can't keep a true flight the fit is biased away from, whatever the
+    threshold: one too narrow misses the truth, one too wide carries no information.
+  - The lever is the fit's bias itself: item 2's turn model, item 8, or a track that stays on the pass (item 3).
+  - `hypotheses.py` and `run_search(hypotheses=True)` stay as off-by-default library code, at the retune's
+    settings, for the re-run after those.
+- **The A1/A3 rerun with the first run's hypotheses** (`runs/2026-11-04-hypotheses-pairs-2/`, from `45d0bd8`)
+  stands as the comparable-score result with hypotheses, and is reported when it finishes. The retune didn't
+  pass B1 and B2, so A1/A3 are not run again on it.

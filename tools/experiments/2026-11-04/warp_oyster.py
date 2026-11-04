@@ -37,6 +37,7 @@ import pandas as pd                                                      # noqa:
 import scipy.signal as ss                                                # noqa: E402
 
 from dopplertrack import audio, warp as W                                # noqa: E402
+from dopplertrack.parallel import default_jobs                           # noqa: E402
 from dopplertrack.adsb import load_traces                                # noqa: E402
 from dopplertrack.audio import Spectrogram                               # noqa: E402
 from dopplertrack.geo import lla_to_enu                                  # noqa: E402
@@ -261,7 +262,7 @@ def _one(job):
 
 def pool(jobs, band_limited):
     from concurrent.futures import ProcessPoolExecutor
-    with ProcessPoolExecutor(int(os.environ.get("JOBS", "4")), initializer=_init, initargs=(band_limited,)) as ex:
+    with ProcessPoolExecutor(default_jobs(), initializer=_init, initargs=(band_limited,)) as ex:
         return list(ex.map(_one, jobs))
 
 
@@ -376,7 +377,7 @@ def refine(rank, knobs, band, spacing_by_scorer):
             pts = [(cand["lat"] + i * dl, cand["lon"] + j * dlon) for i in range(-n, n + 1) for j in range(-n, n + 1)]
             jobs = [("derived/oyster_bay/traces_ny.npz", lat0, lon0, a, b, (cand["icao1"], cand["icao2"]), T0, scorer, knobs) for a, b in pts]
             t = time.perf_counter()
-            with ProcessPoolExecutor(int(os.environ.get("JOBS", "4")), initializer=_init, initargs=(band,)) as ex:
+            with ProcessPoolExecutor(default_jobs(), initializer=_init, initargs=(band,)) as ex:
                 got = list(ex.map(_point_score, jobs, chunksize=4))
             best = max(got, key=lambda g: g[2])
             out[f"{scorer}@{sp:g}m"] = dict(top=cand["name"], lat=best[0], lon=best[1], score=best[2], clock=best[3], points=len(pts),

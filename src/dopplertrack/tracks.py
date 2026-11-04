@@ -42,7 +42,13 @@ class EventFit:
 
 
 def local_whiten(sp: Spectrogram, floor: float = 0.0) -> Spectrogram:
-    """Remove tones that are stationary over this window (per-bin median), clip at floor."""
+    """Remove tones that are stationary over this window (per-bin median), clip at floor. A spectrogram
+    whitened across frequency (sp.whitening == "frequency") keeps its stationary tones: it is only
+    clipped at floor."""
+    if sp.whitening == "frequency":
+        S = np.maximum(sp.S, floor).astype(np.float32)
+        S[:, ~sp.valid] = floor
+        return sp.with_S(S)
     S = np.maximum(sp.S - sp.bin_median(), floor).astype(np.float32)
     S[:, ~sp.valid] = floor
     return sp.with_S(S)

@@ -37,6 +37,7 @@ SOURCES = [   # (path prefix, source, licence)
     ("raw/seismic/alaska-ze2019/earthscope-ze/", "EarthScope FDSN web services, network ZE 2019 (doi:10.7914/SN/ZE_2019), DPZ windows around fitted crossings", None),
     ("raw/aux/geoid/", "https://cdn.proj.org/us_nga_egm96_15.tif (PROJ-data, NGA EGM96 15' grid)", None),
     ("raw/aux/metar/", "Iowa Environmental Mesonet: ASOS/METAR and RAOB soundings", None),
+    ("raw/aux/opensky/", "https://opensky-network.org/datasets/metadata/doc8643AircraftTypes.csv (OpenSky, ICAO Doc 8643)", None),
     ("raw/models/rnnoise/", "RNNoise models for ffmpeg arnndn", None),
 ]
 ECLIPSE_ZENODO = {"375": "21708608", "710": "21722091", "740": "21877430", "937": "21829727"}

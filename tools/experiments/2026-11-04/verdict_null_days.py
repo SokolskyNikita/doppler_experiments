@@ -36,6 +36,7 @@ from bench import cases                                            # noqa: E402
 
 DATA = Path(os.environ.get("DOPPLERTRACK_DATA", Path.home() / "data" / "dopplertrack"))
 SEED = 20261104
+TYPES = "raw/aux/opensky/doc8643AircraftTypes.csv"       # the aircraft-type table AircraftTypes would download
 # each group's cases share a date and are cut from one stream per day
 SETS = {"saved-fit": {"2026-09-08": ["oyster-bay", "oyster-bay-moved-wsw150", "oyster-bay-moved-north150"],
                       "2024-12-28": ["eagle-cam-clip-18000s"]},
@@ -79,8 +80,12 @@ def run():
     a = ap.parse_args()
     p = json.loads(PLAN.read_text())
     if a.inputs:
-        shards.print_inputs([], [], [], ())
+        shards.print_inputs([], [TYPES], [], ())
         return
+    cached = Path(os.environ.get("DOPPLERTRACK_CACHE", Path.home() / ".cache" / "dopplertrack")) / Path(TYPES).name
+    if not cached.exists():       # extract_boxes's prop filter reads it from the cache, and boxes can't reach OpenSky
+        cached.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(DATA / TYPES, cached)
     units = {d: g for g in p["groups"] for d in g["days"]}
     run_dir = shards.open_run(a.run, "verdict-null-days" + ("" if SET == "saved-fit" else f"-{SET}"), {"script": "tools/experiments/2026-11-04/verdict_null_days.py",
                                                           "params": p, "invocation": {"shard": "%d/%d" % a.shard,

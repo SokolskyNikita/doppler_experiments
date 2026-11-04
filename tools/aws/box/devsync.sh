@@ -3,6 +3,7 @@
 # what `runs launch` ships to a job box (code.bundle, dirty.patch, untracked.tar); the old checkout is replaced.
 set -euo pipefail
 src=$1 commit=$2 dest=$3
+mkdir -p "$(dirname "$dest")"
 work=$(mktemp -d)
 trap 'rm -rf "$work" "$dest.new"' EXIT
 s5cmd --log error cp "$src/*" "$work/"

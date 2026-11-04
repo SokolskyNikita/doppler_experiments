@@ -139,7 +139,7 @@ object is kept 30 days), kept when the stack is deleted:
 | `data/raw/`, `data/derived/` | the data root, minus reference/ (the papers) and runs/ | `runs seed`, `fetch-sources` jobs, jobs that build derived files |
 | `cache/{detections,window_fits,terrarium}/` | the seeded caches | `runs seed` only |
 | `cache-deltas/<job>.tar` | the cache entries a job added | that job |
-| `tools/{arm64,amd64}/`, `tools/tools.json` | uv 0.9.7 (MIT or Apache-2.0) and ffmpeg n9.0.2 static (BtbN, GPL-3.0-or-later): sources and hashes in [tools.json](tools.json) | `runs seed-tools` only |
+| `tools/{arm64,amd64}/`, `tools/tools.json` | uv 0.13.7 (MIT or Apache-2.0) and ffmpeg n9.0.2 static (BtbN, GPL-3.0-or-later): sources and hashes in [tools.json](tools.json) | `runs seed-tools` only |
 | `jobs/<job>/` | spec, code, supervisor, status (expire after 60 days) | `runs launch`, the job |
 | `runs/<run>/` | run folders | the job |
 | `dev/`, `plans/` | dev-box syncs (7 days), fetch plans | `runs` |

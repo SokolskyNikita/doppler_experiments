@@ -33,6 +33,8 @@ import urllib.request
 from pathlib import Path
 
 SCRATCH = Path("/scratch")
+# the Mac's interpreter: uv's own CPython build, not Ubuntu's python3, so a box and the Mac run the same Python
+PYTHON_ENV = {"UV_PYTHON": "3.12.15", "UV_PYTHON_PREFERENCE": "only-managed"}
 IMDS = "http://169.254.169.254/latest"
 NOTICE_POLL_S = 5
 HEARTBEAT_S = 60
@@ -135,7 +137,7 @@ def rebuild_tree(work: Path, spec: dict, repo: Path) -> None:
 
 def uv_sync(repo: Path) -> None:
     subprocess.run(["uv", "sync", "--frozen", "-q"], cwd=repo, check=True,
-                   env={**os.environ, "UV_CACHE_DIR": str(SCRATCH / "uv-cache")})
+                   env={**os.environ, **PYTHON_ENV, "UV_CACHE_DIR": str(SCRATCH / "uv-cache")})
 
 
 def pull_inputs(bucket: str, inputs: list[str], data: Path) -> None:
@@ -289,7 +291,7 @@ def main(argv=None) -> int:
            **({"DOPPLERTRACK_SHARD": str(spec["shard"][0]), "DOPPLERTRACK_SHARDS": str(spec["shard"][1]),
                "DOPPLERTRACK_SHARD_SPEC": f"{spec['shard'][0]}/{spec['shard'][1]}"}
               if spec.get("shard") else {}),
-           "UV_CACHE_DIR": str(SCRATCH / "uv-cache"), "PYTHONUNBUFFERED": "1"}
+           "UV_CACHE_DIR": str(SCRATCH / "uv-cache"), "PYTHONUNBUFFERED": "1", **PYTHON_ENV}
     env.pop("DOPPLERTRACK_JOBS", None)
     if spec.get("jobs"):
         env["DOPPLERTRACK_JOBS"] = str(spec["jobs"])

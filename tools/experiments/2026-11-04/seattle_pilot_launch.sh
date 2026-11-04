@@ -37,11 +37,15 @@ done
 for p in "${APPROVED[@]}"; do
   printf '%s\n' "${REQUIRED[@]}" | grep -qxF "$p" || echo "approved but not needed, not shipped: $p"
 done
+# Public inputs the box cannot fetch itself (opensky-network.org is unreachable from the boxes); no approval needed.
+PUBLIC=(raw/aux/opensky/doc8643AircraftTypes.csv)
 INPUTS=()
-for p in "${REQUIRED[@]}"; do INPUTS+=(--input "$p"); done
+for p in "${REQUIRED[@]}" "${PUBLIC[@]}"; do INPUTS+=(--input "$p"); done
 # On the box: the spectrogram from the FLACs, the known-point check, then locate on the case; all under private/.
 BOX_CMD=$(cat <<EOF2
 set -e
+# AircraftTypes() reads the Doc 8643 table from \$DOPPLERTRACK_CACHE and would otherwise fetch it from OpenSky.
+mkdir -p "\$DOPPLERTRACK_CACHE" && cp "\$DOPPLERTRACK_DATA/raw/aux/opensky/doc8643AircraftTypes.csv" "\$DOPPLERTRACK_CACHE/"
 S=private/derived/$CASE/rec.npz
 uv run python -I tools/data/session_spectrogram.py "\$DOPPLERTRACK_DATA/raw/seattle-home/20261104-ha-pilot-2" "\$DOPPLERTRACK_DATA/\$S"
 uv run python tools/experiments/2026-11-04/known_point_site.py $CASE "\$RUN/known_point"

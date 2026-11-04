@@ -159,8 +159,8 @@ is dropped, so only the recording's own window of flight data can reach a candid
 window when a start is stated: the stated start ± (its tolerance + `tol_s` + 300 s) across the recording, capped at the
 whole-day bounds, so no case it passed before now fails. The cut covers the window. One thing changes slightly: the
 comparable score's null draws wrong flights from the whole CPA table, which here lacks the day after 20:13Z. Run 5
-reruns the whole box command at the fix (626937b on): the spectrogram, the known point (rerun under the new bins;
-it is seeded, so the result is the same), `locate`, and then the broadband check.
+runs at 34fab9e, which includes the fix: the spectrogram, the known point (seeded, so the same result) and `locate`.
+The broadband check runs on its own box, with the launch script's `broadband` mode.
 
 ## Outcome
 
@@ -170,7 +170,7 @@ So far, from run 4:
 - `locate` refused before searching, because the flight data stopped short of the whole day. That was a defect in its
   coverage rule, now fixed.
 
-Run 5 adds the broadband check and `locate`'s first search. Whether the box series follows depends on whether
+Run 5 adds `locate`'s first search, and the next run adds the broadband check. Whether the box series follows depends on whether
 `locate`'s region holds the site.
 
 ## Files

@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from dopplertrack import adsb, audio, cache, cli, doppler, pipeline, tracks
+from dopplertrack import adsb, atmosphere, audio, cache, cli, doppler, pipeline, tracks
 from dopplertrack.search import Grid, Segment, cpa_fingerprint
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -17,8 +17,8 @@ from bench import cases, runner  # noqa: E402
 
 def test_the_default_and_the_mid_height_temperature():
     assert doppler.speed_of_sound() == doppler.speed_of_sound(15.0) == pytest.approx(340.275, abs=0.001)
-    assert doppler.mid_height_temperature(15.0, 2000.0) == pytest.approx(8.5)
-    assert doppler.mid_height_temperature(15.0, 0.0) == 15.0
+    assert atmosphere.mid_height_temperature(15.0, 2000.0) == pytest.approx(8.5)
+    assert atmosphere.mid_height_temperature(15.0, 0.0) == 15.0
 
 
 def _spec():

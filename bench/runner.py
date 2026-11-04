@@ -136,7 +136,8 @@ def pick_detected(detected: list[dict]) -> list[dict]:
 def sound_speed(case: dict) -> tuple[dict, dict]:
     """The case's speed of sound, as keyword arguments for the pipeline ({} keeps its 15 C default untouched)
     and as the record's account of where it came from."""
-    from dopplertrack.doppler import mid_height_temperature, speed_of_sound
+    from dopplertrack.atmosphere import mid_height_temperature
+    from dopplertrack.doppler import speed_of_sound
     w = case.get("weather") or {}
     t = w.get("temperature_c")
     if t is None:

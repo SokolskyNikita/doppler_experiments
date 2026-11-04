@@ -10,7 +10,8 @@ from . import pipeline
 from .adsb import join_days
 from .audio import FFmpegNotFoundError, Spectrogram
 from .coverage import DEFAULT_MAX_RANGE_M, report_coverage
-from .doppler import mid_height_temperature, speed_of_sound
+from .atmosphere import mid_height_temperature
+from .doppler import speed_of_sound
 from .parallel import JOBS_ENV
 from .score import SF_FLAT_RATIO
 from .search import Grid

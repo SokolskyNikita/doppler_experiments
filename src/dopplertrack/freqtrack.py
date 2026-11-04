@@ -33,11 +33,13 @@ from .audio import Spectrogram
 
 @dataclass(frozen=True)
 class TrackParams:
-    """Every knob of the tracker. Defaults were set on synthetic cases only
-    (tools/experiments/2026-11-04/freqtrack_knobs.py), before any real recording was tracked."""
+    """Every knob of the tracker, set on synthetic cases only. theta_db and birth come from the one
+    recorded retune after Livermore run 1 (tools/experiments/2026-11-04/freqtrack_retune.py): a lower
+    per-frame threshold with a higher birth cost, at the same rate of one false track per hour per
+    100 Hz on white noise. Run 1 used theta 9.5 dB and birth 6."""
     peaks_per_frame: int = 8          # Viterbi states per frame, besides "off"
-    theta_db: float = 9.5             # whitened level below which a cell costs: 1 false track per hour per 100 Hz on noise
-    birth: float = 6.0                # cost of starting a track (dB)
+    theta_db: float = 9.0             # whitened level below which a cell costs; with birth, 1 false track/h/100 Hz on noise
+    birth: float = 20.0               # cost of starting a track (dB)
     death: float = 6.0                # cost of ending one (dB)
     jump_cost: float = 0.1            # dB per bin of frequency change between frames
     max_rel_slope: float = 0.25       # physical cap on |df/dt| / f, per second (PLAN 6.1, v <= 110 m/s, R >= 150 m)

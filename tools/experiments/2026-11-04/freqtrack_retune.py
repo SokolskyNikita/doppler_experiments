@@ -26,8 +26,10 @@ from dopplertrack import audio, doppler, freqtrack as ft                 # noqa:
 from dopplertrack.tracks import local_whiten, ridge                      # noqa: E402
 
 SR, N, HOP = FL.SR, FL.N, FL.HOP
-THETAS = [5.0, 6.0, 7.0, 8.0, 9.5]
-BIRTHS = [6.0, 9.0, 12.0, 16.0, 20.0, 25.0, 30.0, 40.0, 50.0, 65.0, 80.0]
+# A first grid (theta 5, 6, 7; birth 6-80) was stopped: below about 8 dB no birth reached the target, since
+# the best path through noise then gains on average and repays any birth (runs/.../retune_grid1_stopped.log).
+THETAS = [7.5, 8.0, 8.5, 9.0, 9.5]
+BIRTHS = [6.0, 12.0, 20.0, 30.0, 45.0, 65.0, 90.0, 130.0, 180.0]
 TARGET, HOURS = 1.0, 2.0
 PASSES = [(200.0, 55.0, 600.0), (120.0, 65.0, 1500.0)]
 AMPS = [0.06, 0.04, 0.03, 0.02, 0.015, 0.01, 0.007, 0.005]

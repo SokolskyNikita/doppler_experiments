@@ -119,6 +119,8 @@ def test_a_version_1_record_still_validates_and_version_2_checks_the_verdict():
     validate(v1)
     rec["verdict"] = {"outcome": "ambiguous", "reason_codes": ["winner_only_refined"], "reasons": ["only the winner"]}
     validate(rec)
+    rec["verdict"]["reason_codes"] = ["competing_mode", "below_null_threshold"]       # Phase 4's, in v2
+    validate(rec)
     rec["verdict"]["reason_codes"] = ["made_up"]
     with pytest.raises(RecordError):
         validate(rec)

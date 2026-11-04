@@ -103,8 +103,8 @@ def main():
                "by_ground_range_m": [{"from": lo, "to": hi, "passes": sum(lo <= r["ground_m"] < hi for r in rows),
                                       "heard": sum(lo <= r["ground_m"] < hi and r["heard"] for r in rows)}
                                      for lo, hi in zip(bins[:-1], bins[1:])],
-               "by_engine": {e: {"passes": sum(r["engine"] == e for r in rows),
-                                 "heard": sum(r["engine"] == e and r["heard"] for r in rows)}
+               "by_engine": {e: {"passes": sum(str(r["engine"]) == e for r in rows),
+                                 "heard": sum(str(r["engine"]) == e and r["heard"] for r in rows)}
                              for e in sorted({str(r["engine"]) for r in rows})}}
     (a.out / "known_point_summary.json").write_text(json.dumps(summary, indent=1) + "\n")
     print(json.dumps(summary))

@@ -42,3 +42,38 @@ One counted retune is allowed, of the clock vote's cluster width.
 - Oyster Bay and its copy pass 1, with event 2 matched through ace391's own curve.
 - The eagle cam passes 1 only if its event 2's window earns z > 0 at the true clock, or if another window carries a336e4. I expect the latter to be unlikely, so it may land with a2baea and some other window.
 - The runtime is the open risk: the coarse stage's candidates are unbounded by any speed or distance gate.
+
+## A known-answer suite: turning and climbing passes (written before the run)
+
+**Question.** Is the collective find's gain specific to non-straight trajectories, the claim PLAN's conclusion now makes, or general?
+
+**What runs** (`tools/experiments/2026-11-04/synth_suite.py`; one case per 4xlarge box).
+- **The recordings.** Twelve synthetic 30 min recordings, 4 kHz, white noise of std 0.4, heard by an observer at 40.78 N, 73.40 W, ground level, from 2026-09-08 19:00 UTC.
+- **The passes.** Each recording holds three target passes, each a tone with a second harmonic at half amplitude:
+  - 110 Hz, 120 m/s, 3.5 km horizontal offset, 1.2 km up, heard about 450 s in;
+  - 125 Hz, 100 m/s, 4.5 km, 1.5 km, about 1,000 s;
+  - 140 Hz, 140 m/s, 5.5 km, 1.0 km, about 1,500 s.
+  That is 3.7–5.6 km slant range.
+- **The shapes.**
+  - straight;
+  - **turn:** a 25° heading change, linear over ±60 s about the CPA;
+  - **climb:** 300 m, linear over ±60 s;
+  - **both.**
+- **The amplitudes:** 0.02, 0.03 and 0.05.
+- **The competitors.** The real 2026-09-08 Oyster Bay traffic (`derived/traces/2026-09-08/ny_margin12_v2.npz`), with the three synthetic flights added. Real flights are silent competitors.
+- **The search.** A sub-box of ±0.18° latitude and ±0.22° longitude about the observer, 200 m, the DEM off.
+- **Each case runs two ways:**
+  - `locate` with the `comparable` pair rule (detect, fit_event, ten pair searches, refine);
+  - the collective find (as above, ±10 % f0) on the same detections.
+
+**Criterion, fixed before the run.**
+1. **The non-straight cases (turn, climb, both).** On every one where the pair rule's fit lands in a wrong basin, the collective find's maximum is within 2 km of the observer. A wrong basin is a chosen event's straight-pass v or d more than 20 % from its synthetic pass's truth, matched by heard CPA within 30 s; an event matching no synthetic pass counts too.
+2. **The straight controls.** The collective find is no worse: within 2 km wherever the pair rule's refined point is.
+
+**Decision line.**
+- **The gain is specific to non-straight passes** if 1 holds, the pair rule fails mainly on the non-straight cases, and both are within 2 km on the straight controls.
+- **It is general** if the pair rule also fails on straight controls that the collective find gets.
+
+**Expectation.**
+- The pair rule lands in wrong basins on most turn and both cases at every amplitude, and on some straight ones at 0.02. C's window round 2 found brightness bimodal even on straight synthetic passes, though `detect` and locate's ten searches use contrast.
+- The collective find is within 2 km on all cases at 0.05 and 0.03, and on some at 0.02.

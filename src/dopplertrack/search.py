@@ -1,7 +1,12 @@
 """Candidate observer generation: who could have heard which flight, when, how far."""
 from __future__ import annotations
 
+import hashlib
+import os
+import threading
+import zipfile
 from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -131,16 +136,47 @@ def empty_cpa_table() -> pd.DataFrame:
                          "d": np.zeros(0, np.float32), "v": np.zeros(0, np.float32)})
 
 
-def save_cpa_table(path, cpa: pd.DataFrame, fingerprint: dict):
-    np.savez_compressed(path, fingerprint=np.array(repr(fingerprint)), **{k: cpa[k].to_numpy() for k in CPA_COLUMNS})
+CPA_CACHE_VERSION = 1      # bump when cpa_table's output changes for the same inputs
 
 
-def load_cpa_table(path, fingerprint: dict) -> pd.DataFrame | None:
-    """Return the cached table if it was built from the same grid and segments, else None."""
-    z = np.load(path, allow_pickle=False)
-    if str(z["fingerprint"]) != repr(fingerprint):
+def cpa_fingerprint(grid: Grid, segs: list[Segment], max_range_m: float, c: float) -> str:
+    """SHA-256 of everything cpa_table depends on: the grid's coordinates and elevations, every segment's
+    times, positions and speeds, max_range, the speed of sound and the format version. Changing any of
+    them, e.g. running with and without a DEM, changes the fingerprint even when no array changes size."""
+    h = hashlib.sha256(f"cpa-table v{CPA_CACHE_VERSION} {float(max_range_m)!r} {float(c)!r} "
+                       f"{float(grid.lat0)!r} {float(grid.lon0)!r} {len(grid)} {len(segs)}".encode())
+    for a in (grid.lat, grid.lon, grid.elev, grid.enu):
+        h.update(np.ascontiguousarray(a, np.float64).tobytes())
+    for s in segs:
+        h.update(f"{s.icao} {len(s.t)}".encode())
+        for a in (s.t, s.enu, s.speed):
+            h.update(np.ascontiguousarray(a, np.float64).tobytes())
+    return h.hexdigest()
+
+
+def save_cpa_table(path, cpa: pd.DataFrame, fingerprint):
+    """Written under a temporary name in the same folder and renamed into place, so another process never
+    reads a partial table and an interrupted save leaves nothing behind."""
+    path = Path(path)
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.{threading.get_ident()}.tmp.npz")
+    try:
+        np.savez_compressed(tmp, fingerprint=np.array(repr(fingerprint)), **{k: cpa[k].to_numpy() for k in CPA_COLUMNS})
+        os.replace(tmp, path)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
+
+
+def load_cpa_table(path, fingerprint) -> pd.DataFrame | None:
+    """Return the cached table if it was built from the same inputs, else None. A file that can't be read,
+    such as one cut short by an older version, also counts as a miss."""
+    try:
+        with np.load(path, allow_pickle=False) as z:
+            if str(z["fingerprint"]) != repr(fingerprint):
+                return None
+            return pd.DataFrame({k: z[k] for k in CPA_COLUMNS})
+    except (OSError, ValueError, KeyError, EOFError, zipfile.BadZipFile):
         return None
-    return pd.DataFrame({k: z[k] for k in CPA_COLUMNS})
 
 
 def pair_candidates(cpa: pd.DataFrame, dt_offset: float, tol_s: float = 6.0,

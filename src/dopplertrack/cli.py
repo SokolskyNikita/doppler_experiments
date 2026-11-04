@@ -51,7 +51,7 @@ def main(argv=None):
     r.add_argument("--spacing", type=float, default=200.0); r.add_argument("--harmonics", nargs=2, type=int, default=(1, 1))
     r.add_argument("--no-dem", action="store_true"); r.add_argument("--no-silence", action="store_true")
     r.add_argument("--tol", type=float, default=6.0)
-    r.add_argument("--cpa-cache", metavar="NPZ", help="cache the (point, flight) CPA table here; reused on reruns with the same grid and traces")
+    r.add_argument("--cpa-cache", metavar="NPZ", help="cache the (point, flight) CPA table here; reused when the grid (with its elevations), traces, range and speed of sound are identical")
 
     rf = sub.add_parser("refine", help="fine grid around one search result, optionally adding more events")
     rf.add_argument("spec"); rf.add_argument("results", help="CSV written by search")

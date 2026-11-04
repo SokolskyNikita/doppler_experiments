@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -22,15 +23,19 @@ class Terrain:
     def _path(self, x: int, y: int) -> Path:
         return self.cache / f"{x}_{y}.png"
 
-    def _download(self, x: int, y: int) -> None:
+    def _download(self, x: int, y: int, force: bool = False) -> None:
+        """Fetch one tile unless it is cached. It is written under a temporary name and renamed into
+        place, so another process sharing the cache never reads a half-written tile."""
         p = self._path(x, y)
-        if p.exists():
+        if p.exists() and not force:
             return
         for attempt in range(4):
             try:
                 r = requests.get(_URL.format(z=self.z, x=x, y=y), timeout=60)
                 r.raise_for_status()
-                p.write_bytes(r.content)
+                tmp = p.with_name(f".{p.name}.{os.getpid()}.{threading.get_ident()}.tmp")
+                tmp.write_bytes(r.content)
+                os.replace(tmp, p)
                 return
             except requests.RequestException:
                 if attempt == 3:
@@ -47,7 +52,12 @@ class Terrain:
         if k in self._mem:
             return self._mem[k]
         self._download(x, y)
-        img = np.asarray(Image.open(self._path(x, y)).convert("RGB"), dtype=np.float64)
+        try:
+            img = Image.open(self._path(x, y)); img.load()
+        except (OSError, ValueError):     # unreadable, e.g. cut short by an interrupted older download
+            self._download(x, y, force=True)
+            img = Image.open(self._path(x, y))
+        img = np.asarray(img.convert("RGB"), dtype=np.float64)
         elev = img[..., 0] * 256 + img[..., 1] + img[..., 2] / 256 - 32768
         self._mem[k] = elev
         return elev

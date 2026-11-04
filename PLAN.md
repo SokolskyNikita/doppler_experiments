@@ -1,26 +1,102 @@
-# Plan: making dopplertrack usable on real recordings
+# Plan: from today's dopplertrack to a dependable acoustic geolocator
 
-Written 2026-11-03 against v0.2.0 (a16b700). It merges two independent reviews (Claude's and Astra's) with what was measured in this checkout, and was revised the same day after Astra reviewed the plan itself; section 10 lists what that changed. "Checked" means confirmed in the code or by a run here.
+This is the route from what dopplertrack does today to the tool we want, written from what we currently know. It will change as we learn: each experiment gets a record in [docs/experiments/](docs/experiments/README.md), and its conclusion is folded in here.
+- [AGENTS.md](AGENTS.md) has the working rules.
+- [docs/reference/README.md](docs/reference/README.md) has the papers.
+- Code references are to `dev` at 5a617ff.
 
-## 1. Target for the first usable release
+## 1. Destination
 
-**Recording + UTC date + approximate region (a box of roughly 100–150 km) → candidate locations, each with its evidence and an uncertainty radius, plus an explicit verdict: located, ambiguous, or insufficient evidence.**
+### The tool we're aiming for
 
-The verdict and radius ship labelled experimental until enough independent recordings exist to check them (Phase 4).
+Given a recording made at one fixed spot, on any device and of any length, plus roughly when and where it was made, the tool says where it was recorded, how sure it is, and why. When the recording doesn't hold enough to tell, it says so plainly.
 
-Not in scope: recordings with an unknown date or region, moving microphones, real-time use, a GUI. Section 4 explains why.
+What "good" means, in terms we can measure:
+- **Trustworthy when it answers.** Confident wrong answers are rare, and that rate is measured on recordings never used to build the tool.
+- **Useful.** It locates most recordings that hold two or more matchable propeller flyovers (or one, with a known time), to within the resolution in decision 1.
+- **Honest about uncertainty.** Each answer has a region whose stated coverage holds on independent recordings, and separated alternatives are shown, not hidden.
+- **Robust** to what real recordings go through:
+  - lossy codecs and phone processing;
+  - wind, and other tonal noise such as jets and machinery;
+  - edits;
+  - aircraft that turn, climb or change speed.
+- **Explains itself.** A report shows the matched flights, the measured and modelled curves, and the alternatives with why they lost.
+- **Practical.** It installs with pip and runs on a laptop in minutes once a day's flight data is cached. It survives interruptions and fails with clear messages.
 
-## 2. Where things stand
+Further out, if the first releases work: uncertain dates (a search over ±N days), larger regions, jets as a signal source (most traffic is jets), and single-flyover recordings with only a rough time.
 
-- **Oyster Bay result.** It reproduces from raw audio again on `fix/issue-1`, sent upstream as [PR #2](https://github.com/mjshiggins/dopplertrack/pull/2) for [issue #1](https://github.com/mjshiggins/dopplertrack/issues/1). The PR's CI waits on the maintainer approving the workflow run.
-  - **The fix.** `fit` uses its pre-f890572 mean-brightness objective by default, so the README commands return the committed event fits.
-  - **Search.** With `--harmonics 2 1`, which the README's search and refine commands had left out, the result matches the committed tables exactly: the true pair ranks 1 of 328, the top candidate is 123 m off, the refined peak 43 m off, and the margin is 27.1 vs 25.8. With the default `--harmonics 1 1` the ranking and distances are the same, with a 4.0 % margin.
-  - **Still open.** `detect`'s own fits are still filtered out at the true location (gap 4).
-- **Eagle cam.** The current code reproduces it with the committed events: 432,196 points, 1,233 segments, 50,682 candidates from 607 pairs, the true pair first at 917 m, with a 2.5 % margin.
-  - **Extra flyovers.** The README's three are the committed `detect` candidates #2, #3 and #10. With them the refined peak is 567 m from the nest (README 592 m); with two events only, it is 877 m (README 1.7 km). The two-event score surface is flat, so small input differences move its peak.
-  - **Audio copy.** The audio downloaded here is 11.9 h long, and `detect` on it matches the committed candidates only in the top five.
-- **`fetch-day`** crashed on days whose archive is split into parts. Fixed on `fix/issue-1` with a regression test; part of PR #2.
-- **Costs on this Mac** (M4 Pro, 48 GB RAM, 111 GB free disk):
+**Out of reach or not planned:**
+- aircraft without ADS-B, which can be heard but not matched;
+- moving microphones;
+- no date or region at all: a worldwide index is about 1.4 TB of ADS-B per year, with far more compute;
+- real-time use;
+- a GUI, since a static report covers most of it.
+
+### The first usable release
+
+The first usable release, milestone M2 in section 4, is a `locate` command.
+
+**Inputs:**
+- **The recording.** Any file ffmpeg can decode. Channels are averaged to mono, the audio is resampled to 4 kHz, and only 40–450 Hz is analysed (`audio.py:14`, `cli.py:24`). Searches have run on 1 h and 12 h recordings, and `detect` on clips of 5–92 min. At about 1.5 min of `detect` per audio hour, long recordings are slow but allowed.
+- **The UTC date the recording falls on.** Flight data is fetched for that day only, and the inferred clock is checked against the day's edges.
+- **A region**: a box of roughly 100–150 km. Flight data is fetched with a margin equal to the search range.
+- **Optionally, the start time**, in UTC with a tolerance such as ±30 s. It makes a single-flyover search possible and narrows a two-flyover one.
+
+**Outputs:**
+- a verdict;
+- the candidate locations behind it, each with its evidence;
+- an uncertainty region where the evidence supports one, otherwise "unavailable".
+
+All of it goes into a versioned `result.json` (5.5) and an HTML report.
+
+**Verdicts:**
+- **located**: one location-and-clock mode survives the competitor test (Phase 4), and its region fits within the practical resolution (decision 1).
+- **ambiguous**: two or more separated modes remain plausible, or a single mode's region is wider than the resolution. Each mode is reported.
+- **insufficient evidence**: any of
+  - fewer than two usable flyovers (or one without a start time);
+  - flight data missing over the recording or the box;
+  - no surviving hypothesis;
+  - no meaningful uncertainty region.
+
+Execution errors (unreadable audio, a missing ffmpeg, a network failure) are reported as errors, never as verdicts. The verdict and region are labelled experimental until M3.
+
+## 2. Starting point
+
+**What works:**
+- **The method reproduces both published results from saved event fits.**
+  - Oyster Bay: the true flight pair ranks 1st of 328, the top candidate is 123 m off and the refined peak 43 m off. With `--harmonics 2 1` this matches the committed tables exactly (4.9 % margin); the default gives the same ranking and distances with a 4.0 % margin.
+  - Eagle cam: the true pair ranks 1st of 607 at 917 m, with a 2.5 % margin. With three extra flyovers (the committed `detect` candidates #2, #3 and #10) the refined peak is 567 m from the nest. With two events only, the score surface is flat and the peak 877 m off.
+- **Upstream fixes.** [PR #2](https://github.com/mjshiggins/dopplertrack/pull/2) is waiting for the maintainer. It fixes `fetch-day` on split archives, restores `fit`'s brightness objective as the default, and adds tests.
+- **The CPA cache** is done in `dev`; sending it upstream is deferred.
+  - **How it works.** It is keyed on its inputs' contents, it writes CPA tables and terrain tiles atomically, it treats an unreadable file as a miss, and it holds a lock per table.
+  - **Check.** Re-running the Oyster Bay search reproduced the earlier output byte for byte, and loading a cached table takes 3 s instead of a 5.6 min rebuild.
+  - **Windows.** The lock uses `fcntl`, so on Windows it is skipped. Atomic writes still keep the cache correct; two processes may just build the same table.
+- **Infrastructure.** Data and caches live outside the repo, run folders record their provenance, and raw files are read-only. `bench/manifest.json` lists every raw file's size, hash, source and licence (an integrity inventory, not full provenance).
+
+**What doesn't work:**
+- From raw audio alone, `detect`'s fits don't pass the search's gates at the true location (gaps E1, E2). The tool can't yet locate a recording without hand-picked windows.
+- Every failure is silent: there is no verdict, no abstention and no uncertainty.
+
+**How the pipeline works today:**
+1. **`spectrogram`**: an STFT with a 2.048 s Hann window and a 0.25 s hop (0.49 Hz bins) over 40–450 Hz, whitened by a running median.
+2. **`detect` and `fit`**: a grid search plus Nelder–Mead over (f0, speed, distance, CPA time), maximising mean brightness or ridge contrast under an ideal straight-pass curve. No frequency track is extracted; `tracks.ridge()` exists but nothing calls it.
+3. **`fetch-day`**: streams one UTC day of adsb.lol traces, keeping propeller and unknown types that enter the box.
+4. **`search`**: builds a CPA table (grid point × flight) within 12 km, then:
+   - gates flight pairs on the heard-CPA time between the two events (±6 s), speed (±35 %) and distance (0.4–2.5×);
+   - drops pairs where another flight passes within 6 km between the events (the silence filter);
+   - scores each surviving triple by brightness along the curves modelled from the actual trajectories, with event 1 setting the clock (±8 s shift) and each event's f0 swept by ±5 %.
+5. **`refine`**: a 50 m grid around one candidate, with extra flyovers scored at event 1's clock.
+
+**Data on hand** (the data root's `MANIFEST.md`):
+- the two development recordings, Oyster Bay (1 h) and the eagle cam (12 h);
+- four Eclipse Soundscapes sites recorded on 2024-04-07, CC BY 4.0;
+- seven xeno-canto recordings: one usable single-flyover case, and three Essex recordings that contain only jets;
+- flight data for each recording's day: 2024-04-07 for the Eclipse sites, but not yet 04-08, which two of them run into. The development cases also have the day before, plus METAR reports and upper-air soundings;
+- 16 papers and books.
+
+None of the non-development audio has been searched yet. A recording session in Seattle is being planned.
+
+**Costs on this Mac** (M4 Pro, 48 GB RAM, 183 GB free disk at the time of writing):
 
 | Stage | Time | Disk |
 |---|---|---|
@@ -30,86 +106,317 @@ Not in scope: recordings with an unknown date or region, moving microphones, rea
 | `search`, 200 m grid over that box | 7.6 min, 5.5 of them building the CPA table | 874 MB CPA cache, 10 MB results |
 | `refine`, 50 m grid | 4 s | – |
 
-The CPA table depends only on the grid and the flight data, not on the events, and `--cpa-cache` already reuses it. That is what makes fast iteration possible. Once a case has its table, re-running the search with different event fits, pairing rules or scoring takes about 2 minutes instead of 8. All clips from the same day and box share one table.
+The CPA table depends only on the grid and the flight data, not on the events. So once a case has its table, re-running the search with different fits, pairing rules or scoring takes about 2 minutes instead of 8, and all clips from one day and box share a table. That is what makes fast iteration possible. Plan on about 1 GB of CPA tables per case-day; the data root holds about 47 GB.
 
-One catch, checked: the cache is matched on array sizes and a few grid values, not on contents (gap 19). A DEM run and a `--no-dem` run of the same box get the same fingerprint, and so would flight data whose positions or times changed but not its sizes. It has to be fixed before any benchmark number is trusted.
+## 3. What stands in the way
 
-## 3. Merged gap list
+Open problems, grouped by theme. The IDs are used throughout.
 
-Source: **C** = Claude's review, **A** = Astra's, **C+A** = both, **A2** = Astra's review of this plan. Gaps 19–22 came from that review and are filed under their topics.
+**Event evidence: detection and fits**
 
-**Workflow**
+| ID | Problem | Evidence |
+|---|---|---|
+| E1 | Fits of real passes are biased, and the search turns each fit into hard gates: ±35 % speed, 0.4–2.5× distance, ±6 s between the events, and a ±5 % f0 sweep. A bad fit removes the true answer with no warning. Oyster Bay's event 2 fits with f0 5, 10 and 11 % high under three fitting setups, and the time between the events 5.0, 9.0 and 10.1 s short. The discrepancy persists under both objectives tested | [event2-bias](docs/experiments/2026-11-03-event2-bias.md); `pipeline.py:122`, `score.py:65` |
+| E2 | Pairing compares fitted heard-CPA times (emission CPA + d/c) with the CPA table's `t_heard`. A distance error moves the gate by Δd/c, and an f0 error by δf0/g_max, where g_max is the curve's peak slope. For Oyster Bay's event 2 that is about 1 s per 1 % of f0, consistent with E1's timing errors | `pipeline.py:138`, `search.py:198`; [timing-conventions](docs/experiments/2026-11-03-timing-conventions.md) |
+| E3 | No frequency track, so there is nothing to fit by least squares, weight by reliability, or check for gaps, crossings and harmonic jumps | `tracks.py:36` is never called |
+| E4 | `detect` always returns its top N, even on silence | `tracks.py:212` |
+| E5 | `detect` scores jet tones as highly as propeller flyovers. The Essex recordings have no prop pass within 12 km, 9–14 jet passes each, and strong detections | data root `MANIFEST.md` |
+| E6 | The model assumes a straight pass at constant speed and constant propeller speed, with the speed of sound fixed at 15 °C and no wind. One eagle-cam flight's heard curve falls fastest 16.6 s after its geometric CPA | `doppler.py:12`; [timing-conventions](docs/experiments/2026-11-03-timing-conventions.md) |
 
-| # | Gap | Source | Evidence |
-|---|---|---|---|
-| 1 | No single audio-to-result command: five or more steps, with time windows and frequency bands chosen by eye | C+A | README Usage; its own Oyster Bay run used hand-picked windows |
-| 2 | `detect` writes a JSON list, but `search`/`refine` need two single-event files. The README says entries pass "as they are" | A, checked | `cli.py:104`, `cli.py:120`, `README.md:75` |
-| 3 | Choosing which two events to search with, and which extras to add, is manual. Extras are applied to one candidate at a time | C+A | `refine --rank`, `pipeline.py:151` |
-| 21 | Scores from different event pairs aren't on one scale: each is brightness summed along curves in that pair's own two audio windows, and every candidate fits the pair that proposed it. Merging candidates from several pairs by raw score favours the pair with the loudest events | A2, checked | `score.py:32`, `score.py:82` |
+**Search and decision**
 
-**Silent wrong answers**
+| ID | Problem | Evidence |
+|---|---|---|
+| S1 | Choosing the two search events and the extras is manual, and extras are applied to one candidate at a time | `refine --rank`, `pipeline.py:179` |
+| S2 | Scores from different event pairs aren't on one scale. Each sums brightness in its own two windows, and every candidate fits the pair that proposed it, so merging candidates by raw score favours the loudest events | `score.py:32`, `score.py:82` |
+| S3 | The clock comes from event 1 alone: the time shift that maximises event 1's score is applied to event 2 and to every extra flyover | `score.py:79`, `pipeline.py:219` |
+| S4 | The silence filter drops a pair at a point if any other flight passes within 6 km between the events. An automatically chosen pair with flyovers between them loses the true location, and adjacent detections don't make it safe either, since a pass in between may have been inaudible or missed. Props pass every few minutes at the eagle cam | `search.py:199`, `README.md:139` |
+| S5 | No verdict, abstention or uncertainty. The winning margins were 4.9 % and 2.5 %, and the eagle cam's two-event refinement was 877 m off here (1.7 km in the README). A 50 m grid is not 50 m accuracy | README results |
+| S6 | No up-front check that a recording is usable before a 4 GB download and a search: enough flyovers, continuity, a stationary microphone | – |
 
-| # | Gap | Source | Evidence |
-|---|---|---|---|
-| 4 | Each event fit is a single estimate used as hard gates: ±35 % speed, 0.4–2.5× distance, ±6 s on the time between the two events, and a ±5 % sweep of each fitted f0 when scoring. Ideal-curve fits of a real pass are off by more than that, and a bad fit removes the true answer with no warning. Oyster Bay's event 2 fits with f0 5 % (pre-f890572 objective), 10 % (current) and 11 % (`detect`) above what its trajectory needs, and the time between the events 5.0, 9.0 and 10.1 s short. A straight pass at the true speed and distance fits that window worse than any of the three fits, so the bias is the model's, not one objective's. The committed fit got through by 1 s, at the edge of the f0 sweep. At the eagle-cam nest the committed events fail ±6 s too; the top candidate 917 m away is where the geometry makes up the difference | C | issue #1; `pipeline.py:86`; `score.py:65` |
-| 5 | `fetch-day` crashes on split archives | C | fixed in PR #2 |
-| 6 | Edge of region: the download keeps flights that enter the box, but the search uses flights up to 12 km outside it, so flights passing just outside are missing | A, checked | `adsb.py:152` vs `pipeline.py:95` |
-| 7 | `detect` always returns its top N, even on silence; there is no "no flyovers found" outcome | A, checked | `tracks.py:194`, no score floor |
-| 8 | Malformed traces are skipped silently, with no report of coverage or missing data | A, checked | `fetch.py:88`, `adsb.py:129` |
-| 19 | The CPA cache is matched on sizes, not contents: grid count, origin and two extremes, segment and point counts, range and sound speed. Grid elevations, trace contents and code version aren't in the fingerprint, so a DEM run and a `--no-dem` run of the same box share a table | A2, checked | `pipeline.py:100`, `search.py:31` |
-| 20 | The silence filter drops a pair at a point if any other flight in the data (props and unknown types) passes within 6 km between the two events. That suits two hand-picked flyovers with a quiet gap, but an automatically chosen pair with other flyovers between them loses the true location. Props pass every few minutes at the eagle cam | A2, checked | `search.py:163`, `README.md:131` |
+**Data handling**
 
-**Credibility**
+| ID | Problem | Evidence |
+|---|---|---|
+| D1 | The download keeps flights that enter the box, but the search uses flights up to 12 km outside it | `adsb.py:152` vs `pipeline.py:132` |
+| D2 | Malformed traces are skipped silently, with no report of coverage or missing data | `fetch.py:88`, `adsb.py:129` |
+| D3 | The elevation tiles' no-data value (−32768 m) isn't masked: `Grid.make` clamps it to 0 m, and `refine` uses it raw. One such pixel is in the ESID 937 box | `terrain.py:61`, `search.py:37`, `pipeline.py:200` |
 
-| # | Gap | Source | Evidence |
-|---|---|---|---|
-| 9 | No calibrated confidence, no abstention, no uncertainty radius. The winning margins were 4.9 % and 2.5 %, and the eagle cam's two-event refinement was 1.7 km off. A 50 m grid is not 50 m accuracy | C+A | README results; section 7 |
-| 10 | No up-front check that a recording is usable (number and quality of flyovers, continuity, stationary microphone) before spending a 4 GB download and a search. Edits and microphone motion can be flagged, but not reliably detected | A, A2 | – |
-| 11 | Physics simplifications: sound speed fixed at 15 °C, no wind, constant propeller speed through a pass | C | `doppler.py:12` |
+**Workflow and output**
+
+| ID | Problem | Evidence |
+|---|---|---|
+| W1 | No single audio-to-result command: five or more steps, with windows and bands chosen by eye | README Usage |
+| W2 | `detect` writes a list, but `search` and `refine` need two single-event files, and the README says the entries pass "as they are" | `cli.py:107`, `cli.py:123`, `README.md:79` |
+| W3 | Output is CSV and terminal tables, with no versioned result record. No command uses `plots.py`, so there is no map, flight list, start time or curve overlay | `plots.py:21` |
+| W4 | ffmpeg must be installed separately. CI runs only on Ubuntu, for pull requests and pushes to `main` (not `dev`), and nothing tests a fresh install | `audio.py:14`, `.github/workflows/ci.yml` |
+| W5 | The 4 GB stream survives dropped connections but not a killed process. Low priority at 5 min here | – |
 
 **Validation**
 
-| # | Gap | Source | Evidence |
-|---|---|---|---|
-| 12 | Only two real recordings, both used while building the method (the eagle cam changed the scorer). There is no held-out data: clips and augmented copies of one recording share its site, microphone and day. The end-to-end test is synthetic, there are no negative cases, and nothing in CI would have caught the event-2 regression | C+A, A2 | `tests/test_pipeline_synthetic.py`, `README.md:166` |
-| 22 | ADS-B passes are possible events, not acoustic labels: a pass within 12 km may be inaudible, masked or filtered out by the microphone, and an audible aircraft may have no ADS-B. At the eagle cam, 20 of `detect`'s top 40 candidates coincide with a known prop pass | A2 | `README.md:134` |
-
-**Inherent data limits**
-
-| # | Gap | Source | Evidence |
-|---|---|---|---|
-| 13 | Needs the UTC date and a region. Each search covers one day of flight data, about 12 min per extra day here, so a recording that crosses UTC midnight needs two | C+A, A2 | `fetch-day` takes one date |
-| 14 | adsb.lol history starts in 2023 and covers aircraft broadcasting ADS-B near volunteer receivers. Light aircraft without ADS-B are invisible | C | `globe_history_2023`…`2026` repos |
-| 15 | Needs at least two unedited flyovers, or one with its time known to ±30 s. Phone voice processing, noise suppression and bass cut-off can remove the 60–400 Hz band | C+A | `search-single --tol 30` |
-
-**Packaging and output**
-
-| # | Gap | Source | Evidence |
-|---|---|---|---|
-| 16 | Output is CSV and terminal tables only, with no versioned result format for a report or benchmark to build on. No command uses the `plots.py` helpers, so there is no map, matched-flight list, inferred start time or curve overlay | C+A, A2 | `plots.py:21`, `plots.py:32`, `plots.py:50` |
-| 17 | On PyPI (0.2.0), but ffmpeg must be installed separately, CI runs on Ubuntu only, and there is no fresh-install test | C+A | `audio.py:14`, `.github/workflows/ci.yml` |
-| 18 | The 4 GB stream resumes dropped connections but not a killed process | A | low priority: 5 min here |
-
-## 4. What we can realistically do
-
-Constraints: one developer plus Claude sessions; this Mac; free data only; an upstream author who is still changing the code fast (the repo is a day old), so PR acceptance is unknown; and very little ground truth (recordings with known location and date), none of it independent of the development so far.
-
-| Verdict | Items | Why |
+| ID | Problem | Evidence |
 |---|---|---|
-| **Do now**: small and certain | 2, 5, 6, 7, 8, 17, 19 | Bug fixes and plumbing, each under a day. 19 comes first, because every benchmark comparison depends on it |
-| **Do, with measured iteration**: the core work | 1, 3, 4, 10, 12, 16, 20, 21, 22 | Engineering on existing pieces. The risk is in tuning, which the benchmark (section 5) makes cheap |
-| **Research, time-boxed** | 9, then 11 | 9 has a promising lead (section 7), and its machinery can be built and tuned on development data. Claiming calibrated numbers needs independent recordings, so that part is evidence-gathering with no fixed date. 11 is small gains; historical METAR temperatures are free |
-| **Accept, then detect and report** | 13, 14, 15, moving microphones, edited recordings | Code can't fix these. The tool should say "insufficient evidence" instead of guessing, and flag what it can: an edit between flyovers usually breaks the shared clock. These checks are diagnostics, not guarantees. A ±few-days date mode is a later option at about 12 min per day |
-| **Not for us** | Unknown date and region; a GUI | A worldwide index means about 1.4 TB of ADS-B per year and far more compute. A static HTML report covers most of what a GUI would |
-| **Later, if needed** | 18; choosing extra flyovers by geometry | Useful, not blocking |
+| V1 | Only two recordings have been searched, and both were used to build the method. There is no held-out data and no negative case, and nothing in CI would have caught the event-2 regression | `tests/test_pipeline_synthetic.py`, `README.md:174` |
+| V2 | ADS-B passes are possible events, not acoustic labels. A pass within 12 km may be inaudible, and an audible aircraft may have no ADS-B. At the eagle cam, 20 of `detect`'s top 40 candidates coincide with a known prop pass | `README.md:142` |
 
-## 5. Approach: build the measuring stick first
+**Limits we accept, detect and report rather than fix:**
+- **L1.** It needs the UTC date and a region. Each search covers one day of flight data, at about 12 min per extra day here.
+- **L2.** adsb.lol history starts in 2023 and covers only aircraft broadcasting ADS-B near volunteer receivers.
+- **L3.** It needs two unedited flyovers, or one with a known time. Phone voice processing, noise suppression and bass cut-off can remove the 60–400 Hz band.
+- **L4.** Moving microphones and edited recordings. An edit between flyovers usually breaks the shared clock, so it can be flagged, but not reliably detected.
 
-Every change is judged by numbers on a fixed set of cases, in loops of seconds to minutes. The 20-minute end-to-end run becomes the final check, not the inner loop. The measuring stick has to be trustworthy before it gets big: caches that can't go stale, labels checked against the audio, and evaluation data kept apart from the data we tune on.
+## 4. The route
+
+**Principles:**
+- **Measure first.** Every change is judged by numbers on a fixed benchmark, in loops of seconds to minutes (section 5). The full end-to-end run is the final check, not the inner loop.
+- **Keep evaluation clean.** Development recordings may be tuned on. Evaluation recordings never are, and claims come only from them.
+- **Fail explicitly.** A recording the tool can't locate gets a verdict and a reason, never a guess.
+- **Simple, checkable models first.** Complexity is added only when a measured bias calls for it.
+- **Stay mergeable with upstream.** New capabilities go in new modules, and upstream defaults are kept. Small core fixes go upstream; `AGENTS.md` has the branch recipe.
+
+| Milestone | Delivers | Phases | Depends on | Rough size |
+|---|---|---|---|---|
+| **M1: a measuring stick we can trust** | the small known bugs fixed, the result record, and the seed benchmark with both baselines | 0, 1 | – | 1–2 weeks |
+| **M2: first usable release** | `locate`, from audio, date and box to a verdict and a report, with explicit failures and the alternatives it considered, installable from a release in the fork | 2, 3, 5, 6 and the machinery of Phase 4 | M1 | 3–4 more weeks |
+| **M3: validated claims** | the confident-wrong rate and region coverage measured on independent recordings, against criteria fixed in advance | 4 (claims) | M2, plus enough independent recordings (5.6) | no date: it waits on evidence |
+| **M4: toward the destination** | the extensions in section 1, each when a measurement calls for it | Later | M2 | open |
+
+Sizes assume Claude writes most of the code and you review: S is a day or less, M is 2–5 days, L is 1–2 weeks of part-time work. The critical path is Phase 1 → Phase 2 → Phase 3 (step B) → Phase 4. These run in parallel:
+- Phase 0's fixes, alongside Phase 1;
+- Phase 3's step A, alongside Phase 2;
+- Phase 5, once the result record exists;
+- Phase 6's packaging and install test, at any time, though its release test needs `locate`;
+- collecting independent recordings (5.6), from now on.
+
+Each phase below gives its goal, the approach we expect to take given what we know, and when it's done. The phases with real uncertainty (1–4) also say what to do if they don't work out.
+
+### M1: a measuring stick we can trust
+
+#### Phase 0: quick fixes (S each, independent)
+
+- **Download margin** (D1). Derive the margin from the search range (`max_range_m`), and record it with the flight data as its coverage envelope. `search` warns when the data doesn't cover the box plus that margin. Test it with a synthetic flight that passes outside the box but within range of an edge point.
+- **Hand-off** (W2). `search` and `refine` take `detect` output directly, e.g. `--events detected.json --pick 1 2`, and the README sentence is fixed.
+- **An empty result** (E4). `detect` can return "no flyovers found" instead of a padded top-N list. That is plumbing; choosing the threshold needs positive and negative recordings, so it happens in Phase 2.
+- **Data report** (D2). `fetch-day` and `search` report traces kept, traces skipped as malformed, and gaps near the candidates. The report also says what it can't know: a complete download doesn't mean every aircraft overhead broadcast ADS-B (L2).
+- **Elevation no-data** (D3). Mask −32768 in `Terrain`, with a test on the ESID 937 pixel.
+- **Platform** (W4). A macOS CI job, a fresh-install smoke test, and a clear error when ffmpeg is missing. If `dev` is ever pushed, CI has to run on it too.
+
+**Done when** each fix has its test and is in `dev`.
+
+#### Phase 1: minimal benchmark (M)
+
+1. **Result record v1** (5.5).
+2. **A case manifest, a runner, and the four seed cases** from 5.1. Each case's entry carries:
+   - exact source identifiers and acquisition details;
+   - clip offsets and transformation recipes;
+   - the flight-data assets (date, pod and archive asset names), the box, and the search parameters;
+   - labels, with who checked them;
+   - the expected outcome and the case's group and set;
+   - the code revision it was built with;
+   - links to its raw files' entries in `bench/manifest.json`.
+
+   Changing a case makes a new version of it. A fetch script rebuilds `raw/` on another machine.
+3. **Both baselines** at upstream a16b700, and `bench compare`.
+4. **Tiers 0–2** (5.4).
+5. **Sets for the clean recordings** (5.2), written into the case manifest before any of them is searched (decision 2).
+6. **Any new cache** (detections, spectrograms) follows the CPA cache's rules: keyed on its inputs' contents, written atomically, and locked. Use `filelock` and a library cache such as `joblib.Memory` or `diskcache` rather than repeating the hand-written pattern.
+
+**Done when:**
+- the seed cases have both baselines, with every input and cache hash recorded;
+- Tier 1 runs in under 3 min and Tier 2 on the seed set in under 15 min;
+- every clean recording has its set.
+
+The benchmark then grows alongside Phases 2–4, as they need cases. **If the budget can't be met:** Tier 1 runs fewer cases.
+
+### M2: first usable release
+
+#### Phase 2: event evidence that survives real passes (M–L; research, time-box 2 weeks)
+
+**Goal:** from `detect` output, with no hand-picked windows, event evidence that lets the true flights through on every positive development case without letting wrong pairs win. It depends on Phase 1's Tiers 1–2 and labels.
+
+The experiments run in this order. Each is judged in Tiers 1–2 against labelled events, kept, reverted or deferred by the stop rule below, and recorded in `docs/experiments/`.
+
+1. **Timing convention** (S; E2). This comes first because it is cheap and the measurements so far point at it.
+   - **Gate.** Pair on emission-CPA times against the CPA table's `t_emit`, with a looser gate.
+   - **Scoring.** Compare like with like: the steepest-fall time of the fitted curve against that of the curve modelled from the actual trajectory.
+   - **Measurement.** On every confirmed pass, measure how far the modelled curve's steepest fall is from the geometric CPA. That shows how often a flight isn't straight enough for `t_emit` to stand in.
+2. **Model error** (S; E1, E6). Fit the straight-pass model to three kinds of curve: noiseless curves made from the real trajectories of confirmed passes, the same curves with noise, and ideal straight passes. That separates model bias, measurement noise and optimiser failure before any fit changes.
+   - **Perturbations**, one at a time: f0 drifting through a pass, sound speed (METAR temperature), wind (soundings), trajectory sampling, altitude and terrain.
+   - **A check on real fits.** Fit each pass's approach and recede halves separately. A straight, constant-speed pass gives the same f0 and speed from both, so a difference measures model error (a two-estimator comparison of the kind White 1982 recommends).
+   - **Heavier models** (turns, acceleration, weather) come only after a measured bias they would remove.
+3. **Frequency track** (M; E3). One track per event:
+   - times, and frequencies refined below the bin width (quadratic interpolation, or Quinn's estimators);
+   - an amplitude or quality per point, and valid and missing samples;
+   - explicit start, end and gaps;
+   - links between the harmonics of one pass.
+
+   Start from `tracks.ridge()`, restricted to spectral peaks. Ridge extraction joins unrelated components when tones come and go, and the literature offers no stopping rule (6.3). So starts, stops and crossings get their own rules and tests, and false continuations and false bridges are measured alongside frequency error. An adaptive tracker is tried only if track errors turn out to limit the fits.
+4. **Least-squares fit** (M; E1, E3). Fit the track with f(t) = α + β·z(t; τ_c, s) (6.1). At each (τ_c, s), α and β are solved in closed form, so the search is over those two parameters only (variable projection).
+   - **Losses.** Start with ordinary least squares, then weight points by amplitude, then try a robust loss if outliers call for one.
+   - **Safeguards:**
+     - a stable linear solve, with a check that z varies enough over the track, since flat and partial tracks make α and β inseparable;
+     - physical bounds on speed and distance;
+     - a grid of starts over (τ_c, s), since variable projection doesn't remove local optima;
+     - convergence and conditioning diagnostics in the result record;
+     - a synthetic test that the reduced fit's optimum matches the full four-parameter fit.
+   - **Comparison.** Compare it with today's brightness and contrast fits on the same cases.
+5. **Window length** (S). The 2.048 s window smears the steepest part of a typical pass. A window matched to a sweep rate g is about 1/√g, which is 0.9 s for Oyster Bay's event 2 (6.1). Compare:
+   - 2.048 s against about 1 s and 0.5 s;
+   - a two-window version, short near CPA and long in the tails, where a longer window measures the steady tone far better.
+
+   Zero padding only interpolates the spectrum; resolution comes from the window length.
+6. **Harmonics and extent** (S–M).
+   - Compare harmonic assignments, allow for a missing fundamental, and merge the harmonics of one pass into one event. Their evidence is correlated, so they aren't separate votes.
+   - Mask the unreliable stretches of a track instead of cropping to a fixed width ([rewindow](docs/experiments/2026-11-03-rewindow.md)).
+   - Set `detect`'s threshold here, as a curve of detections against false alarms per audio hour on the development background recordings, the Essex ones (E4, E5).
+7. **Joint hypotheses instead of gates** (M; E1). Replace the independent speed, distance, time and f0 gates with each event's own hypotheses: its best few local optima, each with the joint region its data supports.
+   - **Why joint.** Time and f0 trade off along the curve's slope, and distance follows speed (6.1). Marginal ranges combined freely admit combinations the event never supported.
+   - **Profiles.** Derive the regions from profiles, re-optimising the other parameters, and call them sensitivity ranges until the objective is a calibrated likelihood.
+   - **Weak identification.** A flat or one-sided profile marks a weakly identified parameter. A poorly fixed distance widens the distance constraint but keeps the timing evidence. A range that ends where the optimiser hit a bound isn't a range.
+   - **Overlapping frames.** Consecutive STFT frames share 88 % of their samples, so counting them as independent would understate the spread roughly threefold.
+
+**Acceptance.** A change is kept only if all of these hold on the development cases and the synthetic failure matrix:
+- the true flights pass the filters on every positive case, using `detect` output with no hand-picked windows;
+- on Oyster Bay from raw audio, the true pair ranks first, with the refined peak within the practical resolution of the truth;
+- candidate counts stay within 2× the baseline's, and Tier 2 stays within its budget;
+- no wrong pair beats the true one where it didn't before, and the top candidate's location error doesn't grow;
+- partial and degenerate passes give an explicit weak or unusable fit, not a confident one.
+
+These thresholds are provisional, and they are fixed before the experiments run. Every knob tuned on the development cases is counted, because tuning many knobs on two recordings overfits them.
+
+**Stop rule.**
+- An experiment is kept if it meets the criteria and reverted if it doesn't. It is deferred if two recordings can't decide it.
+- If the time box ends without a variant that meets them, the fallback is the best measured variant, or else the ±10 s / ±12 % gates ([gate-tolerances](docs/experiments/2026-11-03-gate-tolerances.md)).
+- Under the fallback, raw-audio localisation is documented as a known limitation, the verdict abstains more, and E1 stays open.
+
+#### Phase 3: `dopplertrack locate` (M–L; step A can start alongside Phase 2)
+
+**Step A: a thin `locate` with explicit failures.** One command over today's pieces:
+1. audio → spectrogram → `detect` → usability check (S6);
+2. flight data (with margin, cached) → CPA table (cached);
+3. search with one automatically chosen pair of adjacent detected flyovers. Tier 2 checks it with and without the silence filter, which is off by default in `locate` (S4);
+4. refine the winner with the other flyovers;
+5. verdict and `result.json`.
+
+Each failure is an outcome with a stated reason:
+- no usable flyovers;
+- flight data missing over the recording's time or the box;
+- a matched clock that puts part of the recording past UTC midnight. `locate` searches one day, and `--days` fetches the adjacent one;
+- no candidate surviving.
+
+**Step B: search over several pairs.** Choosing pairs automatically breaks assumptions the single-pair search relies on:
+- **Silence filter** (S4). Off by default in `locate`. Close passes that no detected flyover explains become a weak penalty at re-ranking, validated separately. `search` keeps upstream's default.
+- **Assignment** (S1, S2). Each candidate assigns events to flights one to one:
+  - a detection explains at most one pass, and a pass at most one detection;
+  - the harmonics of one pass are one event;
+  - a detection can stay unmatched at a fixed cost: a jet, a bird, or an aircraft without ADS-B.
+
+  Every candidate is scored on the same detections with the same normalisation. The record shows how much support comes from the proposing pair and how much from the other flyovers.
+- **One clock, fitted to every event** (S3). The audio-to-UTC offset is optimised over all assigned events jointly.
+  - **Drift.** On long recordings, test a bounded clock drift and add it only if it improves consistency. Sample clocks drift by tens of ppm, about 1 s in 12 h at 20 ppm.
+  - **Edits.** A flyover that fits only with a different clock suggests an edit, as a diagnostic.
+- **Final score on the actual trajectory**, with propagation delay and the shared clock. Each event's f0 is solved conditionally: as a 1-D sweep, or in closed form for a least-squares track.
+- **Several modes through refinement.** Keep separated location-and-clock modes, including several from the same flight pair, and refine each before choosing.
+  - Two geometries are degenerate, and `locate` checks for both (6.1): a single flight can't tell which side of its track the microphone is on, and parallel flights at the same speed leave the position along the tracks open.
+  - More flyovers on other headings resolve both.
+- **Edges.** A candidate whose support or region reaches the box edge, or the edge of the flight data's coverage, is flagged.
+- **Confidence on the final output.** Trying many pairs and keeping the best inflates the winner's score, so confidence is computed after all the pair selection and re-ranking, never per pair.
+
+**Done when**, from audio, date and box alone, two things hold. First, on both development recordings the top-ranked mode holds the true flight pair, with its refined peak within the practical resolution of the truth. Second, each failure case gives its expected outcome with no confident wrong answer:
+- no usable flyovers;
+- incomplete flight data;
+- a recording crossing UTC midnight;
+- the moved box.
+
+Motion and edit checks are diagnostics and not part of this.
+
+**If step B slips:** release step A's single-pair `locate`, and document multi-pair search as a known limitation.
+
+#### Phase 4, machinery: verdicts and abstention (L; time-box 2 weeks)
+
+- **Modes first.** Two candidates are distinct modes when their locations are farther apart than the practical resolution (decision 1), or their clocks differ by more than a pass can resolve.
+  - "Ambiguous" then means a distinct mode is still plausible, and no rule depends on the radius being estimated.
+  - A single radius is reported only when one mode sums up the result; otherwise every region is listed.
+- **A starting feature.** The time-gated extra-flyover consistency is the strongest lead so far ([extra-consistency](docs/experiments/2026-11-03-extra-consistency.md)). Its ±15 s gate is a development hypothesis until it holds on recordings it wasn't chosen on.
+- **Other candidate features:**
+  - the margin over the strongest distinct competing mode, from any pair;
+  - the number of extra flyovers explained, and their scores;
+  - close passes that no flyover explains;
+  - peak width after refinement;
+  - event fit quality;
+  - clock consistency.
+- **Thresholds.** Fit them on the calibration groups' positives against their negatives, never on the evaluation group. A region that is unavailable or wider than the resolution means no "located".
+- **Whole-process evaluation.** Each evaluated case runs pair selection, refinement and abstention; nothing is scored per pair.
+- **Done when** the verdict and region come out of `locate`, labelled experimental, and the benchmark reports confident-wrong and abstention rates for each group.
+- **If the time box runs out** before any features separate the calibration positives from the negatives:
+  - `locate` uses conservative fixed rules instead: "located" only for a single surviving mode with at least one extra flyover explained within ±15 s and a region inside the resolution;
+  - the region is reported as unavailable otherwise;
+  - the limitation is documented.
+
+#### Phase 5: report (S–M; independent once the result record exists)
+
+One HTML page per `result.json`:
+- a map of the candidate regions and the score map;
+- the matched flights, with registration and type;
+- the inferred recording start time;
+- a measured-against-modelled curve overlay for each event (`plots.py` already draws these);
+- the data report and diagnostics: flight-data coverage, clock consistency, possible edits;
+- GeoJSON and KML export.
+
+**Done when** every seed case's `result.json` renders, failures included.
+
+#### Phase 6: release (S–M)
+
+A README covering install (including ffmpeg), requirements and limits, and how to read the verdict, including what "experimental" means. Release in the fork, and send upstream PRs as the author accepts them.
+
+**Acceptance test**, run before each release:
+- install the built package in a clean environment on macOS and Linux (in CI), run the quickstart, and check its expected output;
+- a clear diagnostic when ffmpeg is missing or too old;
+- progress reporting, and resource estimates (download size, CPA table size, time) before the long stages, with a disk-space check before writing;
+- cancellation at any point, and a re-run that resumes from completed cached stages;
+- defined behaviour for an unavailable archive, a network failure or a partial download: retry a fixed number of times, then stop with an error.
+
+**Done when** the acceptance test passes on macOS and Linux.
+
+### M3: validated claims
+
+A claim is made only on evaluation recordings, against criteria and thresholds fixed before any evaluation recording is run:
+- **Three numbers, reported together:**
+  - the confident-wrong rate among located answers;
+  - region coverage among located answers;
+  - the share located, with the location error and the abstention rate.
+
+  Coverage over all cases says nothing about the located subset, so it's computed on that subset.
+- **Independence.** Each group counts once (5.2). Candidate pairs or clips from one recording are not independent.
+- **What the numbers can show.**
+  - Zero confident wrong answers among n located groups bounds the true rate below about 3/n at 95 % confidence: under 10 % after 30, under 5 % after 60. Abstentions don't count toward n, so the more the tool abstains, the more recordings this takes.
+  - A 90 % region that holds in 27 of 30 groups is consistent with a true coverage of 74–98 %; 54 of 60 narrows that to 80–96 %.
+- **What they can't guarantee.** Those numbers describe the evaluation group, not the method that sets the region. A guarantee needs more:
+  - Split conformal calibration on held-out groups gives coverage averaged over all cases.
+  - A guarantee among located answers needs a selective method such as Learn-then-Test. With zero errors it takes about 22 located calibration groups at α = δ = 0.1, and about 59 at 0.05.
+  - Leave-one-group-out tuning gives neither guarantee.
+  - Reaching 30 cases doesn't calibrate a region by itself. With 30 calibration cases, a nominal 90 % region's realised coverage spans about 80–97 % (5th to 95th percentile).
+
+Until then the verdict and region stay labelled experimental. Gathering the evaluation group is evidence work with no fixed date.
+
+### M4: toward the destination
+
+Each item waits for a measurement that calls for it:
+- a ±N-day search for recordings whose date is uncertain, at about 12 min per extra day here. Converting each day once into propeller-only tiles would make extra days and boxes cheap;
+- temperature and wind corrections from METAR and soundings, if Phase 2 finds a bias they remove;
+- models of turning and accelerating flight, on the same condition;
+- jets as a signal source, with their own detection and matching;
+- choosing extra flyovers by how well their geometry pins down the location;
+- downloads that resume across restarts;
+- multipath delays, microphone arrays, and advanced time-frequency methods, each if a measured bottleneck points to it.
+
+## 5. Measuring progress
+
+The measuring stick has to be trustworthy before it gets big: caches that can't go stale, labels checked against the audio, and evaluation data kept apart from the data we tune on.
 
 ### 5.1 Cases
 
-**Seed set.** Phase 1 starts with four cases, one for each kind of outcome:
+**Seed set**, one for each kind of outcome:
 
 | Case | Expected outcome | What it tests |
 |---|---|---|
@@ -118,253 +425,224 @@ Every change is judged by numbers on a fixed set of cases, in loops of seconds t
 | Oyster Bay audio with the box moved 150 km, over land with similar traffic | not located | the truth is outside the box by construction, so any confident answer is wrong |
 | A degraded copy of one of these, e.g. high-passed at 150 Hz and encoded as low-bitrate AAC | located or abstain | abstaining passes; a confident wrong answer fails |
 
-**Growth**, once the seed loop works, cheapest first:
-
-1. **More eagle-cam clips**: the 12 h archive cut into 1–2 h clips. Every clip has the same known location but different flights, so one download gives roughly 6–12 positive cases with different geometry. They share a site, microphone and day, so for evaluation they count as one recording.
-2. **Augmented copies**, made with ffmpeg: low-bitrate AAC, Opus and MP3; high-pass at 100 and 150 Hz; noise suppression; added wind noise; shorter trims (30 and 15 min); a 30 s cut between two flyovers. Expected outcome: located or abstain. Severe ones should sometimes end in "insufficient evidence"; they aren't all cases the tool must locate.
+**Growth**, cheapest first:
+1. **More eagle-cam clips**: the 12 h archive cut into 1–2 h clips, giving roughly 6–12 positive cases with different geometry. They share a site, a microphone and a day, so they count as one group.
+2. **Augmented copies**, made with ffmpeg: low-bitrate AAC, Opus and MP3; high-pass at 100 and 150 Hz; noise suppression; added wind noise; trims to 30 and 15 min; a 30 s cut between two flyovers. Expected outcome: located or abstain.
 3. **Negative controls**, expected not to be located:
    - the right audio with another day's flight data;
    - the right day with the box moved 150 km;
-   - stretches with no flyovers, confirmed in the spectrogram.
+   - stretches with no flyovers, confirmed in the spectrogram;
+   - real background recordings with other tonal sources and no prop passes: the three Essex recordings (jets) and ESID 937 (no prop within 20 km all day). These also give `detect`'s false alarms per audio hour.
 4. **Stress tests**, inspected rather than scored as plain negatives:
-   - time-reversed audio. Its curves mostly rise, which a straight pass at steady power can't produce, but turns, climbs and power changes can, so it isn't a guaranteed negative. A confident answer gets looked at, not counted as a false positive automatically;
-   - incomplete flight data (an hour of traces removed), and a recording crossing UTC midnight (synthetic if none of ours does).
-5. **New real recordings** as we find them: public livestream archives with published locations, and clips we record ourselves at known spots, including moving and phone-processed ones. These are the only source of evaluation data.
+   - time-reversed audio. Its curves mostly rise, which turns, climbs and power changes can also produce, so it isn't a guaranteed negative;
+   - incomplete flight data (an hour of traces removed);
+   - a recording crossing UTC midnight: ESID 375 and 937 do;
+   - a true location within a few km of the box edge.
+5. **Independent recordings** (5.6), the only source of calibration and evaluation data.
 
-**Groups.** Every clip, augmented copy and negative made from one recording stays in that recording's group, since they share its site, microphone, day and flights. Groups are assigned whole:
+**Synthetic failure matrix.** Small cases that run in seconds as Tier 0–1 tests. Each phase adds the ones it needs.
+- **For the fits (Phase 2):**
+  - a partial pass, with its CPA outside the recording or masked;
+  - a nearly flat curve, from a distant or slow pass;
+  - a crossing tone;
+  - a missing fundamental;
+  - a harmonic mistaken for the fundamental;
+  - a turning or descending pass made from a real trace.
+- **For the search (Phase 3):**
+  - one flight that could be on either side of the microphone;
+  - two flights on parallel tracks at the same speed and heading;
+  - two plausible clock offsets;
+  - a true location near the box edge;
+  - a gap in a flight trace;
+  - a sample clock drifting 50 ppm over 12 h.
 
-- **Development**: Oyster Bay and the eagle cam. Both have shaped the method already, so they never count as evaluation.
-- **Calibration**: recordings used to fit Phase 4's thresholds. While there are few, fit them leaving one recording out at a time rather than fixing a split, so each recording gets used.
-- **Evaluation**: whole recordings held out, from other sites and days where possible, run only at milestones and never tuned on.
+### 5.2 Groups and sets
 
-Calibration and evaluation are empty today. That, not code, is what limits Phase 4.
+A group holds everything that shares a site, a microphone installation, a session (day) or flights, and groups are assigned whole.
+- **What travels together.** Clips, augmented copies and negatives made from one recording stay in its group. So do recordings made together, such as several devices recording one Seattle session, or the two Essex recordings 400 m apart that hear the same jet.
+- **Familiar and unseen sites.** Results on new sessions at a familiar site are reported apart from results at unseen sites. Only the second measures how the tool does somewhere new.
 
-### 5.2 Labels: ADS-B proposes, the audio confirms
+Each group belongs to one set:
+- **Development**: Oyster Bay and the eagle cam. They have shaped the method, so they never count as evaluation.
+- **Calibration**: groups used to fit Phase 4's thresholds. While there are few, fit them leaving one group out at a time, and redo every tuned choice inside each fold. That is a development method, not a guarantee (M3).
+- **Evaluation**: whole groups held out, from other sites and days where possible, run only at milestones and never tuned on.
 
-For any case with a known location, the flight data shows which propeller aircraft passed within 12 km, when each pass would be heard, and how close and how fast it was. Those are possible events, not ground truth (gap 22). Used as labels as they stand, they would reward detecting aircraft that aren't in the audio.
+### 5.3 Labels
 
-So:
+Three layers, labelled separately:
+1. **Acoustic event.** Is a tone or flyover present in the window? The classes are clear, uncertain, overlapping (two flyovers, or a crossing tone), masked (wind, birds, an edit) and absent. Labelled from the spectrogram.
+2. **Flight association.** Which ADS-B pass made it, if any. "Unmatched" is a label on both sides (V2).
+3. **Physical truth.** What the observer should hear, from the curve modelled on the actual trajectory: its steepest-fall and heard-CPA times, and the slant range and speed at CPA.
+   - This is not the parameters of a straight pass, which don't exist for a turning, climbing or descending aircraft. The propeller's rest frequency is never observed directly.
+   - A pass whose curve falls fastest far from its geometric CPA is flagged as not straight.
 
-- **Propose.** Generate a window for each ADS-B pass and draw its modelled curve over the spectrogram crop (`plots.py` already draws this overlay), as one contact sheet per case.
-- **Confirm.** Mark each window as heard or not by eye, along with every detection that matches no pass. With the overlay that takes minutes per case, so all windows in the seed set get checked and a sample elsewhere. A Claude session can do the first pass, with you spot-checking it; each label records who checked it.
-- **Score by class.** Confirmed acoustic events, unverified passes and synthetic events are reported separately. Recall and fit errors in time, speed and distance are measured on confirmed and synthetic events, and precision on detections checked by eye. Unverified passes are reported but never tuned on.
+Steps:
+- **Propose** a window for each ADS-B pass, as one contact sheet per case.
+- **Label blind first.** For every seed window and a sample of the rest, label layer 1 without the modelled curve, then reveal it and label layer 2. Seeing the expected curve first biases the eye toward finding it.
+- **Confirm the rest with the overlay**, which takes minutes per case. A Claude session can do the first pass, with you spot-checking it. Each label records who made it and whether it was blind.
+- **Score by class.**
+  - detection recall and precision on layer 1;
+  - association accuracy on layer 2;
+  - fit errors against layer 3, with flagged passes and synthetic events reported separately.
 
-Detection and fit metrics still come in seconds, without running a search.
+  Unverified passes are reported but never tuned on.
 
-### 5.3 Tiers
+### 5.4 Tiers
 
 | Tier | Runs | Time | When |
 |---|---|---|---|
-| 0 | unit tests, including the cache-miss tests | < 1 min | every change |
-| 1 | `detect`/`fit` against labels, and the known-point check, on the seed set | < 3 min | every change to detection, fitting or scoring |
+| 0 | unit tests, including the cache tests and the synthetic failure matrix | < 1 min | every change |
+| 1 | `detect` and `fit` against labels, and the known-point check, on the seed set | < 3 min | every change to detection, fitting or scoring |
 | 2 | blind search on the seed set from cached CPA tables | 2–3 min per case | before keeping a change |
-| 3 | everything from scratch (audio, flight data, CPA table, search, refine, report) on all development cases, negatives and stress tests | hours, in the background | nightly and before a PR |
-| E | the evaluation group, end to end | hours | at milestones only |
+| 3 | everything from scratch on all development cases, negatives and stress tests | hours, in the background | nightly and before a PR |
+| E | the evaluation set, end to end | hours | at milestones only |
 
-Tier 1's budget holds only on a small subset: `detect` takes 1.5 min per audio hour here, so the 12 h eagle cam alone would take 18 min. Tier 1 runs the seed set with its cases in parallel, and detections are cached by audio and detector version, so changes to fitting or scoring skip detection. A case joins Tier 1 only if Tier 1 stays under 3 min.
+Tier 1 runs its cases in parallel, and detections are cached by audio and detector version, so changes to fitting or scoring skip detection. A case joins Tier 1 only if Tier 1 stays under 3 min.
 
-### 5.4 Scoreboard
+### 5.5 The result record and the scoreboard
 
-Every run of `locate` or of a benchmark case writes one versioned `result.json` (it carries a schema version), so the CLI, the benchmark and the report can be built independently. A benchmark run collects them into `bench/results/<commit>-<tier>.json` with:
+**The result record.** Every run of `locate` or of a benchmark case writes one `result.json` with a schema version. It holds the decisions themselves, so the report and the benchmark never reconstruct them from logs. Version 1 holds what today's pipeline can fill. Later fields arrive with the features that produce them, each with a version bump.
 
-- provenance: code revision, parameters, and the hash of every input and cache used (audio, flight data, CPA table, detections);
-- for each case, the expected outcome and whether it was met;
-- event metrics by label class, and the known-point result;
-- the rank of the true pair, and the error of the top and refined candidates;
-- the margin, confidence and verdict;
-- confident wrong answers and abstentions, as counts and rates, for each group;
-- stage timings.
+What it records:
+- **conventions**:
+  - WGS-84 coordinates, and which height;
+  - times in audio seconds and UTC, saying which CPA time each one is (emission, heard or steepest fall);
+  - distances as slant range at CPA, not altitude or ground range;
+- **provenance**: code revision, parameters, and the hash of every input and cache used;
+- **events**: each detection's fit, harmonic, fit diagnostics, and assignment to a flight or to "unmatched";
+- **candidates**: location, flight pair, clock and drift, score per event, and the mode each one belongs to;
+- **the funnel**: how many hypotheses each filter removed, and for benchmark cases whether the true one survived;
+- **the verdict**: its reasons, and the uncertainty region with the method and version that made it, or why there is none;
+- **data limitations**: flight-data coverage over the recording and the box, skipped traces, possible edits;
+- **execution errors**, kept apart from the verdict.
+
+**The scoreboard.** A benchmark run collects the records into one `results.json` in its own run folder, `$DOPPLERTRACK_DATA/runs/<date>-bench-<commit>-<tier>/`. It reports by case and by group:
+- the expected outcome, and whether it was met;
+- **detection**: recall on confirmed events, and false alarms per audio hour on background recordings, as a curve over thresholds;
+- **association**: the share of confirmed events assigned to the right flight;
+- **fits**: errors against layer-3 truth by label class, and the known-point result;
+- **the funnel**: candidate counts after each filter, and where the true hypothesis dropped out;
+- **search**: the true pair's rank, the margin, and the location error of the top and refined candidates as quantiles over cases;
+- **verdicts**:
+  - the share of positive cases located;
+  - the confident-wrong rate among located answers;
+  - the abstention rate;
+  - region coverage, always next to region size;
+- **stage timings**.
+
+A tool that always abstains has no confident wrong answers, so the share of positive cases located is a target of its own.
 
 `bench compare <a> <b>` prints the difference between two runs. There are two baselines, both at upstream a16b700:
-
 - **saved-fit**: the event fits committed in `docs/results/`. It isolates search and physics.
-- **raw-audio**: `detect` output with no hand-picked windows. It is what a user gets, event-2 regression included.
+- **raw-audio**: `detect` output with no hand-picked windows. It is what a user gets.
 
 A fitting change shows only in the raw-audio numbers; a search or scoring change is judged on both.
 
-### 5.5 How we work
+### 5.6 Independent recordings
 
-- **Repos.** The fork is `SokolskyNikita/dopplertrack`. Remote `origin` is the fork and `upstream` is mjshiggins; this checkout's pushes always use the SokolskyNikita account, through a repo-local credential helper.
-  - **`main`** mirrors upstream; nothing is committed to it.
-  - **Topic branches** carry upstreamable fixes. Each starts from upstream `main` and becomes one small PR.
-  - **`dev`** is the improved version: `main` plus every fix, whether merged upstream or not, plus all fork-only work and this plan. Upstream is merged into it, never rebased.
-  - **Upstream review.** Bigger features (benchmark, `locate`, confidence) get an upstream issue first and stay on `dev` until the author wants them. New capabilities go in new modules. Core edits stay small, keep defaults that preserve upstream behaviour, and go upstream quickly, so merges stay cheap.
-- **Data.** Set up on 2026-11-03; `AGENTS.md` has the rules.
-  - **Location.** Data lives outside every checkout, in `$DOPPLERTRACK_DATA` (`~/data/dopplertrack`): `raw/` inputs, never modified; `derived/` pipeline outputs; `runs/<date>-<topic>/` experiment outputs, written once; `reference/` papers. In the main checkout, `data` is a symlink to it.
-  - **Caches.** Regenerable files go in `$DOPPLERTRACK_CACHE` (`~/.cache/dopplertrack`), which the code already uses for terrain tiles. Each cache is to be keyed by content hashes of its inputs plus the parameters and code version that produced it; today's CPA cache isn't (gap 19), and Phase 1 fixes that first.
-  - **Provenance.** `bench/manifest.json` records the size, SHA-256, source and licence of every raw file (`tools/data/manifest.py`; `--check` verifies). A fetch script that rebuilds `raw/` on another machine is still to do in Phase 1.
-  - **Budget.** About 1 GB per case-day for CPA tables. The data root holds 47 GB and the disk had 75 GB free when it was set up, so it should move to an external SSD before growing much.
-  - **CI.** CI gets only small fixtures.
-- **Case manifest.** Each case's entry is immutable provenance: source URL and audio hash, clip offsets, augmentation recipe, flight-data assets (date, pod and archive asset names), box, parameters, labels and who checked them, expected outcome, group, and the code revision it was built with. Changing a case makes a new version of it.
-- **Experiment log.** One entry per experiment in `bench/LOG.md`: hypothesis, change, tier 1–2 numbers, kept or reverted. Section 7 is the first entry.
-- **Parallel work.** Once the benchmark and the result format exist, independent streams (the Phase 0 fixes, the report, packaging) run in separate Claude sessions, each in its own worktree. The cache fix, the fit gates and multi-pair search all change `pipeline.py` or `search.py`, so they land one at a time. Tier 3 runs in the background.
+The evaluation set is what limits M3, and collecting it takes calendar time rather than engineering, so it starts now.
 
-## 6. Phases
+**A recording counts if it has:**
+- the microphone's location to about ±10 m (a phone's GPS fix or a known point), and its height above the ground;
+- the start time in UTC to the second, from a network-synced clock or a time chime, and no pauses except at known times. AudioMoth's 5 s gap per minute is fine once the spectrogram handles gaps;
+- the original file, not a re-encode, with the device, app and settings noted. Voice processing, noise suppression and bass cut-off should be off where possible;
+- no edits, or each one noted;
+- adsb.lol coverage of the place and day, checked with `tools/data/site_traffic.py`, with at least two prop passes expected within about 6 km;
+- a site and session ID, for the groups.
 
-Sizes assume Claude writes most of the code and you review: S is a day or less, M is 2–5 days, L is 1–2 weeks. As a rough guess, 4–6 weeks of part-time work gets to a `locate` command with explicit failure outcomes and an experimental confidence. Calibrated confidence is a separate milestone that waits on collecting independent recordings, and no estimate here covers it. The critical path is 1 → 2 → 3 (step B) → 4. Step A of Phase 3 runs alongside Phase 2, and Phases 0, 5 and 6 alongside everything.
+**Variety matters more than volume**: new sites, devices, traffic levels (quiet airspace especially) and pass geometries (crossing tracks, not one airway).
 
-### Phase 0: quick fixes (S; each independent)
+**Where to look:**
+- public livestream archives with published locations;
+- long field recordings with location and time, such as Eclipse Soundscapes and xeno-canto;
+- your own controlled recordings. These are the only source of moving, edited and phone-processed cases, which the motion and edit diagnostics (L4, S6) need for testing.
 
-- Commit the `fetch-day` fix and send it upstream as a PR linked to issue #1. Done: part of PR #2.
-- Fix the event-2 regression from issue #1. Done in PR #2: `fit` uses the pre-f890572 mean-brightness objective by default, so the README commands return the committed fits again. The opt-in `tests/test_oyster_bay.py` checks the README windows, and tracks the `detect`-output path as a strict expected failure. That test is the benchmark's raw-audio regression fixture; it flips to a pass once Phase 2 makes `detect`'s fits usable.
-- **Download margin.** Fetch the search box plus 12 km by default, and have `search` warn when the flight data doesn't cover that margin. Test it with a synthetic flight that passes outside the box but within 12 km of an edge point.
-- **Hand-off.** Let `search` and `refine` take `detect` output directly, e.g. `--events detected.json --pick 1 2`, and fix the README sentence.
-- **`detect` score floor**, with a clear "no flyovers found" result.
-- **Data report** from `fetch-day` and `search`: traces kept, traces skipped as malformed, gaps near the candidates.
-- **Platform.** A macOS CI job, a fresh-install smoke test, and a clear error when ffmpeg is missing.
+**On disk now:**
 
-### Phase 1: minimal benchmark (M)
-
-The first milestone: trustworthy numbers on a few cases before adding more.
-
-1. **Cache correctness** (S, first). Key the CPA cache on content hashes of the grid (coordinates and elevations) and of the segments (times and positions), plus `max_range`, sound speed and a format and algorithm version, and apply the same rule to every cache the benchmark adds. Tests: a run with changed flight positions or timestamps but the same array sizes, and a DEM run after a `--no-dem` run of the same box, must each miss the cache. It's a plain bug fix, so it also goes upstream. PR #2 didn't touch `pipeline.py`, so it can start now, as a topic branch from upstream `main` (5.5).
-2. **Result format v1**, as in 5.4.
-3. **One manifest, one runner, the four seed cases** from 5.1, with provenance, expected outcomes and checked labels.
-4. **Both baselines** at a16b700, and `bench compare`.
-5. Tiers 0–2.
-
-**Done when** the cache tests pass; the seed cases have both baselines, with every input and cache hash recorded; Tier 1 runs in under 3 min; and Tier 2 on the seed set runs in under 15 min.
-
-**Then grow it** alongside Phases 2–4, as they need cases: the other eagle-cam clips, the augmentations, the negatives and stress tests from 5.1, and Tier 3.
-
-### Phase 2: robust event fits (M–L; research, time-box 1 week)
-
-Hypotheses, each tested in tier 1 against confirmed events:
-- Keep several fit hypotheses per event (the best local optima of the grid search) instead of one.
-- Derive each event's speed, distance and time ranges from how fast the fit's score falls off around its optimum, instead of the fixed ±35 % / 0.4–2.5× / ±6 s.
-- Pair events on their best-constrained feature (when the frequency falls fastest) rather than the fitted CPA time, which inherits distance errors.
-- Compare the old and new fit objectives case by case, and use harmonics where they're visible.
-- Ideal-curve fits overestimate f0 on real passes, which moves the fitted CPA time with it (gap 4). Correct for that, or carry it as uncertainty, rather than widening the gates. Widening alone doesn't work: a single flyover's f0 and timing trade off in scoring, so a wider gate on one acts as a wider gate on the other. The measurements below, all on development recordings, show the trade-off.
-
-| Gates (time between events, f0 sweep) | Oyster Bay, README windows, current objective | Oyster Bay, `detect` events | Eagle cam, committed events |
-|---|---|---|---|
-| ±6 s, ±5 % (defaults) | filtered out at the true location (blind search not run) | filtered out at the true location (blind search not run) | 1st of 607 pairs, 2.5 % margin, 50,682 candidates |
-| ±10 s, ±12 % | 1st of 469, 17.8 %, 32,554 | – | 1st of 647, 1.6 %, 84,431 |
-| ±12 s, ±12 % | 1st of 485, 17.8 %, 39,144 | 2nd of 505, −6.7 %, 38,531 | 2nd of 660, −0.5 %, 101,673 |
-
-With the committed Oyster Bay fits, ±12 s / ±12 % changes nothing at the top: 1st of 358, the same 4.0 % margin, with 81,339 candidates instead of 40,889. On the eagle cam, the ±12 s gate lets in points where a wrong pair 9 km from the nest outscores the true one. The wider f0 sweep changed no score at the points both runs share. Scoring cost rises about 2.3× per candidate at ±12 %. The code for both knobs (`--tol` help, `--f0-tol`) is on branch `exp/gate-tolerances`.
-
-- Re-fitting `detect`'s flyovers in a narrower window doesn't fix both recordings either. Each event was re-fitted with no hand choices: the window came from `detect`'s own fit (±55 s around its CPA, as wide as the README's hand windows, or ±2·d/v), the band was 0.85 f_post to 1.15 f_pre, and the gates stayed at their defaults. Development measurements:
-
-| Re-fit | Oyster Bay, `detect`'s top two | Eagle cam, README's two events |
+| Source | What it is | Use |
 |---|---|---|
-| none (`detect`'s 240 s windows) | filtered out at the true location | 1st of 607, 917 m, 2.5 % |
-| ±55 s, brightness objective | 1st of 465, 123 m, 6.0 %, 48,237 candidates | 70th of 604; a wrong pair 14 km away wins by 20 % |
-| ±2·d/v, brightness objective | 1st of 403, 123 m, 7.7 %, 48,036 | true pair filtered out everywhere |
+| Eclipse Soundscapes ESID 375, 740, 710 | AudioMoths with clocks set by a time chime, 2024-04-07; 6, 7 and 19 prop passes within 12 km | calibration or evaluation (decision 2). 740 and 710 record 55 s of every minute, so they need a gap-aware spectrogram first |
+| Eclipse ESID 937 | about 25 h from 05:40 UTC on 2024-04-07, with no prop pass within 20 km that day | a negative that must abstain, once 04-08's flight data is fetched |
+| xeno-canto XC979185 | one prop pass, start time known to the minute | a single-flyover case |
+| xeno-canto XC990819, XC990820, XC986433 | Essex, jets only | development: background negatives for `detect`'s threshold; the first two are one group |
 
-With the contrast objective, the re-fits fail at the true location on both recordings. On the eagle cam, the ±55 s event-1 window raises the wrong pair's event-1 score from 6.8 to 10.4, but the true pair's only from 6.2 to 7.1. The 240 s window's flat tails were what told those two pairs apart. Narrowing the window removes the dilution that hurt Oyster Bay, but also the evidence that protected the eagle cam, so no fixed width suits both. A next hypothesis is to set each event's width from where its ridge is visible in the spectrogram. Scripts: `tools/experiments/2026-11-03/` (`rewindow.py` re-fits and scores the true location, `swfl_truth.py` shows which filter each fit trips at the nest, `summarise.py` ranks a search's results). Outputs: `$DOPPLERTRACK_DATA/runs/2026-11-03-rewindow/`.
+ESID 375 and 937 both run past UTC midnight into 2024-04-08, so they also test the midnight case, and they need that day's flight data.
+| Seattle (planned) | your recordings, several devices at one spot | one group per session: it tests devices, not new sites |
 
-**Done when** the true flights pass the search filters on every positive development case using `detect` output with no hand-picked windows, and Oyster Bay reproduces from raw audio.
+Aircraft-audio datasets without location, timing and matching trajectories can train or test detection, but can't validate a location.
 
-### Phase 3: `dopplertrack locate` (M–L; step A can start alongside Phase 2)
+## 6. What we know
 
-**Step A: a thin `locate` with explicit failures.** One command over today's pieces:
+### 6.1 The physics of a pass
 
-1. audio → spectrogram → `detect` → usability check;
-2. flight data (with margin, cached) → CPA table (cached);
-3. search with one automatically chosen pair of adjacent detected flyovers, the case the silence filter was written for (Tier 2 checks it with and without the filter);
-4. refine the winner with the other flyovers;
-5. verdict and `result.json`.
+For a straight pass at constant speed v and closest slant range R_c, the frequency heard at time t is
 
-Each failure is an outcome with a stated reason, not a crash or a guess: no usable flyovers; flight data missing over the recording's time or the box; a recording that runs past UTC midnight; no candidate surviving the filters.
+f(t) = α + β·z(t), with z(t) = (t − τ_c) / √(s² + (t − τ_c)²), where:
+- α = f0·c²/(c² − v²);
+- β = −f0·c·v/(c² − v²);
+- s = R_c·√(c² − v²)/(v·c).
 
-**Step B: search over several pairs.** Choosing pairs automatically breaks assumptions the single-pair search relies on:
+Sources: Ferguson & Quinn 1994, eqs. 15–16; Ferguson & Lo 2000, eqs. 1–4. What follows from it:
 
-- **Silence filter** (gap 20). For pairs with other flyovers between them, replace the hard rule with a penalty, at re-ranking, for close passes that no detected flyover explains. Weight it weakly, since passes can be inaudible (5.2). Keep the hard rule only for adjacent pairs, and only if Tier 2 shows it still helps there.
-- **Comparable scores** (gap 21). Pairs only propose candidates. Every distinct candidate is then refined and scored on the same full set of flyovers. Its score on the flyovers it wasn't proposed from is reported separately, since every candidate fits its own pair by construction.
-- **One flyover, one vote.** Merge duplicate detections of a flyover, and don't let one pass of one flight explain two events.
-- **One clock.** All flyovers behind a candidate share one audio-to-UTC time map, so the same place with two different clocks is two hypotheses. A flyover that only fits with a different clock suggests an edit, as a diagnostic.
-- **Confidence on the final output.** Trying many pairs and keeping the best inflates the winner's score, so Phase 4's confidence is computed after the whole pair selection and re-ranking, never per pair.
+- **Three landmarks.**
+  - The curve falls fastest, and passes the midpoint of its two asymptotes, at τ_c, the instant the aircraft is at closest approach (the emission CPA).
+  - It passes f0, the heard CPA, R_c/c later. At 1–9 km that is 3–26 s.
+  - The CPA table's `t_emit` matches the steepest fall only for straight, constant-speed flight.
+- **What each parameter rests on.** Speed comes from the frequency span (v = −c·β/α), f0 from α, and distance from the sweep's duration s together with v. Distance is therefore the weakest parameter. It is also coupled to timing through the heard CPA, which is why pairing on heard-CPA times is fragile (E2).
+- **f0 and time trade off.** Near the steepest point, raising f0 by δf0 looks like shifting the curve by δf0/g_max, where g_max = f0·c²·v²/(R_c·(c² − v²)^{3/2}). For the four development flights g_max is 0.8–1.4 Hz/s, so 1 % of f0 is worth 0.8–1.7 s.
+- **Window length.** At g_max, a window of length T smears the tone by g_max·T. The 2.048 s window spreads 1.6–2.9 Hz (3–6 bins) at the steepest point of the development passes. The best compromise between smear and frequency resolution is T ≈ 1/√g_max, about 0.85–1.1 s here. For controlled overhead passes at 5–21 Hz/s it is about 0.2–0.45 s, which is why the reference work used 0.256 s. In the flat tails, longer windows win: frequency variance falls as 1/N³ (Kay I, eq. 3.41).
+- **Geometry.**
+  - A single pass is mirror-symmetric: the curve depends only on the slant range, not on which side of the track the microphone is.
+  - With an unknown clock, one pass fixes only a distance from its track. Two passes on different headings fix a few discrete points, and more remove the ghosts.
+  - Two flights on parallel tracks at the same speed and heading leave the position along the tracks open.
+- **Ground reflection.** For a microphone well above the ground, the direct and ground-reflected sound can cancel at some elevation angles, so a tone can fade in and out during a close pass. This hasn't been checked in our recordings yet. Tracks must tolerate gaps, and the recording checklist notes microphone height.
 
-The pipeline becomes: steps 1–2 as in step A; then search over the top few pairs, reusing one CPA table; then refine and re-rank every distinct candidate on the full set of flyovers with one shared clock; then the verdict and `result.json`.
+### 6.2 What our experiments showed
 
-**Done when**, from audio, date and box alone, both development recordings are located, and each failure case gives its expected outcome with no confident wrong answer: no usable flyovers, incomplete flight data, a recording crossing UTC midnight, and the moved box. Motion and edit checks are diagnostics and not part of this.
+All on the two development recordings:
+- **The event-2 bias** persists under both fit objectives tested, and fitted timing errors grow with the f0 error ([event2-bias](docs/experiments/2026-11-03-event2-bias.md)).
+- **Wider gates**: ±10 s / ±12 % kept the true pair first on both recordings with the README windows. ±12 s let a wrong pair win on both, and candidate counts grew up to 2× ([gate-tolerances](docs/experiments/2026-11-03-gate-tolerances.md)).
+- **Narrower re-fit windows** help one recording and hurt the other. Neither window rule tested suits both ([rewindow](docs/experiments/2026-11-03-rewindow.md)).
+- **Extra flyovers** behind a time gate of about ±15 s were explained only for the true pair, on Oyster Bay. That is the best confidence lead so far ([extra-consistency](docs/experiments/2026-11-03-extra-consistency.md)).
+- **Timing conventions.** Pairing on emission-CPA times helps some fits and hurts others. The like-for-like steepest-fall comparison agreed within 0.5–2.7 s for the contrast and `detect` fits on both recordings, but not for every fit: the committed Oyster Bay fits were 8.7 s off ([timing-conventions](docs/experiments/2026-11-03-timing-conventions.md)).
 
-### Phase 4: confidence and abstention (L; research, time-box 2 weeks for the machinery)
+### 6.3 What the literature supports, and its limits
 
-- Start from the time-gated extra-flyover consistency in section 7. Its ±15 s gate is a development hypothesis until it holds on recordings it wasn't chosen on.
-- Candidate features: margin over the strongest distinct competing hypothesis (the best candidate more than one radius away, from any pair); the number of extra flyovers explained and their scores; close passes that no flyover explains; peak width after refinement; event fit quality; clock consistency.
-- Fit thresholds on the calibration group's positives against its negatives, never on the evaluation group. Output located, ambiguous or insufficient evidence, with a radius, labelled experimental.
-- **Done when** the verdict and radius come out of `locate`, and the benchmark reports confident-wrong and abstention rates for each group.
+Equations cited here were checked against the PDFs.
 
-**Claims need an evaluation group.** A calibrated claim is made only on evaluation recordings, against criteria set in advance:
-
-- Zero confident wrong answers out of n bounds the true rate below about 3/n at 95 % confidence: under 10 % after 30 confident answers, under 5 % after 60. Abstentions don't count toward n, so the more the tool abstains, the more recordings this takes.
-- A radius stated at 90 % that holds in 27 of 30 cases is consistent with a true coverage anywhere from 74 % to 98 %. 54 of 60 narrows that to 80–96 %.
-
-Until the evaluation group is that large, the verdict and radius stay labelled experimental. Gathering it is evidence work, not engineering, and has no fixed date.
-
-### Phase 5: report (S–M; independent once the result format exists)
-
-One HTML page per `result.json`:
-- a map of candidate areas and the score map;
-- the matched flights, with registration and type;
-- the inferred recording start time;
-- a measured-vs-modelled overlay for each event (`plots.py` already draws these);
-- the data report and diagnostics: flight-data coverage, clock consistency, possible edits;
-- GeoJSON and KML export.
-
-### Phase 6: release (S)
-
-A README covering install (including ffmpeg), requirements and limits, and how to read the verdict, including what "experimental" means. Release in the fork, and send upstream PRs as the author accepts them.
-
-### Later
-
-- A ±N-day date search, at about 12 min per extra day here.
-- Temperature and wind from historical METAR.
-- Choosing extra flyovers by how well their geometry pins down the location.
-- Downloads that resume across restarts.
-
-## 7. First experiment: does a candidate explain the other flyovers?
-
-Setup, on Oyster Bay:
-- a blind search with the committed event fits, taking the top 10 flight pairs (rank 1 is the true pair);
-- 8 extra events: those from `detect --top 10` other than the two search events;
-- at each pair's best point, find a flight that explains each extra event and score its modelled curve, using the same time shift as event 1 and a propeller-tone scale of 0.95–1.05;
-- an extra counts as explained at a score of 3 or more.
-
-| Rule for the explaining flight | True pair | Wrong pairs (9) |
+| Source | What we take from it | Caveat |
 |---|---|---|
-| any flight within 12 km and ±5 min (what `pick_flight` does) | sum 36.9 | up to 41.1; three of them at 35 or more |
-| heard closest approach within ±6 s | 1 explained (4.7) | none explained (max sum 2.5) |
-| within ±15 s | **2 explained (6.7, 4.7)** | **none explained (max sum 2.8)** |
-| within ±30 s | 2 explained | two pairs explain 1 each (sums 6.6 and 6.3) |
-| ±15 s plus `detect`'s speed and distance gates | none | none |
+| Ferguson 1992; Ferguson & Quinn 1994; Ferguson & Lo 2000; Ferguson 2016 | The pass model, the least-squares fit with α and β eliminated, and starting values from the asymptotes and peak slope | Controlled overhead passes at about 70–610 m, flown straight and level at set speeds. Single-sensor errors were 5–9 kn and 54–100 ft, yet about 12 % of altitude estimates were more than 20 % off. Our passes are opportunistic, at 1–9 km, so expect worse. Ferguson 2016's printed eq. 14 squares each term inside the sum; take the reduced objective from Ferguson & Quinn 1994 eq. 20 |
+| Quinn 1995 | Weighting each frequency estimate by amplitude squared, a covariance for the fitted parameters, and fits of partial tracks | Amplitude is a reliability weight, not a range measurement. The covariance assumes independent errors from non-overlapping blocks |
+| Timlelt et al. 2017 | A closed-form comparator | Eq. 19 takes the argmax of f′ although f′ is negative (its eq. 15), and eq. 20 drops a square. Its simulations show a 7 % f0 error, and its experiments use a loudspeaker moving at 1–1.6 m/s |
+| Chan & Towers 1992 | Keeping several low-cost solutions, because of ghost solutions and noise | Written for five or more simultaneous sensors; their sensor counts don't transfer |
+| Iatsenko et al. 2016 | Ridge-extraction schemes, adaptive penalties, and error measures | Built for components present throughout a signal. With transient ones it hops between components, and it has no stopping rule. Harmonics aren't covered |
+| Kay I (1993) | The frequency-estimation bound (eq. 3.41), separable least squares (§8.9), and the threshold effect at low SNR | Bounds hold above a threshold SNR; below it, outliers dominate |
+| Kay II (1998) | False alarms grow roughly in proportion to the cells searched (eqs. 7.36–7.37) | Assumes independent cells and known noise; ours overlap, so the rate has to be measured |
+| White 1982 | A wrong model's fit converges to the best approximation for that objective and window | Even a sandwich covariance measures spread around that approximation, not distance to the truth, and the usual covariance can be wrong in either direction. It applies to likelihoods, which a brightness score isn't |
+| Raue et al. 2009 | Profile likelihood, and structural against practical non-identifiability | χ² thresholds need Gaussian noise of known variance and an adequate model. For a brightness score, read profile shapes only |
+| Golub & Pereyra 2003 | Variable projection for the least-squares fit | Applies to sums of squares only, doesn't remove local minima, and isn't always faster |
+| Angelopoulos & Bates 2021 | Split conformal regions, and Learn-then-Test for guarantees among non-abstained answers | Coverage is averaged over exchangeable cases, here groups of recordings. It doesn't cover thresholds tuned by leave-one-out |
+| Cawley & Talbot 2010 | Tuning and reporting on the same cases biases results by as much as the differences between methods | Their smallest data set has 64 points; with two recordings the risk is larger |
+| Lo & Ferguson 2003 | Ground-reflection delay as a constraint on elevation and range | Written for broadband jets over hard ground. Its interference fringes are one plausible source of `detect`'s jet false positives (E5) |
 
-Separately, the robust z-score of each pair's best score against all 328 pairs is 4.2 for the true pair and 3.9 for the runner-up. Statistics from a single search don't separate them.
+## 7. Risks and open questions
 
-Takeaways:
-- The time gate is what makes extra flyovers informative, and ±15 s worked best of the windows tried. It was picked on this recording, so it stays a development hypothesis until it holds on recordings it wasn't chosen on.
-- `detect`'s speed and distance are too unreliable to gate on, the same problem Phase 2 targets.
-- Only 2 of 8 extras matched, so better detection feeds directly into confidence. The extras weren't checked by eye (5.2), so some may not be aircraft at all.
-- All ten pairs came from one search and were scored on the same extras. Comparing candidates from different pairs needs that same footing (Phase 3, step B).
-- This is one recording and ten candidates: a lead to test on the benchmark, not a result.
-
-## 8. Decisions for you
-
-1. Work in a fork and upstream small fixes, or try to upstream everything? Recommended: fork first.
-2. Can data derived from third-party recordings (spectrogram crops of the YouTube clips) go into the repo for CI, or should fixtures download on demand? Recommended: on demand, plus small synthetic fixtures in the repo. This also decides whether the raw-audio regression fixture can run in CI.
-3. Will you record ground-truth clips yourself? It's the only way to get controlled moving, edited and phone-processed cases, and the surest way to build the evaluation group that calibrated confidence needs (Phase 4): tens of recordings, preferably at more than one site. It needs a spot with regular light-aircraft traffic and a phone whose clock and location give the truth.
-
-## 9. Risks
-
-- **Upstream moves fast.** Merge upstream into `dev` often (5.5), and keep changes modular.
-- **Ground truth stays scarce.** Slicing and augmentation stretch two recordings a long way for development, but slices of one recording share its site, microphone and day, so they aren't independent evidence. Both recordings are in busy US airspace; add at least one quiet-airspace case before trusting the calibration.
-- **Tuning to the benchmark.** Development cases get tuned on, so their numbers will flatter the method. Only the evaluation group counts for claims.
+- **Event fits may stay too weak on real passes.** If Phase 2's model-error experiment shows that most passes aren't straight enough, the route shifts toward scoring on actual trajectories and wider joint hypotheses, at the cost of more candidates and more abstentions.
+- **Ground truth stays scarce.** Slices and augmented copies of one recording aren't independent, and both development recordings are in busy US airspace. M3 waits until there are enough independent groups, including quiet airspace.
+- **Tuning to the benchmark.** Development numbers will flatter the method. Only the evaluation set counts for claims, and Phase 2's acceptance criteria are fixed before its experiments run.
+- **Detection precision.** Jets and other tonal sources score like props (E5). If they can't be separated, more assignments end unmatched and fewer recordings are located.
+- **ADS-B coverage.** Light aircraft without ADS-B are invisible (L2), so an unmatched acoustic event isn't evidence against a location.
 - **Labels from ADS-B.** Unchecked passes would reward detecting aircraft that aren't in the audio, so only confirmed events are tuned on.
-- **Stale caches.** Until Phase 1's cache fix lands, a cached CPA table can silently belong to other inputs.
-- **Test recordings disappear from YouTube.** Keep the downloaded audio in the local cache.
-- **Confidence may not generalise.** Report the abstention rate alongside every accuracy number.
+- **Upstream moves fast.** Merge upstream into `dev` often and keep changes modular.
+- **Test recordings disappear from YouTube.** The downloaded audio is kept in the data root.
 
-## 10. What Astra's review of this plan changed
+## 8. Decisions needed
 
-Astra reviewed the first version of this plan. All six main points were adopted; where the plan goes further or differs, it says so here.
-
-1. **Labels are provisional** (5.2, gap 22). ADS-B passes now propose windows that are confirmed against the spectrogram, and metrics are kept for each label class. The plan checks every window in the seed set rather than a sample, since drawing the modelled curve over each crop makes that quick.
-2. **Development, calibration and evaluation groups** (5.1), with every derivative of a recording kept in its group. Phase 4 claims now need the evaluation group and criteria set in advance, with the numbers worked out, and confidence stays experimental until then. "Margin over the best wrong pair", which needs the answer, is now "margin over the strongest distinct competing hypothesis". Added: leave-one-recording-out calibration while recordings are few.
-3. **Cache correctness first** (Phase 1, gap 19). Checked in the code, which also turned up a collision the review didn't name: DEM and `--no-dem` runs of one box share a fingerprint.
-4. **Multi-pair search assumptions** (Phase 3 step B, gaps 20–21): a soft penalty in place of the silence filter, candidates compared on one set of flyovers, one flyover one vote, one clock, and confidence on the final output. The hard silence rule stays for adjacent pairs, where its assumption holds, if Tier 2 shows it still helps.
-5. **A smaller first benchmark**: four seed cases, saved-fit and raw-audio baselines, and a Tier 1 budget defined on that subset, because detection alone on every case would take far longer. The moved-box negative goes over land with similar traffic, since a box over the sea would be too easy.
-6. **Failure behaviour before `locate` counts as done.** Phase 3 now starts with a thin `locate` whose failures are explicit outcomes, its done-when includes the failure cases, augmented copies expect "located or abstain", and motion and edit checks are described as diagnostics.
-
-Smaller changes: time-reversed audio is a stress test rather than a guaranteed negative; ±15 s is a development hypothesis; a versioned `result.json` comes in Phase 1; case manifests hold immutable provenance; and the 4–6 week estimate no longer covers calibrated confidence.
+1. **The practical resolution behind "located".** Proposed: a 1 km radius. A smaller radius makes the tool abstain more; a larger one makes "located" less useful.
+2. **Which clean recordings go to calibration and which to evaluation.** This has to be decided before any of them is searched. Proposed:
+   - evaluation: ESID 375 (quiet, continuous) and ESID 710 (moderate traffic);
+   - calibration: ESID 740, ESID 937 (the must-abstain negative) and XC979185;
+   - development: the three Essex recordings, since Phase 2 tunes `detect`'s threshold on them;
+   - Seattle sessions go to evaluation by default.
+3. **Recording ground truth yourself.** The checklist in 5.6 applies. Several devices at one session form one group, so a second site is worth more than a fourth device. Deliberately moved, edited and phone-processed clips are worth a session of their own.

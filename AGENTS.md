@@ -1,8 +1,8 @@
 # Working in this repository
 
 Fork of [mjshiggins/dopplertrack](https://github.com/mjshiggins/dopplertrack): acoustic geolocation from the
-Doppler curves of propeller aircraft. `README.md` explains the method; `PLAN.md` is the fork's roadmap and the
-record of what has been measured. Read PLAN.md's sections 2 and 6 before starting work.
+Doppler curves of propeller aircraft. `README.md` explains the method; `PLAN.md` is the fork's roadmap, and
+`docs/experiments/` the record of what has been measured. Read PLAN.md's sections 2 and 4 before starting work.
 
 ## Setup
 
@@ -38,8 +38,8 @@ record of what has been measured. Read PLAN.md's sections 2 and 6 before startin
   test fixtures, with attribution.
 - Secrets, such as the xeno-canto API key, come from the environment. Never write them into a file here or
   in the data root.
-- `--cpa-cache` matches a table by array sizes, not contents (PLAN gap 19), so give every combination of
-  grid, flight data and DEM setting its own cache file.
+- `--cpa-cache` rejects a table built from different inputs and rebuilds it, so give every combination of
+  grid, flight data and DEM setting its own cache file, or each switch costs a rebuild.
 
 ## Git
 
@@ -47,7 +47,8 @@ record of what has been measured. Read PLAN.md's sections 2 and 6 before startin
   account through a repo-local credential helper; leave it alone.
 - `main` mirrors upstream; never commit to it. `dev` is the fork's line, and all work branches off `dev`.
   Merge upstream into `dev`; never rebase or force-push `dev`.
-- Fork-only files: `PLAN.md`, `AGENTS.md`, `CLAUDE.md`, `.claude/`, `tools/`, `bench/`, `docs/reference/`.
+- Fork-only files: `PLAN.md`, `AGENTS.md`, `CLAUDE.md`, `.claude/`, `tools/`, `bench/`, `docs/reference/`,
+  `docs/experiments/`.
   A commit meant for upstream must not touch any of them; keep upstream and fork-only changes in separate
   commits.
 - To send work upstream, branch `up/<topic>` from `upstream/main`, cherry-pick the topic's upstream commits
@@ -68,8 +69,9 @@ record of what has been measured. Read PLAN.md's sections 2 and 6 before startin
 - Say before starting a long job (`fetch-day`, `detect` on hours of audio, blind searches), run it in the
   background, and keep its log in the run folder.
 - Don't edit or move files another session created; ask it or the user.
-- Log every experiment's numbers in PLAN.md (until `bench/LOG.md` exists): what ran, on which recordings,
-  and that Oyster Bay and the eagle cam are development data, not evaluation.
+- Record every experiment as `docs/experiments/<date>-<topic>.md`: the question, what ran on which recordings,
+  the numbers, the outcome, and the script and run folder. Oyster Bay and the eagle cam are development data, not
+  evaluation. PLAN.md keeps only the conclusions.
 
 ## Layout
 
@@ -80,6 +82,7 @@ record of what has been measured. Read PLAN.md's sections 2 and 6 before startin
 | `docs/results/` | upstream's committed results |
 | `tools/data/` | cutting flight data to boxes, counting passes near sites, the raw-data manifest, new run folders |
 | `tools/reference/` | scripts that converted the papers to Markdown |
-| `tools/experiments/<date>/` | scripts behind PLAN.md's numbers; records, not tools |
+| `tools/experiments/<date>/` | scripts behind the numbers in `docs/experiments/`; records, not tools |
 | `bench/manifest.json` | size, SHA-256, source and licence of every raw input |
+| `docs/experiments/` | one record per experiment: question, setup, numbers, outcome, script and run folder |
 | `docs/reference/README.md` | reading list for the papers in `$DOPPLERTRACK_DATA/reference/` |

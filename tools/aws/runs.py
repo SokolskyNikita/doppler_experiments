@@ -56,6 +56,31 @@ CACHE_ROOT = Path(os.environ.get("DOPPLERTRACK_CACHE", Path.home() / ".cache" / 
 SEED_DATA = ("derived", "raw/audio/youtube", "raw/audio/xenocanto", "raw/aux", "raw/models", "raw/audio/a2o",
              "raw/seismic")
 TOOLS = "tools.json"
+# Never on the fleet or in the bucket: the owner's home recordings and anything derived from them (household
+# audio, exact home coordinates). Paths are relative to the data root; any path with a "private" folder in it
+# counts too. `launch` refuses them as inputs, `seed` and `fetch-sources` exclude them (PM decision, 2026-11-04).
+PRIVATE_PREFIXES = ("private/", "raw/seattle-home/", "derived/traces/20261104-ha-pilot-2/")
+
+
+def is_private(rel: str) -> bool:
+    rel = rel.strip("/") + "/"
+    return rel.startswith(PRIVATE_PREFIXES) or "/private/" in "/" + rel
+
+
+def refuse_private(paths, what: str) -> None:
+    bad = [p for p in paths if is_private(p)]
+    if bad:
+        sys.exit(f"{what} {bad[0]}: private data (the owner's home recordings and what is derived from them) never "
+                 "goes to the fleet or the bucket; it is processed on the Mac only")
+
+
+def seed_excludes(sub: str) -> list[str]:
+    """aws s3 sync --exclude patterns that keep every private prefix out of a sync of data-root folder sub."""
+    out = ["--exclude", "*/private/*", "--exclude", "private/*"]
+    for pre in PRIVATE_PREFIXES:
+        if pre.startswith(sub.strip("/") + "/"):
+            out += ["--exclude", pre[len(sub.strip("/")) + 1:] + "*"]
+    return out
 
 
 def profile() -> str:
@@ -132,6 +157,9 @@ def case_inputs(case_ids: list[str]) -> list[str]:
         if cid not in cases:
             sys.exit(f"no case {cid!r} in bench/cases.json")
         c = cases[cid]
+        if c.get("private"):
+            sys.exit(f"--case {cid}: a private case (its site's coordinates and audio stay on the Mac) never goes to "
+                     "the fleet")
         traces = c.get("flight_data", {}).get("traces")          # one file, or one per UTC day
         paths = [c.get("audio", {}).get("path"), c.get("spectrogram"),
                  *([traces] if isinstance(traces, str) else traces or [])]
@@ -224,6 +252,7 @@ def check_run_input(p: str) -> str:
 def seed_run_inputs(s3, bucket: str, inputs: list[str]) -> None:
     """Inputs under runs/ (small reference files from earlier runs) go up from here when the bucket lacks
     them or they changed; data/ inputs come from the seed."""
+    refuse_private(inputs, "input")
     for rel in inputs:
         if rel.startswith("runs/"):
             src = DATA_ROOT / rel
@@ -281,6 +310,7 @@ def launch(a) -> str:
     a.input = a.input + [check_run_input(p) for p in getattr(a, "input_run", None) or []]
     inputs = case_inputs(a.case) + [p for p in a.input if p not in case_inputs(a.case)]
     inputs = list(dict.fromkeys(inputs))
+    refuse_private(inputs, "input")
     for p in inputs:
         if is_run_path(p):
             check_run_input(p)
@@ -670,12 +700,13 @@ def seed(a) -> None:
     if a.run:        # only these run folders, for jobs that read them (--input runs/<folder>)
         for name in a.run:
             name = name.removeprefix("runs/").strip("/")
+            refuse_private([f"runs/{name}"], "--run")
             aws_cli("s3", "sync", "--only-show-errors", *dry, str(DATA_ROOT / "runs" / name),
                     f"s3://{bucket}/data/runs/{name}")
             print(f"data/runs/{name}", flush=True)
         return
     for sub in SEED_DATA:
-        aws_cli("s3", "sync", "--only-show-errors", "--exclude", ".DS_Store", *dry, str(DATA_ROOT / sub),
+        aws_cli("s3", "sync", "--only-show-errors", "--exclude", ".DS_Store", *seed_excludes(sub), *dry, str(DATA_ROOT / sub),
                 f"s3://{bucket}/data/{sub}")
         print(f"data/{sub}", flush=True)
     for kind in CACHE_KINDS:
@@ -720,7 +751,7 @@ def fetch_plan(s3, bucket: str) -> tuple[list[dict], list[dict]]:
     have = bucket_sizes(s3, bucket, "data/raw/")
     plan, rest, zenodo = [], [], {}
     for f in manifest_files():
-        if not f["path"].startswith("raw/") or have.get(f"data/{f['path']}") == f["bytes"]:
+        if not f["path"].startswith("raw/") or have.get(f"data/{f['path']}") == f["bytes"] or is_private(f["path"]):
             continue
         if any(f["path"].startswith(p + "/") for p in SEED_DATA):
             continue       # `runs seed` sends these from here

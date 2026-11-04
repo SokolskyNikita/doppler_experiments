@@ -260,3 +260,25 @@ def test_memory_in_use_is_total_less_available(tmp_path, monkeypatch):
     monkeypatch.setattr(builtins, "open", lambda f, *x, **k: real(meminfo if f == "/proc/meminfo" else f, *x, **k))
     total, used = supervisor.memory_gb()
     assert round(total) == 131 and round(used) == 100
+
+
+def test_private_data_never_reaches_the_fleet_or_the_bucket(tmp_path, monkeypatch):
+    for p in ("private/seattle/site.json", "raw/seattle-home/2026-11-04.flac", "derived/traces/20261104-ha-pilot-2/area.jsonl",
+              "derived/foo/private/x.npz", "runs/2026-11-05-home/private/a.json"):
+        assert runs.is_private(p), p
+        with pytest.raises(SystemExit, match="private data"):
+            runs.refuse_private([p], "--input")
+    for p in ("derived/traces/2026-11-01/seattle.npz", "raw/audio/youtube/oyster_bay.webm", "derived/privateer/x"):
+        assert not runs.is_private(p), p
+    # the seed's syncs of derived/ and raw/ exclude the private prefixes under them
+    assert ["--exclude", "traces/20261104-ha-pilot-2/*"] == runs.seed_excludes("derived")[-2:]
+    assert ["--exclude", "seattle-home/*"] == runs.seed_excludes("raw")[-2:]
+    assert runs.seed_excludes("raw/audio/youtube")[:4] == ["--exclude", "*/private/*", "--exclude", "private/*"]
+    # a case marked private is refused
+    import json
+    (tmp_path / "bench").mkdir()
+    (tmp_path / "bench" / "cases.json").write_text(json.dumps({"cases": [
+        {"id": "home-1", "private": True, "audio": {"path": "private/seattle/a.flac"}}]}))
+    monkeypatch.setattr(runs, "REPO", tmp_path)
+    with pytest.raises(SystemExit, match="private case"):
+        runs.case_inputs(["home-1"])

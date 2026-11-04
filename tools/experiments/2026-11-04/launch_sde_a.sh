@@ -20,7 +20,7 @@
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")/../../.." && pwd)
 cd "$HERE"
-RUNS=${RUNS:-tools/aws/runs}           # RUNS=echo prints the launches instead
+RUNS=${RUNS:-tools/aws/runs}           # RUNS=echo prints the launches; every job names its checkout with --repo
 P=tools/experiments/2026-11-04
 PY="uv run --frozen python"
 DATA=${DOPPLERTRACK_DATA:-$HOME/data/dopplertrack}
@@ -62,11 +62,11 @@ launch)
                "$PY $(pairs "$DATA") $ARGS_B --inputs" $PY $(pairs "$BOX") $ARGS_B ;;
         n) launch hypotheses-pairs-n$NULL_N_CAP "$SHARDS_N" "--on-demand --size $SIZE_N --repo $PIN" \
                "$PY $(pairs "$DATA") $ARGS_N --inputs" $PY $(pairs "$BOX") $ARGS_N ;;
-        a) launch comparable-score "$SHARDS_A" "--size $SIZE_A" "$PY $(pairs "$DATA") $ARGS_A --inputs" \
+        a) launch comparable-score "$SHARDS_A" "--size $SIZE_A --repo $HERE" "$PY $(pairs "$DATA") $ARGS_A --inputs" \
                $PY $(pairs "$BOX") $ARGS_A ;;
-        b12) launch hypotheses-b1b2 "$SHARDS_B12" "--size $SIZE_B12" \
+        b12) launch hypotheses-b1b2 "$SHARDS_B12" "--size $SIZE_B12 --repo $HERE" \
                "$PY $P/hypotheses_b1b2.py --detected $DATA/$BASE --inputs" $PY $P/hypotheses_b1b2.py --detected "$BOX/$BASE" ;;
-        sweep) launch timing-sweep "$SHARDS_SWEEP" "--size $SIZE_SWEEP" "$PY $P/timing_sweep.py --inputs" \
+        sweep) launch timing-sweep "$SHARDS_SWEEP" "--size $SIZE_SWEEP --repo $HERE" "$PY $P/timing_sweep.py --inputs" \
                $PY $P/timing_sweep.py ;;
         *) echo "unknown job $job (b, n, a, b12, sweep)"; exit 1 ;;
         esac

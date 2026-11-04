@@ -179,8 +179,10 @@ def test_an_export_that_differs_from_its_commit_is_refused(tmp_path):
     (rev.root / "export.json").write_text(json.dumps({"commit": commit}))
     revisions.verify(rev)
     (rev.src / "bench" / "cases.json").write_text("{}")
-    with pytest.raises(revisions.RevisionError, match="changed after it was made"):
+    (rev.src / "stray.pyc").write_bytes(b"")
+    with pytest.raises(revisions.RevisionError, match="changed after it was made") as exc:
         revisions.verify(rev)
+    assert "M bench/cases.json" in str(exc.value) and "A stray.pyc" in str(exc.value)
     (rev.root / "export.json").write_text(json.dumps({"commit": "0" * 40}))
     with pytest.raises(revisions.RevisionError, match="exported from"):
         revisions.verify(rev)
@@ -212,3 +214,25 @@ def test_a_record_with_execution_errors_is_an_error_entry(tmp_path, one_case):
         return rec
     entry = runner.bench_case("synthetic", tmp_path / "out", execute=failing, cases_path=one_case)
     assert entry["status"] == "error"
+
+
+@pytest.mark.parametrize("flags, writes", [(["-I", "-B"], False), (["-I"], True)])
+def test_the_export_flags_keep_spawned_workers_from_writing_bytecode(tmp_path, flags, writes):
+    # a16b700's detect starts spawn workers; whatever the parent is run with must reach them
+    import subprocess
+    pkg = tmp_path / "pkg"
+    pkg.mkdir()
+    (pkg / "work.py").write_text("def square(x):\n    return x * x\n")
+    # only the worker imports `work`, so any bytecode for it was written by the worker
+    code = (f"import sys; sys.path.insert(0, {str(pkg)!r})\n"
+            "import multiprocessing as mp\n"
+            "def load(x):\n"
+            "    import work\n"
+            "    return work.square(x)\n"
+            "if __name__ == '__main__':\n"
+            "    with mp.get_context('spawn').Pool(1) as p:\n"
+            "        assert p.map(load, [3]) == [9]\n"
+            "    assert 'work' not in sys.modules\n")
+    (tmp_path / "main.py").write_text(code)
+    subprocess.run([sys.executable, *flags, str(tmp_path / "main.py")], check=True, cwd=tmp_path)
+    assert (pkg / "__pycache__").exists() is writes

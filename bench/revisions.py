@@ -60,13 +60,18 @@ def _git(*args, env=None) -> str:
                           env=env).stdout.strip()
 
 
-def tree_on_disk(src: Path) -> str:
-    """The git tree hash of every file under src, ignored or not, computed in a throwaway index."""
+def tree_on_disk(src: Path, against: str | None = None) -> str | tuple[str, list[str]]:
+    """The git tree hash of every file under src, ignored or not, computed in a throwaway index. With
+    `against` (a tree), also the files that differ from it: added (A), modified (M) or deleted (D)."""
     with tempfile.TemporaryDirectory() as tmp:
         env = {**os.environ, "GIT_INDEX_FILE": str(Path(tmp) / "index")}
         work = ["--work-tree", str(src)]
         _git(*work, "add", "--all", "--force", ".", env=env)
-        return _git(*work, "write-tree", env=env)
+        tree = _git(*work, "write-tree", env=env)
+        if against is None:
+            return tree
+        changed = _git(*work, "diff", "--cached", "--name-status", "--no-renames", against, env=env)
+        return tree, [ln.replace("\t", " ") for ln in changed.splitlines()]
 
 
 @contextlib.contextmanager
@@ -88,10 +93,11 @@ def verify(rev: Revision) -> None:
     info = json.loads((rev.root / "export.json").read_text())
     if info.get("commit") != rev.commit:
         raise RevisionError(f"{rev.root} was exported from {info.get('commit')}, not {rev.commit}")
-    on_disk = tree_on_disk(rev.src)
+    on_disk, changed = tree_on_disk(rev.src, against=rev.tree)
     if on_disk != rev.tree:
+        shown = "; ".join(changed[:10]) + (f"; and {len(changed) - 10} more" if len(changed) > 10 else "")
         raise RevisionError(f"{rev.src} hashes to tree {on_disk}, not {rev.commit}'s tree {rev.tree}: "
-                            "the export was changed after it was made")
+                            f"the export was changed after it was made ({shown})")
 
 
 def ensure_revision(name: str, log=print) -> Revision:

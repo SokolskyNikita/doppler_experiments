@@ -345,7 +345,8 @@ def execute_case(case: dict, case_dir: Path, log=print, code: dict | None = None
     return draft.record()
 
 
-# What a16b700's CLI hard-codes and so can't be given; a case asking for anything else is refused.
+# What a16b700's CLI hard-codes and so can't be given; a case asking for anything else is refused. The
+# silence filter is the third fixed setting: its CLI offers 6000 m or none (--no-silence), nothing else.
 FIXED_IN_CLI = {"v_tol": 0.35, "d_tol": [0.4, 2.5], "max_range_m": 12000.0}
 
 
@@ -608,8 +609,9 @@ def run_bench(case_ids: list[str], tier: str = "t2", run_dir: Path | None = None
                     try:
                         entries[cid] = json.loads((run_dir / cid / "entry.json").read_text())
                     except OSError:
+                        tail = (run_dir / cid / "process.log").read_text().strip().splitlines()[-3:]
                         entries[cid] = {"case": cid, "status": "error",
-                                        "reason": f"bench run-case exited with {proc.returncode}; see process.log"}
+                                        "reason": f"bench run-case exited with {proc.returncode}: " + " | ".join(tail)}
                     log(f"{cid}: {entries[cid]['status']}")
             time.sleep(2)
         entries = [entries[c] for c in case_ids]

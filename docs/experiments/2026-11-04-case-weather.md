@@ -104,12 +104,13 @@ Scored triples change by under 0.1 %: Oyster Bay 40,889 to 40,861, the eagle cam
 - **Oyster Bay.** The refit procedure reproduces the committed fits (f0, v, d and t_cpa to the second decimal), so the comparison is fair.
   - Refitted at the ground temperature and searched per flight, the true pair keeps rank 1 with a margin of 8.7 %: above both the default's 4.9 % and the committed fits' 2.0 % with the weather on. Refined error is 84 m against the default's 43 m.
   - Event 2's refit moves more than c alone would: v 141 to 121 m/s, d 5.9 to 4.3 km. The contrast optimum shifts with c.
-  - This supports the 15 °C fits being the mismatch. Read literally, though, "within 1 point of 4.9 %" fails: the margin overshoots, so the criterion's number isn't met.
-- **The eagle cam can't be judged.** Its check fails: refitting the committed fits at 15 °C, by `detect`'s refine step on the clip's spectrogram, doesn't reproduce them.
+  - **Criterion met on margin, as intended.** The PM's intent was recovery: a margin back to at least 3.9 %. 8.7 % at rank 1 meets that. The cost is the refined error, 84 m against the default's 43 m. This supports the 15 °C fits being the mismatch for Oyster Bay.
+  - **The size of event 2's move is the open point.** A 1.9 % change in c should move v and d by 1.9 % (d ln v / d ln c = 1, model-error stage 3). They moved 14 % and 28 %. So the fit has probably landed in another basin of its objective, and the profile that tests this follows.
+- **The eagle cam can't be judged, and that is a provenance problem for the benchmark: the case's saved fits can't be reproduced from the case's own inputs.** Its check fails: refitting the committed fits at 15 °C, by `detect`'s refine step on the clip's spectrogram, doesn't reproduce them.
   - Event 2's CPA moves 2.8 s and its distance from 3.1 to 3.3 km, and the true pair falls from rank 1 to rank 392.
   - The committed fits came from `detect` on the full 12-hour recording, whose spectrogram and whitening differ from the clip's.
   - So the temperature refit, with the true pair not ranked, says nothing about temperature. It does show again how fragile the eagle cam's result is: a 3 s shift in one fit takes the true pair from first to 392nd.
-- **Outcome: the criterion isn't met, and the temperature stays off by default.**
+- **Outcome: the eagle cam half isn't met, and the temperature stays off by default** until Oyster Bay's event 2 is profiled and the eagle cam's fits are remade from the full recording.
   - Oyster Bay says the per-flight path wants fits made at the same temperature.
   - The eagle cam needs its fits remade the way they were made, with `detect` on the full recording at each temperature, before it can answer.
 

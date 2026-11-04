@@ -68,7 +68,7 @@ def main(argv=None):
     f.add_argument("--objective", choices=("brightness", "contrast"), default="brightness",
                    help="brightness: mean brightness under the curve (the docs/results fits); contrast: the sweep-weighted ridge contrast detect uses")
 
-    d = sub.add_parser("detect", help="scan a whole spectrogram for Doppler events and rank them")
+    d = sub.add_parser("detect", help="scan a whole spectrogram for Doppler events and rank them (cached in $DOPPLERTRACK_CACHE/detections)")
     d.add_argument("spec"); d.add_argument("--band", nargs=2, type=float, required=True, metavar=("FLO", "FHI"))
     d.add_argument("--harmonics", type=int, default=1); d.add_argument("--top", type=int, default=20)
     d.add_argument("--window", type=float, default=240.0); d.add_argument("--out", help="write ranked fits as a JSON list")
@@ -161,10 +161,13 @@ def main(argv=None):
         if a.out:
             open(a.out, "w").write(js)
     elif a.cmd == "detect":
-        from .tracks import detect_events
+        from . import tracks
+        from .cache import cached_detections
         sp = Spectrogram.load(a.spec)
-        evs = detect_events(sp, a.band[0], a.band[1], harmonics=a.harmonics, top=a.top, window_s=a.window, min_score=a.min_score,
-                            workers=a.jobs, progress=lambda k, n: print(f"\r  window {k}/{n}", end="", flush=True))
+        # cached on the spectrogram's contents, the parameters and the detector's source ($DOPPLERTRACK_CACHE)
+        evs = cached_detections(sp, tracks.detect_events, f_lo=a.band[0], f_hi=a.band[1], harmonics=a.harmonics,
+                                top=a.top, window_s=a.window, min_score=a.min_score, workers=a.jobs,
+                                progress=lambda k, n: print(f"\r  window {k}/{n}", end="", flush=True))
         print()
         if not evs:
             print("no flyovers found")

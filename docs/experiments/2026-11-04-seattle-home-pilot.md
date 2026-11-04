@@ -78,7 +78,19 @@ the site.
 
 ### Locate
 
-Pending: run 4.
+**Run 4** (`private/runs/2026-11-04-seattle-home-pilot-4/locate/`, 541 s for the box, $0.05): `locate` detected 10
+flyovers, all 10 usable, on a recording with every frame valid. It then stopped before searching, `insufficient_evidence`
+with `flight_data_missing_time`. The case's ADS-B cut was fetched on the day itself and ends at 20:13Z, while
+`locate` required data for the whole UTC day, and that rule doesn't depend on the clock gate. There are no candidates,
+no refined point and no funnel, so there is nothing to place and no measure of the site's distance yet.
+
+The whole-day rule is there for a search with no stated start, whose clock can fall anywhere in the day. Under the clock
+gate in the criteria above, every triple whose start is more than the stated 1 s plus `tol_s` from the stated start
+is dropped, so only the recording's own window of flight data can reach a candidate. `locate` now asks for that
+window when a start is stated: the stated start ± (its tolerance + `tol_s` + 300 s) across the recording, capped at the
+whole-day bounds, so no case it passed before now fails. The cut covers the window. One thing changes slightly: the
+comparable score's null draws wrong flights from the whole CPA table, which here lacks the day after 20:13Z. Run 5
+reruns `locate` alone on the same case.
 
 ## Outcome
 

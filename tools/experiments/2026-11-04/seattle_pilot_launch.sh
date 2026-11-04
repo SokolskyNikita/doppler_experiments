@@ -6,7 +6,8 @@
 # spectrogram and locate only. --silence off runs locate with the silence filter off, into $RUN/locate-silence-off.
 # --box KM (the box series): locate's box becomes a KM-km square around the site, its centre 73 m west and 131 m south
 # of it so the site is off every 200 m node, with the metro box the cut was fetched for (adsbfetch's own record of
-# the query, public) as the flight data's envelope; into $RUN/locate[-silence-off]-box<KM>km.
+# the query, public) as the flight data's envelope; into $RUN/locate[-silence-off]-box<KM>km. --spacing M (with
+# --box) sets the grid spacing in metres, into ...-box<KM>km-sp<M>m.
 # APPROVED_LIST: one path per line, relative to $DOPPLERTRACK_DATA, as the owner cleared them (blank lines and # comments
 # ignored). The run needs every one of these, so a missing one stops the launch before anything ships:
 REQUIRED=(
@@ -38,7 +39,8 @@ while [ $# -gt 0 ]; do
     "--box "[0-9]*) KM=$2
       LOCATE_ARGS="$LOCATE_ARGS --search-param box_m=$((KM * 1000)) --search-param box_offset_m=[73.0,131.0]"
       LOCATE_ARGS="$LOCATE_ARGS --search-param extraction_box=[47.45,47.80,-122.60,-122.05]"
-      BOX_SUFFIX=-box${KM}km ;;
+      BOX_SUFFIX=-box${KM}km${BOX_SUFFIX:-} ;;
+    "--spacing "[0-9]*) LOCATE_ARGS="$LOCATE_ARGS --search-param spacing_m=$2"; BOX_SUFFIX=${BOX_SUFFIX:-}-sp${2}m ;;
     *) echo "unknown option: $1 ${2:-}"; exit 1 ;;
   esac
   shift 2

@@ -626,7 +626,7 @@ def test_a_box_override_squares_a_private_case_around_its_site_and_off_the_grid(
     seen = {}
 
     def fake_locate(spec, date, bbox, paths, cfg, **kw):
-        seen.update(bbox=bbox, cache=cfg.cpa_cache, envelope=cfg.envelope)
+        seen.update(bbox=bbox, cache=cfg.cpa_cache, envelope=cfg.envelope, spacing=cfg.spacing_m)
         raise RuntimeError("stop here")
     monkeypatch.setattr(loc, "locate", fake_locate)
     case = private.resolve_case(runner.blind_case("home-1", path=private_home))
@@ -637,6 +637,8 @@ def test_a_box_override_squares_a_private_case_around_its_site_and_off_the_grid(
                                                 "extraction_box": [39.0, 43.0, -76.0, -71.0]})
     assert seen["bbox"] == box and seen["cache"].endswith("_box8000m.npz") and "stop here" in rec["execution"]["errors"][0]
     assert seen["envelope"] == [[39.0, 43.0, -76.0, -71.0]]
+    runner.execute_case_locate(case, tmp_path, log=lambda *a: None, overrides={"box_m": 4000, "spacing_m": 50})
+    assert seen["cache"].endswith("_box4000m_sp50m.npz") and seen["spacing"] == 50.0
     public = {**case}
     del public["site"]
     rec = runner.execute_case_locate(public, tmp_path, log=lambda *a: None, overrides={"box_m": 8000})

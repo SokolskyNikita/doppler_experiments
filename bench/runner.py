@@ -802,18 +802,20 @@ def execute_case_locate(case: dict, case_dir: Path, log=print, code: dict | None
     overrides = dict(overrides or {})
     weather = bool(overrides.get(WEATHER_KEY, False))
     unknown = set(overrides) - {"pair_rule", "silence_d_m", "clock_gate", "box_m", "box_offset_m", "extraction_box",
-                                WEATHER_KEY}
+                                "spacing_m", WEATHER_KEY}
     if "box_m" in overrides:       # a private case's box, as a square around its site (box series); its own CPA table
         if "site" not in case:
             unknown.add("box_m (private cases only)")
         else:
             from . import private as priv
             side, off = float(overrides["box_m"]), [float(x) for x in overrides.get("box_offset_m", [0.0, 0.0])]
+            spacing = float(overrides.get("spacing_m", case["search"]["spacing_m"]))
             cache = Path(case["search"]["cpa_cache"])
+            tag = f"_box{side:g}m" + (f"_sp{spacing:g}m" if "spacing_m" in overrides else "")
             case = {**case, "search": {**case["search"], "bbox": priv.site_box(priv.load_site(case["site"]), side, off),
-                                       "cpa_cache": str(cache.with_name(f"{cache.stem}_box{side:g}m{cache.suffix}"))}}
-    elif "box_offset_m" in overrides:
-        unknown.add("box_offset_m (without box_m)")
+                                       "spacing_m": spacing, "cpa_cache": str(cache.with_name(f"{cache.stem}{tag}{cache.suffix}"))}}
+    elif "box_offset_m" in overrides or "spacing_m" in overrides:
+        unknown.add("box_offset_m or spacing_m (without box_m)")
     if "extraction_box" in overrides:   # the flight data's declared envelope, for a file whose own isn't measured
         if "site" not in case:
             unknown.add("extraction_box (private cases only)")
@@ -837,7 +839,7 @@ def execute_case_locate(case: dict, case_dir: Path, log=print, code: dict | None
     try:
         if unknown:
             raise ValueError(f"the locate profile takes only pair_rule, silence_d_m, clock_gate and (private) box_m, "
-                             f"box_offset_m and extraction_box overrides, not {sorted(unknown)}")
+                             f"box_offset_m, spacing_m and extraction_box overrides, not {sorted(unknown)}")
         out = loc.locate(resolve(case["spectrogram"]), case["flight_data"]["date"], s["bbox"], paths, cfg,
                          out_dir=case_dir, code=code or code_revision(), log=log)
         record = out.record

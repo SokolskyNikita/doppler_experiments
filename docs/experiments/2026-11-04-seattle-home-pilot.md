@@ -2,7 +2,7 @@
 
 <!-- index
 question: What does the owner's indoor phone recorder hear of the propeller traffic around it, and what does locate make of a 2.3 h session?
-outcome: Indoors the stored 40-450 Hz carries passes within about 1 km, as lines (tonal 2, broadband 3 of the ear's 11); the gap is placement, detection or the stored band; locate's top 4 km node is the site's (no verdict)
+outcome: Indoors the stored 40-450 Hz carries passes within about 1 km, as lines; the gap is placement, detection or the stored band; locate finds the site on-node, 482 m off it off-node (4 km fails the series criterion)
 -->
 
 ## Question
@@ -275,7 +275,8 @@ The funnel:
 | Scored | 6 |
 
 This time the comparable rule chose a different event pair, and the time join kept 6 triples. All 6 are the same
-flight pair, the two passes the known-point check heard.
+flight pair: one of the two passes the known-point check heard (about 0.5 km), and the 0.8 km piston it missed at z
+4.1 (pass picture 4).
 
 **The scored triples' surface (from the site-relative sidecar):**
 
@@ -304,6 +305,65 @@ flight pair, the two passes the known-point check heard.
 
 **Run 6** (at b8802ee) ran `locate` and then failed at the end of the broadband check, on a numpy integer in its JSON.
 The PM's fix reruns the check in `broadband` mode.
+
+**Run 9: off the grid, the 4 km box fails the criterion.** Run 9 (`private/runs/2026-11-04-seattle-home-pilot-9/
+locate-silence-off-box4km/`) is the series' 4 km box, with the site 73 m east and 131 m north of its centre, off the
+grid. It ended `ambiguous` (`winner_only_refined`, `silence_filter_off`).
+
+The funnel:
+
+| Stage | Count |
+|---|---|
+| CPA records | 134,641 |
+| Time join | 36 |
+| Clock gate | 20 |
+| Scored | 20 |
+
+The comparable rule chose another event pair: the same 0.8 km piston with the 1.8 km piston of pass picture 6. Both
+are real passes near the site, and neither cleared the tonal check's strict rule.
+
+- **Top candidate:** 482 m from the site, score 5.13. The grid node nearest the site, 100 m away, scores 3.13 for this
+  pair.
+- **Clock:** the pair's clock puts the start 0.49 s from the stated one, well inside the gate. The −6.0 s is the
+  residual shift of the curve against the events, at the edge of its ±6 s sweep, so the winning node needed the
+  largest time slip allowed. At the site in run 7 it was −1.0 s.
+- **Refine:** 294 m from the site, score 35.1 with 8 more flyovers. Its ±600 m window covered the site, but it inherits
+  the winning triple's clock.
+- **Verdict:** by the criterion written first (rank 1 within 300 m), the 4 km size fails, and the judged series stops
+  here.
+
+The scored surface (this pair only):
+
+| Node | Distance from the site | Score |
+|---|---|---|
+| top | 482 m | 5.13 |
+| second | 141 m | 4.88 |
+| | 294 m | 4.79 |
+| | 677 m | 4.52 |
+| | 331 m | 4.29 |
+| | 472 m | 4.15 |
+| nearest the site | 100 m | 3.13 |
+
+This pair's surface is broad: four nodes from 141 to 677 m are within 12 % of the top.
+
+**What moved the answer: sampling, not the clock.** The comparable rule searches every pair of the top 5 events and
+keeps the pair whose top node scores highest.
+- In run 7, run 7's pair scored 5.95 on the site's own node and about 2 at the nodes 200 m away: a peak narrower than
+  the grid.
+- In run 9, that pair can't have scored above 5.13 at any node, or it would have won. With the site 150 m off the grid,
+  its peak fell between nodes, and a pair with a broader, displaced surface won instead.
+- So the true point doesn't lose on its clock. At the site, run 7's pair has the clock 0.31 s from the stated start
+  and a 1 s residual shift. It loses on the 200 m grid's sampling of a sharp peak.
+- So run 7's 0 m was partly the node artefact. The record keeps both runs.
+
+**Run 10, the direct test:** the same off-node 4 km box at 50 m spacing (`--box 4 --spacing 50`). If run 7's pair wins
+again with the top within 300 m of the site, the failure is sampling. If not, it is the method.
+
+The method's fix would choose among pairs after each pair's top is refined, not on the coarse grid. That is
+recorded here, not built.
+
+**8 and 12 km:** run as the owner asked, at 200 m. They are reported, not judged: they fall outside the pre-registered
+rule, and they carry the same sampling limit.
 
 ### The box series: criterion, written before any run
 
@@ -360,7 +420,10 @@ So far, from runs 4, 5 and 7:
     next session, rerun the known-point and broadband checks on both bands (pre-registered above), and meanwhile
     the owner re-listens to the band-limited copy.
 
-The box series (4, 8 and 12 km, then 20 km once the day's archive is out) looks for the limit.
+- Run 9, the box series' first size: 4 km with the site off the grid fails the criterion. Its top is 482 m away, on
+  a different event pair with a broader surface. Run 7's sharp pair can't score above it on a 200 m grid that misses
+  its peak. So the judged series stops at 4 km. Run 10 (50 m spacing) tests whether sampling is the cause, and 8 and
+  12 km are reported, not judged.
 
 ## Files
 

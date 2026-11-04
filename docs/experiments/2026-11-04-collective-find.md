@@ -129,3 +129,33 @@ Twelve units on 12 spot 8xlarge boxes, the unit shards relaunched after spot int
 **Decision line.** "If 1–4 hold" is false, whatever γ shows: step B doesn't become the collective find in this form. The proposal's second line ("if 1 fails on the eagle cam while Oyster Bay passes") doesn't apply either: the failure is the other way round. What the null can still tell:
 - whether the eagle cam's win is significant over SWFL traffic;
 - whether the negatives stay below γ.
+
+## A design step, written before the next rerun: cells by margin, the tone per candidate
+
+**Two causes, both design.** Both lost Oyster Bay, and both repeat the per-event fit's failure: the find inherits a fixed choice made before the evidence is weighed.
+- **The pruning keeps a count, not a margin.** Five cells out of 3,876, whatever the scores.
+- **The tone comes from detection's coarse template.** ace391's window is the second-strongest of ten, and its coarse tone (140 Hz) is 11.5 % off the true line (125.5 Hz). Its estimate isn't weak; it is confidently wrong, so a sweep widened only where the tone estimate is weak wouldn't catch it.
+
+**The step, fixed now.**
+1. **The coarse map is written whole,** every cell's Z, so the true cell's rank is known on each case. The fine stage keeps every coarse cell with Z ≥ Z_max − 2σ_c, where σ_c is 1.4826 × the MAD of the coarse Z over the cells with Z > 0. The count is reported, not fixed, under a cap of 20 cells by Z. Where the cap binds, the record gives the margin it reached.
+2. **The tone is each candidate's own.** For each (point, flight, window), the score is maximised over f0 across ±25 % of detection's coarse tone: the crop's span holds it, and ace391 needs −10.4 %. So each candidate flight's curve picks its own f0 from the window's observed frequencies, instead of starting from detection's.
+   - This is the PM's variant (b). Its look-elsewhere cost is the same as any ±25 % sweep's. Each window's null is drawn with the same rule, so the cost is priced there, and the other-day null redraws on it.
+   - The coarse stage takes the same ±25 % (at 2 % steps); the fine stage steps at 0.5 %.
+
+**The cost, and its bound.**
+- **Today's fine stage** on Oyster Bay is 2,543 s for 5 cells × 41 tone points on an 8xlarge, about 510 s per cell.
+- **The new step at today's sampler** would be 20 cells × 101 tone points, about 21 min per cell and 7 box-hours per case at the cap.
+- **Two implementation items keep that affordable.**
+  - **A log-frequency view of each window:** a scaled f0 becomes an index shift, so the 101 tone points are a gather from one precomputed (log f × time) matrix, not 101 bilinear samplings. Its speed is measured on the unit test before any run.
+  - **The fine stage as fleet units,** one per (case, kept cell). The wall time per case is then one cell's, under 21 min, and the box cost is at most 7 hours per case.
+- **The null at the cap** would be up to 150 × 7 box-hours for New York. That's why the coarse map comes first: it says what the cap needs to be.
+
+**The order.**
+1. **The coarse map,** at ±25 %, on the eight cases. It's cheap, about 5–10 min per case. It reports the true cell's rank on the positives.
+2. **The fine stage** within the margin.
+3. **Only then** the New York draws.
+
+**What it should do to the eagle cam.**
+- **Its z values drop.** Widening the sweep from ±5 % to ±10 % took a2baea from z 6.59 to 4.95, and a336e4 from 2.44 to 1.80, about × 0.75 each. Going to ±25 % should cost a similar factor again: about 3.5 and 1.3.
+- **Both should stay matched.** The margin rule can only add cells, so it can't drop the eagle cam's winning cell. Its second mode (9.37 against 16.27) leaves room.
+- **I expect the eagle cam's location and matched set unchanged,** with lower z, and ace391 reachable at Oyster Bay. Whether Oyster Bay's true cell then wins is what the coarse map's rank says first.

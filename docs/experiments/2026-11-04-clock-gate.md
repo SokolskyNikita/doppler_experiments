@@ -52,6 +52,14 @@ the gate. The gate passes if:
 Then the eagle cam's and the midnight cases' outcomes are read and reported as they come, with no pass or fail on
 them: found, a different wrong pair inside the gate, or `no_surviving_candidate`.
 
+**Conditions, added before the run's other shards (after its smoke shard).** The smoke shard (Oyster Bay and the
+cut-short case, `runs/2026-11-04-locate-gate-s4of5/`) ran at 15 °C. Since the Tier 2 runs, SDE-D's change made a case's
+station temperature apply only when a run asks for it (`bench run --weather`), and the Tier 2 finds were made with it
+(Oyster Bay at 25.6 °C, each flight's own speed from its height). At 15 °C Oyster Bay's comparable search ranks the true
+pair third (17.98 against 18.0+ for the winner), with the gate keeping the whole stated day. So the gate is judged
+against Tier 2 at Tier 2's conditions: all ten cases with `--weather`, criterion as above. The 15 °C reading is reported
+beside it, since it says the Tier 2 find depends on the station temperature.
+
 ## Results
 
 Pending.

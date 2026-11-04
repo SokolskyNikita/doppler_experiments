@@ -133,6 +133,24 @@ def pick_detected(detected: list[dict]) -> list[dict]:
     return sorted(top, key=lambda d: d["t_cpa"])
 
 
+def sound_speed(case: dict) -> tuple[dict, dict]:
+    """The case's speed of sound, as keyword arguments for the pipeline ({} keeps its 15 C default untouched)
+    and as the record's account of where it came from."""
+    from dopplertrack.atmosphere import mid_height_temperature
+    from dopplertrack.doppler import speed_of_sound
+    w = case.get("weather") or {}
+    t = w.get("temperature_c")
+    if t is None:
+        return {}, {"c_m_s": speed_of_sound(), "temperature_c": None, "basis": "the pipeline's default, 15 C"}
+    h = w.get("aircraft_height_m")
+    eff = t if h is None else mid_height_temperature(t, h)
+    c = speed_of_sound(eff)
+    return {"c": c}, {"c_m_s": c, "temperature_c": t, "aircraft_height_m": h, "effective_temperature_c": eff,
+                      "basis": "ground temperature" if h is None else "temperature halfway up (ground - 3.25 C per km)",
+                      "source": w.get("source"), "station": w.get("station"),
+                      "station_distance_km": w.get("station_distance_km"), "observed_utc": w.get("observed_utc")}
+
+
 def trace_paths(case: dict) -> list[Path]:
     """A case's flight data: one trace file, or consecutive days of one box."""
     t = case["flight_data"]["traces"]
@@ -180,7 +198,6 @@ class Draft:
 
     def __init__(self, case: dict, code: dict, profile: str, log, overrides: dict | None = None):
         from dopplertrack.coverage import padded_bbox
-        from dopplertrack.doppler import speed_of_sound
         assert "labels" not in case, "the runner must be given the blind case"
         self.case, self.code, self.stage, self.errors = case, code, Stages(log), []
         overrides = dict(overrides or {})
@@ -194,7 +211,8 @@ class Draft:
         self.harmonics = list(overrides["harmonics"]) if "harmonics" in overrides else search_harmonics(case, profile)
         self.params = {"profile": profile, "profile_settings": PROFILES[profile], "search": s, "refine": case["refine"],
                        "search_overrides": overrides, "events": case["events"], "search_harmonics": self.harmonics,
-                       "speed_of_sound_m_s": speed_of_sound()}
+                       "speed_of_sound_m_s": sound_speed(case)[1]["c_m_s"], "speed_of_sound": sound_speed(case)[1]}
+        self.c_kw = sound_speed(case)[0]
         self.inputs, self.caches, self.events, self.candidates = [], [], [], []
         self.refined = unavailable("the search did not run")
         self.funnel = {k: unavailable("the search did not run") for k in (
@@ -365,7 +383,7 @@ def execute_case(case: dict, case_dir: Path, log=print, code: dict | None = None
                 # cached on the spectrogram, the parameters and the detector's source
                 detected = [e.to_dict() for e in cached_detections(sp, detect_events, f_lo=d["band_hz"][0],
                                                                    f_hi=d["band_hz"][1], harmonics=d["harmonics"],
-                                                                   top=d["top"], window_s=d["window_s"])]
+                                                                   top=d["top"], window_s=d["window_s"], **draft.c_kw)]
             (case_dir / "detected.json").write_text(json.dumps(detected, indent=1) + "\n")
             fits = pick_detected(detected)
             draft.add_events(fits, harmonics, "detect", "detect's sweep-weighted ridge contrast")
@@ -384,7 +402,7 @@ def execute_case(case: dict, case_dir: Path, log=print, code: dict | None = None
                                             silence_d_m=s["silence_d_m"], max_range_m=s["max_range_m"],
                                             progress=False, cpa_cache=str(cache_path),
                                             trace_metadata=meta, search_bbox=tuple(s["bbox"]), triples=triples,
-                                            **draft.extra_kwargs)
+                                            **draft.c_kw, **draft.extra_kwargs)
         draft.caches.append(file_entry("cpa_table", cache_path))
         draft.stage.stages += [{"name": f"search.{k}", "wall_s": round(v["wall_s"], 3), "cpu_s": round(v["cpu_s"], 3)}
                                for k, v in res.attrs.get("stages", {}).items()]
@@ -404,7 +422,8 @@ def execute_case(case: dict, case_dir: Path, log=print, code: dict | None = None
                 hs = harmonics + [1] * (len(ev) - len(harmonics))
                 fine = pipeline.refine(sp, ev1, ev2, segs, row, spacing_m=rf["spacing_m"], half_m=rf["half_m"],
                                        harmonics=tuple(harmonics[:2]), elevation=terrain.elevation if terrain else None,
-                                       extra=ev[2:], extra_harmonics=hs[2:], max_range_m=s["max_range_m"])
+                                       extra=ev[2:], extra_harmonics=hs[2:], max_range_m=s["max_range_m"],
+                                       **draft.c_kw)
             draft.add_refined(fine, list(fine.attrs.get("extra_icao", [])))
     except Exception as exc:          # kept apart from the verdict: a failed run is not an abstention
         draft.errors.append(f"{type(exc).__name__}: {exc}")
@@ -464,6 +483,8 @@ def execute_case_at(case: dict, case_dir: Path, rev, log=print, code: dict | Non
             draft = Draft(case, draft.code, profile, log, overrides)
             stage, s = draft.stage, draft.search
         verify(rev)
+        if sound_speed(case)[0]:
+            raise ValueError(f"{rev.short}'s CLI has no temperature input; this case sets one")
         bad = {k: s[k] for k, v in FIXED_IN_CLI.items() if s[k] != v}
         if bad or s["silence_d_m"] not in (6000.0, None):
             raise ValueError(f"{rev.short}'s CLI can't take {bad or {'silence_d_m': s['silence_d_m']}}")

@@ -91,3 +91,41 @@ One counted retune is allowed, of the clock vote's cluster width.
 **Expectation.**
 - The pair rule lands in wrong basins on most turn and both cases at every amplitude, and on some straight ones at 0.02. C's window round 2 found brightness bimodal even on straight synthetic passes, though `detect` and locate's ten searches use contrast.
 - The collective find is within 2 km on all cases at 0.05 and 0.03, and on some at 0.02.
+
+## The own-day rerun: the top 5 coarse cells (40454ae)
+
+Twelve units on 12 spot 8xlarge boxes, the unit shards relaunched after spot interruptions at the same commit, merged into `runs/2026-11-04-collective-find-merge/` (`collective.json`, and `OWN.json` for A's null). Each unit's result was written before any label was read.
+
+| Case | Sweep | Z | Second mode ≥ 2 km off | Distance from truth | True flights matched | Fine stage |
+|---|---|---|---|---|---|---|
+| oyster-bay | ±10 % | 15.30 | 15.10 | 29.6 km | neither | 2,543 s |
+| oyster-bay-hp150-aac32k | ±10 % | 18.38 | 15.08 | 61.1 km | neither | 2,215 s |
+| eagle-cam-clip-18000s | ±10 % | 16.27 | 9.37 | **0.5 km** | **both** (a2baea z 4.95, a336e4 z 1.80) | 1,279 s |
+| eagle-cam-midnight | ±10 % | 8.81 | 8.06 | 19.1 km | – | 977 s |
+| oyster-bay-moved-wsw150 (−) | ±10 % | 19.30 | 17.36 | – | – | 1,571 s |
+| oyster-bay-moved-north150 (−) | ±10 % | 10.37 | 9.91 | – | – | 340 s |
+| oyster-bay-sources-removed (−) | ±10 % | 15.31 | 14.97 | – | – | 2,131 s |
+| xenocanto-xc990819 (−) | ±10 % | 13.36 | 12.93 | – | – | 610 s |
+| oyster-bay | ±5 % | 19.82 | 17.33 | 58.3 km | neither | 777 s |
+| oyster-bay-hp150-aac32k | ±5 % | 21.51 | 21.22 | 58.5 km | neither | 728 s |
+| eagle-cam-clip-18000s | ±5 % | 17.21 | 14.76 | 1.3 km | both (z 6.59, 2.44) | 816 s |
+| eagle-cam-midnight | ±5 % | 10.10 | 9.50 | 23.5 km | – | 553 s |
+
+**Against the criteria.** Criterion 3 waits for A's γ; its draws are the other-day null below.
+1. **Fails on Oyster Bay and its copy at both sweeps; holds on the eagle cam clip at both.** eagle-cam-midnight's winner is 19 km off.
+2. **Holds only trivially.** eagle-cam-midnight's clock puts the recording on 2024-12-28, but 9.3 h from its start.
+3. **Waits for A's γ.**
+4. **Fails.** The fine stage alone takes 6–42 min per case against 2–3 min, though the top-5 rule cut it 2–6× from the first run.
+
+**Why Oyster Bay fails.**
+- **The true cell never reaches the fine stage.** None of the five kept coarse cells is within 14 km of the truth, on any of the three Oyster Bay runs. The kept cells' coarse Z are 18–23 (±10 %), out of 3,876 cells in the case's 100 × 150 km box of New York traffic.
+- **The winner doesn't depend on the true flights.** oyster-bay's winner and matched flights (a0bcb7, a27aab) are sources-removed's exactly: the same point, found with the true pair deleted.
+- **ace391's window is out of the fine sweep's reach.** Detection gives its window a coarse tone of 140 Hz against the true line's 125.5 Hz, 11.5 % off. The fine stage's ±10 % can't reach it even at the true point; the coarse stage's ±12 % just can.
+
+**Against the expectation.** I expected Oyster Bay to pass 1 and the eagle cam to be the doubtful one. The opposite happened:
+- the eagle cam is found with both true flights, weak window included, at both sweeps;
+- Oyster Bay is lost twice over, in the coarse ranking and in the tone sweep.
+
+**Decision line.** "If 1–4 hold" is false, whatever γ shows: step B doesn't become the collective find in this form. The proposal's second line ("if 1 fails on the eagle cam while Oyster Bay passes") doesn't apply either: the failure is the other way round. What the null can still tell:
+- whether the eagle cam's win is significant over SWFL traffic;
+- whether the negatives stay below γ.

@@ -6,7 +6,8 @@ so the clock anchor (which changes scores, not survival) isn't part of this tabl
 The emission gate is applied once at the widest G_e: a narrower gate keeps a subset of its triples,
 and the silence filter acts on each triple alone. Each triple's two modelled steepest falls are
 computed once, with the same estimator run_search uses. The true pair counts as surviving if its two
-flights form a surviving triple anywhere in the box, as the runner counts it.
+flights form a surviving triple anywhere in the box, as the runner counts it; and, more strictly, near
+the reference if they do so at a grid point within NEAR_M of the reference location.
 
 It also records, at the grid point nearest the reference, each true flight's modelled steepest fall
 minus its CPA table t_emit (the PLAN item's measurement bullet).
@@ -37,6 +38,7 @@ REPO = Path(__file__).resolve().parents[3]
 DATA = Path(os.environ.get("DOPPLERTRACK_DATA", Path.home() / "data" / "dopplertrack"))
 G_E = (8.0, 12.0, 16.0, 20.0)
 T_SF = (2.0, 3.0, 4.0, 6.0)
+NEAR_M = 250.0       # the grid points around the reference at 200 m spacing
 SF = dict(window_s=60.0, smooth_s=3.0, flat_ratio=SF_FLAT_RATIO)
 _STATE: dict = {}
 
@@ -84,8 +86,14 @@ def main():
                  v2=(ev2.v * (1 - s["v_tol"]), ev2.v * (1 + s["v_tol"])), d2=(ev2.d * s["d_tol"][0], ev2.d * s["d_tol"][1]),
                  silence_d_m=s["silence_d_m"])
 
-    def survives(p):
-        return bool(np.any((icao[p.seg1.to_numpy()] == true[0]) & (icao[p.seg2.to_numpy()] == true[1])))
+    ref = lab["reference"]
+    dist = np.hypot((grid.lat - ref["lat"]) * 111320.0, (grid.lon - ref["lon"]) * 111320.0 * np.cos(np.radians(ref["lat"])))
+
+    def survives(p, near=False):
+        hit = (icao[p.seg1.to_numpy()] == true[0]) & (icao[p.seg2.to_numpy()] == true[1])
+        if near:
+            hit &= dist[p.gidx.to_numpy()] <= NEAR_M
+        return bool(np.any(hit))
 
     fh: dict = {}
     heard = search.pair_candidates(cpa, ev2.t_cpa - ev1.t_cpa, tol_s=s["tol_s"], funnel=fh, **gates)
@@ -107,10 +115,10 @@ def main():
         for t in (None, *T_SF):
             keep = in_gate if t is None else in_gate & (unplaceable | (np.abs(dm - df) <= t))
             rows.append({"G_e": g, "T_sf": t, "reaching_scoring": int(keep.sum()), "unplaceable": int((keep & unplaceable).sum()),
-                         "true_pair_survives": survives(em[keep]), "flight_pairs": len(set(zip(icao[cols[1][keep]], icao[cols[2][keep]])))})
+                         "true_pair_survives": survives(em[keep]), "true_pair_near_reference": survives(em[keep], True),
+                         "flight_pairs": len(set(zip(icao[cols[1][keep]], icao[cols[2][keep]])))})
     # the measurement bullet: true flights at the grid point nearest the reference
-    ref = lab["reference"]
-    near = int(np.argmin((grid.lat - ref["lat"]) ** 2 + ((grid.lon - ref["lon"]) * np.cos(np.radians(ref["lat"]))) ** 2))
+    near = int(np.argmin(dist))
     meas = []
     for p in (em, heard):
         hit = p[(p.gidx == near) & (icao[p.seg1.to_numpy()] == true[0]) & (icao[p.seg2.to_numpy()] == true[1])]
@@ -125,7 +133,8 @@ def main():
     out = {"case": a.case, "events": a.events, "pick": a.pick, "event_fits": [ev1.to_dict(), ev2.to_dict()],
            "true_pair": true, "cpa_table": a.cpa, "cpa_built_in_memory": built, "sf_knobs": SF,
            "fitted_steepest_fall_gap_s": None if not np.isfinite(df) else float(df), "fitted_emission_gap_s": dt_emit,
-           "heard_gate": {"tol_s": s["tol_s"], **fh, "true_pair_survives": survives(heard)},
+           "heard_gate": {"tol_s": s["tol_s"], **fh, "true_pair_survives": survives(heard),
+                          "true_pair_near_reference": survives(heard, True)},
            "emission_widest": fe, "grid": rows, "true_flights_at_reference": meas,
            "wall_s": round(time.perf_counter() - t0, 1)}
     Path(a.out).write_text(json.dumps(out, indent=1) + "\n")

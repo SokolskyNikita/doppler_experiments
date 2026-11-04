@@ -33,6 +33,9 @@ Bay cases are one recording, so without the eagle cam the decision would rest on
 eagle cam's raw-audio cells are reported beside them, as out of this item's reach, with the wrong pick
 named. The Oyster Bay cases are still judged at raw-audio.
 
+**Clarification, 2026-11-04, before the deciding table was read.** "The smallest count" is the smallest
+total of triples reaching scoring over the three judged cases. Each case's count is shown beside it.
+
 ## Design
 
 All knobs are `run_search` keyword arguments and `search` flags. Their defaults reproduce the previous

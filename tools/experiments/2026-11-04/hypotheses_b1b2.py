@@ -94,7 +94,7 @@ def main(run: Path, jobs: int):
             a0 = time.perf_counter()
             w = EventWindow.from_fit(sp, ev, h)
             null = event_null(w, cpa, segs, grid.enu, c, workers=jobs)
-            hyps = H.event_hypotheses(sp, w, ev, c, null["sigma"], h)
+            hyps = H.event_hypotheses(sp, w, ev, c, null["sigma"], h, v_tol=s["v_tol"], d_tol=tuple(s["d_tol"]))
             adm = H.admitted(cpa, hyps)
             v_tol, (dlo, dhi) = s["v_tol"], s["d_tol"]
             today = (cpa.v.between(ev.v * (1 - v_tol), ev.v * (1 + v_tol)) & cpa.d.between(ev.d * dlo, ev.d * dhi)).to_numpy()

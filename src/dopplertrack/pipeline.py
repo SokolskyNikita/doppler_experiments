@@ -322,7 +322,8 @@ def run_search(sp: Spectrogram, ev1: EventFit, ev2: EventFit, traces: list[Trace
       sensitivity ranges in v, k = v^2/d, tau and f0, merged where they agree. A CPA row is admitted for an event
       if a hypothesis holds its speed and v^2/d. Every pair of the two events' hypotheses is joined at its own
       time offset, and each triple is scored with its event-1 hypothesis's heard CPA as the clock anchor and an
-      f0 sweep widened to the hypotheses' f0 ranges. v_tol and d_tol are unused. res.attrs["hypotheses"] holds
+      f0 sweep widened to the hypotheses' f0 ranges. v_tol and d_tol set only the fallback for an event without
+      an informative hypothesis (hypotheses.gate_hypothesis). res.attrs["hypotheses"] holds
       them, the funnel gains "event1_hypotheses" and "event2_hypotheses", and its event gates count admitted rows.
       It doesn't combine with sf_tol_s or the steepest anchor yet.
 
@@ -376,7 +377,7 @@ def run_search(sp: Spectrogram, ev1: EventFit, ev2: EventFit, traces: list[Trace
             if sf_tol_s is not None or clock_anchor == "steepest":
                 raise ValueError("hypotheses=True doesn't combine with the steepest-fall check or anchor yet")
             nulls = [event_null(w, cpa, segs, grid.enu, c, workers=workers) for w in (w1, w2)]
-            hyps = [event_hypotheses(sp, w, ev, c, nl["sigma"], h)
+            hyps = [event_hypotheses(sp, w, ev, c, nl["sigma"], h, v_tol=v_tol, d_tol=d_tol)
                     for w, ev, nl, h in zip((w1, w2), (ev1, ev2), nulls, harmonics)]
             pairs = _pair_hypotheses(cpa, hyps, tol_s, emission, silence_d_m, funnel, triples)
         else:

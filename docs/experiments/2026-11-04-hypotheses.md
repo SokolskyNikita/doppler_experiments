@@ -92,6 +92,7 @@ score triples, so neither fix touches it, and it stands.
      threshold is multiplied by 3² = 9: LS 3.84 × 3 × 9 residual variances, brightness 2 × 9 null sigmas.
    - The ranges then are the "sensitivity ranges" PLAN calls them until the objective is a calibrated
      likelihood.
+   The same threshold decides which of a source's optima are kept, so that scales too.
 2. **The weak-hypothesis rule.** A hypothesis weak in v, k and τ together is dropped as uninformative. An
    event left with no hypotheses admits rows as today's gates do (±35 % speed, 0.4–2.5× distance).
 

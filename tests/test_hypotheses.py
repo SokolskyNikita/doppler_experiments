@@ -76,7 +76,7 @@ def test_run_search_pairs_every_hypothesis_pair(monkeypatch):
     monkeypatch.setattr(pipeline, "cached_cpa_table", lambda *a, **k: cpa)
     monkeypatch.setattr(pipeline.EventWindow, "from_fit", staticmethod(lambda sp, fit, h=1: EventWindow(fit, None, h)))
     monkeypatch.setattr(pipeline, "event_null", lambda *a, **k: {"median": 0.0, "sigma": 1.0})
-    monkeypatch.setattr(pipeline, "event_hypotheses", lambda sp, w, ev, c, s, h: fast if ev.t_cpa < 1500 else slow)
+    monkeypatch.setattr(pipeline, "event_hypotheses", lambda sp, w, ev, c, s, h, **k: fast if ev.t_cpa < 1500 else slow)
     monkeypatch.setattr(pipeline, "modelled_curve", lambda *a: (np.zeros(2), np.zeros(2)))
 
     def locked(*a, t0_map=None, f0_scales=None, f0_scales2=None, **k):
@@ -124,7 +124,7 @@ def test_a_triple_is_scored_at_every_clock_its_hypotheses_give_and_keeps_the_bes
     ev1 = EventFit(1008.8, 1000.0, 120, 100, 3000, 950, 1050, 5, 150, 90)
     ev2 = EventFit(1926.8, 1918.0, 120, 100, 3000, 1870, 1970, 5, 150, 90)
     for order in ([early, late], [late, early]):
-        monkeypatch.setattr(pipeline, "event_hypotheses", lambda sp, w, ev, c, s, h, o=order: o if ev.t_cpa < 1500 else second)
+        monkeypatch.setattr(pipeline, "event_hypotheses", lambda sp, w, ev, c, s, h, o=order, **k: o if ev.t_cpa < 1500 else second)
         res, _ = pipeline.run_search(None, ev1, ev2, [], grid, silence_d_m=None, progress=False, workers=1,
                                      hypotheses=True, tol_s=30.0)
         assert len(res) == 1 and res.score[0] == 5.0
@@ -142,3 +142,22 @@ def test_the_null_gets_the_candidates_f0_sweep(monkeypatch):
     sweep = np.arange(0.9, 1.1, 0.005)
     out = pipeline.event_null(EventWindow(ev, None), cpa, segs, np.zeros((1, 3)), C, n=20, workers=1, f0_scales=sweep)
     assert all(s is sweep or np.array_equal(s, sweep) for s in seen) and out["f0_sweep"][2] == len(sweep)
+
+
+def test_uninformative_hypotheses_fall_back_to_todays_gates(monkeypatch):
+    flat = _hyp(41, 1400, 1000, H.V_BOUNDS, H.K_BOUNDS, (940, 1060))
+    flat.weak = ["f0", "k", "tau", "v"]
+    good = _hyp(100, 3000, 1000, (90, 110), (3.0, 3.7))
+    monkeypatch.setattr(H, "ls_hypotheses", lambda *a, **k: [])
+    ev = EventFit(1008.8, 1000.0, 120, 100, 3000, 950, 1050, 5, 150, 90)
+    monkeypatch.setattr(H, "fit_event_hypotheses", lambda *a, **k: [flat, good])
+    assert H.event_hypotheses(None, None, ev, C, 1.0) == [good]
+    monkeypatch.setattr(H, "fit_event_hypotheses", lambda *a, **k: [flat])
+    (gate,) = H.event_hypotheses(None, None, ev, C, 1.0, v_tol=0.35, d_tol=(0.4, 2.5))
+    assert gate.sources == ["gate"] and gate.v_range == pytest.approx((65, 135)) and gate.d_range == pytest.approx((1200, 7500))
+    cpa = pd.DataFrame({"v": np.float32([100, 100, 140]), "d": np.float32([7000, 8000, 3000])})
+    assert gate.admits(cpa).tolist() == [True, False, False]                 # today's box, not a k band
+
+
+def test_thresholds_carry_the_model_error_factor():
+    assert H.MODEL_ERROR_FACTOR == 3.0 and H.LS_DCHI2 == pytest.approx(3.84 * 3.0)

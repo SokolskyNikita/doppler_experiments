@@ -33,6 +33,10 @@ K = 3                       # optima kept per source
 LS_DCHI2 = 3.84 * 3.0       # chi2(1, 0.95) times the variance inflation of 88 %-overlapping frames (about 3, from
                             # SDE-D's c(r)^2 frame-correlation model, docs/experiments/2026-11-04-model-error.md)
 NULL_DELTA = 2.0            # brightness threshold, in the event's null sigma
+MODEL_ERROR_FACTOR = 3.0    # both thresholds are multiplied by its square: a misspecified model's profile measures
+                            # spread about its best approximation, not distance to the truth (White 1982), and SDE-D
+                            # measured that distance at 2.8-3.2x the information bound in slant range on Livermore
+                            # (docs/experiments/2026-11-04-model-error.md). The one counted retune of stage B.
 MIN_SEP_S = 20.0            # fit_event optima: distinct emission-CPA times at least this far apart
 V_BOUNDS = (10.0, 300.0)
 D_BOUNDS = (100.0, 30000.0)
@@ -58,6 +62,7 @@ class Hypothesis:
     weak: list = field(default_factory=list)      # parameters whose profile was flat or one-sided
     corr_v_d: float | None = None                 # speed-distance correlation, where the source gives one
     identified: bool | None = None                # fit_track's own verdict, for "ls"
+    d_range: tuple | None = None                  # "gate" only: admits by today's distance box instead of k
 
     @property
     def k(self) -> float:
@@ -65,8 +70,12 @@ class Hypothesis:
 
     def admits(self, cpa: pd.DataFrame) -> np.ndarray:
         v = cpa.v.to_numpy(np.float64)
-        k = v * v / cpa.d.to_numpy(np.float64)
-        return (v >= self.v_range[0]) & (v <= self.v_range[1]) & (k >= self.k_range[0]) & (k <= self.k_range[1])
+        d = cpa.d.to_numpy(np.float64)
+        in_v = (v >= self.v_range[0]) & (v <= self.v_range[1])
+        if self.d_range is not None:
+            return in_v & (d >= self.d_range[0]) & (d <= self.d_range[1])
+        k = v * v / d
+        return in_v & (k >= self.k_range[0]) & (k <= self.k_range[1])
 
     def contains(self, other: "Hypothesis") -> bool:
         return (self.v_range[0] <= other.v <= self.v_range[1] and self.k_range[0] <= other.k <= self.k_range[1]
@@ -219,9 +228,10 @@ def ls_hypotheses(sp: Spectrogram, ev: EventFit, f_lo: float, f_hi: float, c: fl
         return []
     obj, n = _ls_objective(track, c)
     sigma2 = fit.optima[0][0] / max(n - 4, 1)
+    threshold = LS_DCHI2 * MODEL_ERROR_FACTOR ** 2 * sigma2
     out = []
     for rss, tc, s in fit.optima[:K]:
-        if rss > fit.optima[0][0] + LS_DCHI2 * sigma2:
+        if rss > fit.optima[0][0] + threshold:
             continue
         sub = tracks_fit_at(track, tc, s, c)
         if sub is None:
@@ -229,7 +239,7 @@ def ls_hypotheses(sp: Spectrogram, ev: EventFit, f_lo: float, f_hi: float, c: fl
         f0, v, d = sub
         theta = np.array([f0, v, d, tc])
         span = (ev.t_start - TAU_REACH_S, ev.t_end + TAU_REACH_S)
-        out.append(_region(obj, theta, LS_DCHI2 * sigma2, span, (f_lo, f_hi), ["ls"], fit.corr_v_d, fit.identified, c))
+        out.append(_region(obj, theta, threshold, span, (f_lo, f_hi), ["ls"], fit.corr_v_d, fit.identified, c))
     return out
 
 
@@ -268,7 +278,7 @@ def fit_event_hypotheses(sp: Spectrogram, w, ev: EventFit, f_lo: float, f_hi: fl
     thetas = [np.array([f.f0, f.v, f.d, f.t_cpa_emit]) for f in fits]
     vals = [obj(th) for th in thetas]
     best = min(vals)
-    threshold = NULL_DELTA * null_sigma
+    threshold = NULL_DELTA * MODEL_ERROR_FACTOR ** 2 * null_sigma
     span = (ev.t_start - TAU_REACH_S, ev.t_end + TAU_REACH_S)
     return [_region(obj, th, threshold, span, (f_lo, f_hi), ["fit_event"], c=c)
             for th, val in zip(thetas, vals) if val - best <= threshold]
@@ -294,8 +304,24 @@ def merge(hyps: list[Hypothesis]) -> list[Hypothesis]:
     return out
 
 
-def event_hypotheses(sp: Spectrogram, w, ev: EventFit, c: float, null_sigma: float, harmonic: int = 1) -> list[Hypothesis]:
-    """Both sources' hypotheses for one event, merged. The band is 0.85 f_post to 1.15 f_pre of the event's fit."""
+def gate_hypothesis(ev: EventFit, v_tol: float, d_tol: tuple, c: float) -> Hypothesis:
+    """Today's speed and distance gates as a hypothesis: an event without an informative one admits as they do."""
+    v_range, d_range = (ev.v * (1 - v_tol), ev.v * (1 + v_tol)), (ev.d * d_tol[0], ev.d * d_tol[1])
+    return Hypothesis(sources=["gate"], f0=ev.f0, v=ev.v, d=ev.d, t_cpa_emit=ev.t_cpa_emit, t_cpa=ev.t_cpa,
+                      v_range=v_range, k_range=(v_range[0] ** 2 / d_range[1], v_range[1] ** 2 / d_range[0]),
+                      tau_range=(ev.t_cpa_emit, ev.t_cpa_emit), f0_range=(0.95 * ev.f0, 1.05 * ev.f0), d_range=d_range)
+
+
+def informative(hyps: list[Hypothesis]) -> list[Hypothesis]:
+    """Drop a hypothesis weak in v, k and tau together: its region is the whole table."""
+    return [h for h in hyps if not {"v", "k", "tau"} <= set(h.weak)]
+
+
+def event_hypotheses(sp: Spectrogram, w, ev: EventFit, c: float, null_sigma: float, harmonic: int = 1,
+                     v_tol: float = 0.35, d_tol: tuple = (0.4, 2.5)) -> list[Hypothesis]:
+    """Both sources' hypotheses for one event, merged, without uninformative ones; with none left, today's gates
+    (gate_hypothesis). The band is 0.85 f_post to 1.15 f_pre of the event's fit."""
     f_lo, f_hi = 0.85 * ev.f_post, 1.15 * ev.f_pre
-    return merge(ls_hypotheses(sp, ev, f_lo, f_hi, c, harmonic) +
-                 fit_event_hypotheses(sp, w, ev, f_lo, f_hi, c, null_sigma, harmonic))
+    hyps = informative(merge(ls_hypotheses(sp, ev, f_lo, f_hi, c, harmonic) +
+                             fit_event_hypotheses(sp, w, ev, f_lo, f_hi, c, null_sigma, harmonic)))
+    return hyps or [gate_hypothesis(ev, v_tol, d_tol, c)]

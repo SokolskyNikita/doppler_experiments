@@ -15,7 +15,7 @@ All of this is in [tracks.py](../src/dopplertrack/tracks.py).
    (`window_start_s`, `window_end_s`), the band, the speed of sound, the speed and slant-range grids, the
    f0 and t0 steps, and how many maxima to keep and how far apart.
 2. The requests go to **`_scan_window`**, through the built-in `map` when `workers=1` and through
-   `ProcessPoolExecutor.map` otherwise. Both consume the same requests, so everything in a request must
+   `parallel.process_pool` otherwise. Both consume the same requests, so everything in a request must
    pickle. `_scan_window` runs `grid_search(..., per_t0=True)` and returns up to `per_window`
    **`Candidate`s**, taking the best score first (`argsort(-bs)`) and skipping any within `min_sep_s`
    of one already kept.
@@ -38,6 +38,7 @@ Tests, in [tests/test_phase0_cli.py](../tests/test_phase0_cli.py):
 - `test_merge_breaks_score_ties_as_the_tuple_sort_did` calls `merge_candidates` with two candidates of
   equal score 10 s apart and requires the 121 Hz one to beat the 120 Hz one presented first. A merge
   that sorts by score alone keeps the wrong one.
+- `tests/test_parallel.py` checks the `--jobs` default and that pool workers start with one BLAS thread.
 - `test_worker_pool_matches_serial_scan` plants one straight pass in a synthetic spectrogram and
   requires `workers=2` and `workers=1` to return equal events, refinement included. It is the first
   form of Phase 1's check that `jobs=1` and `jobs=10` agree byte for byte.
@@ -68,25 +69,39 @@ differences, `ev2.t_cpa - ev1.t_cpa` against `t_heard2 - t_heard1`, so it needs 
    of the call: while it loads the cached table, checks the fingerprint, and on a miss builds and saves a
    new one. A second process asking for the same path waits on that lock instead of building the table
    again.
-3. **`search.cpa_table`** ([search.py](../src/dopplertrack/search.py)) builds the rows, one segment at a
-   time:
-   - a KD-tree over the grid's horizontal coordinates finds the points within `1.05 * max_range_m` of
-     probe samples spaced at most `max_range_m / 4` apart along the track, which covers the corridor
-     around it;
-   - those points are handled `chunk` (20 000) at a time. For each chunk, squared distances to the track
-     samples come from one matrix product, `|g|² + |p|² − 2 g·p`, on coordinates centred on the chunk,
-     with the samples split so each block holds about 10⁷ entries. The nearest sample is the CPA;
+3. **`search.cpa_table`** ([search.py](../src/dopplertrack/search.py)) builds the rows. Each segment is
+   one task, run by **`_segment_cpa`** in the calling process when `workers=1` and otherwise in a
+   `parallel.process_pool` whose workers each hold the grid and its KD-tree (`_init_cpa_worker`). Tasks
+   are handed out longest segment first, and the results are put back in segment order. For one segment:
+   - **`_corridor`**: a KD-tree over the grid's horizontal coordinates finds the points within
+     `1.05 * max_range_m` of probe samples spaced at most `max_range_m / 4` apart along the track, which
+     covers the corridor around it;
+   - those points are handled `chunk` (20 000) at a time, in grid-index order. Coordinates are centred on
+     the chunk's mean, so which points share a chunk is part of the result's bits; keep the chunks when
+     changing anything else;
+   - **`_nearest_samples`** splits a chunk into tiles of `CPA_TILE_M` (4 km) and compares each tile only
+     with the samples within `max_range_m` + 1 m of it, using `|g|² + |p|² − 2 g·p` with one matrix
+     product per block of about 10⁷ entries. The nearest sample is the CPA; on a tie, the first;
    - a row is kept when the CPA is within `max_range_m` and not at either end of the segment. It records
      the emission time `t_emit`, the heard time `t_heard = t_emit + d / c` (both Unix seconds), the slant
      distance `d` and the ground speed `v`.
-4. **`search.save_cpa_table`** writes the table to a temporary file in the same folder and renames it
-   into place, and **`search.load_cpa_table`** treats a mismatched fingerprint or an unreadable file as a
-   miss.
+
+   Rows come out ordered by segment, then grid index, the same bytes for any `workers`.
+
+After the table, `run_search` scores the surviving triples with `locked_score`, and `refine` scores its fine
+points, both in chunks of `SCORE_CHUNK` through `parallel.ordered_map`. Each pool's workers receive the
+two `EventWindow`s and the segments the chunks refer to once, through `_set_score_state`, and the results
+come back in task order, so the ranking is the same for any `workers`.
+4. **`search.save_cpa_table`** writes the table uncompressed, about 3 GB for a case-day's box (compressing
+   it took longer than building it), to a temporary file in the same folder and renames it into place,
+   and **`search.load_cpa_table`** treats a mismatched fingerprint or an unreadable file as a miss.
 
 If a change alters the table built from the same inputs, bump `CPA_CACHE_VERSION` so old cache files
 are rebuilt.
 
-Tests, in [tests/test_cache.py](../tests/test_cache.py):
+[tests/test_cpa_build.py](../tests/test_cpa_build.py) compares `cpa_table`, at one and two workers, with
+the brute-force code it replaced, on tracks that include exact ties and an end inside the range. Cache
+tests, in [tests/test_cache.py](../tests/test_cache.py):
 
 - `test_fingerprint_follows_contents_not_sizes`: a change of elevation, position, time, range or speed
   of sound changes the fingerprint even when no array changes size.
@@ -98,3 +113,51 @@ Tests, in [tests/test_cache.py](../tests/test_cache.py):
 [tests/test_search_pairs.py](../tests/test_search_pairs.py) checks pairing and a save/load round trip,
 and [tests/test_pipeline_synthetic.py](../tests/test_pipeline_synthetic.py) builds a table for two
 synthetic flights and requires the true observer to rank first.
+
+## Caches
+
+Every cache lives under `$DOPPLERTRACK_CACHE` (default `~/.cache/dopplertrack`), outside the repo, and
+everything in it can be rebuilt. A cache follows four rules:
+- **Keyed on contents.** The key covers the SHA-256 of every input, file or array, and every parameter
+  that changes the result. Sizes and modification times never stand in for contents.
+- **Keyed on the code.** The key covers the hash of the source that produces the artefact, so editing
+  that code invalidates its entries. It also covers the versions of libraries that can change the
+  result (ffmpeg, numpy, scipy).
+- **Atomic writes.** An entry is written under a temporary name and renamed into place, so a reader
+  sees the old entry or the complete new one.
+- **Locked, and fails safe.** One lock per entry makes a second process wait instead of building the
+  same thing twice. An entry that won't load, or whose stored description differs from the request,
+  is a miss and is rebuilt.
+
+| Folder | What | Code | Keyed on |
+|---|---|---|---|
+| `spectrogram/` | spectrograms of an audio file or an AudioMoth folder | `audio.cached_spectrogram` | each file's name, SHA-256 and offset; the start time; every `spectrogram_from_blocks` parameter, defaults filled in; `audio.py`'s source; the ffmpeg, numpy and scipy versions |
+| `detections/` | `detect_events` results | `cache.cached_detections` | the spectrogram's t, f, S, mask and start time; every detect parameter except `workers` and `progress`; the source of `tracks.py`, `doppler.py` and `audio.py`; the numpy and scipy versions |
+| `cpa/` (path given by `--cpa-cache`) | the (point, flight) CPA table | `pipeline.cached_cpa_table` | `search.cpa_fingerprint` and `CPA_CACHE_VERSION` (see above), with an `fcntl` lock on `<path>.lock` |
+| `terrarium/<zoom>/` | elevation tiles | `terrain.Terrain` | tile coordinates; written atomically, and an unreadable tile is fetched again |
+| `doc8643AircraftTypes.csv` | the aircraft type list | `adsb.AircraftTypes` | nothing: downloaded once |
+
+**`spectrogram/` and `detections/`** both go through `cache.cached(kind, parts, produce)`. `parts` is
+a dict describing every input. Its canonical JSON (sorted keys, arrays replaced by their hash) is the
+entry's description, and the description's SHA-256 is the key.
+- [joblib.Memory](https://joblib.readthedocs.io/en/stable/memory.html) stores each entry as plain
+  files: a folder under `<kind>/dopplertrack/cache/_build/`, holding `output.pkl` (the description
+  and the value) and `metadata.json` (the call's arguments, the description among them). joblib was
+  chosen over diskcache because diskcache keeps its index in SQLite, which can't be read with `ls`
+  and `cat`.
+- joblib has no lock, so `<kind>/locks/<key>.lock` (`filelock`) is held around the load and the
+  build.
+- A lock file stays behind after its entry is built. Removing lock files while another process might
+  use them is unsafe, so `locks/` is only cleared along with the whole folder.
+
+**Using it.** To cache a new artefact, call `cache.cached` with a new kind, and include
+`cache.source_sha256(<the producing modules>)` in `parts`. `detect_events` is not yet wired to
+`cached_detections`; the call is `cached_detections(sp, detect_events, f_lo=..., f_hi=..., ...)`.
+
+Tests, in [tests/test_artefact_cache.py](../tests/test_artefact_cache.py):
+- a hit, then a miss when an input file's contents or a parameter change;
+- a truncated entry rebuilt;
+- a detections miss when the spectrogram's mask, a parameter or the detector's source changes, and
+  a hit when only `workers` or `progress` change;
+- two processes contending for one entry building it once;
+- the spectrogram cache hitting, and matching the uncached spectrogram.

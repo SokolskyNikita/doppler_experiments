@@ -6,7 +6,8 @@
   "sha256": "58dd4c1259598c85579d1aba1311d18651f70501c2df822104cacb54b4a0ddc0",
   "t0_utc": "2024-12-28T14:21:08.49Z",
   "case": null,
-  "t0_note": "from the known-point fit's clock (runs/2026-11-03-issue-1); used for layer 2 only"
+  "t0_note": "from the known-point fit's clock (runs/2026-11-03-issue-1); used for layer 2 only",
+  "case_note": "outside the one eagle-cam case, eagle-cam-clip-18000s, which covers full-stream seconds 18,000-23,400 (case ids from SDE-B's bench/cases.json at f5ccdfe, not yet on dev)"
  },
  "span": [
   3600,

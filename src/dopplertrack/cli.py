@@ -10,6 +10,7 @@ from . import pipeline
 from .adsb import load_trace_metadata, load_traces
 from .audio import FFmpegNotFoundError, Spectrogram
 from .coverage import DEFAULT_MAX_RANGE_M, report_coverage
+from .parallel import JOBS_ENV
 from .search import Grid
 from .terrain import Terrain
 from .tracks import EventFit, fit_event
@@ -40,6 +41,16 @@ def load_events(files, picks=None):
         raise ValueError(f"invalid event fit: {exc}") from exc
 
 
+def _jobs(text: str) -> int:
+    try:
+        n = int(text)
+    except ValueError:
+        n = 0
+    if n < 1:
+        raise argparse.ArgumentTypeError(f"must be a positive integer, got {text!r}")
+    return n
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="dopplertrack")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -57,7 +68,7 @@ def main(argv=None):
     f.add_argument("--objective", choices=("brightness", "contrast"), default="brightness",
                    help="brightness: mean brightness under the curve (the docs/results fits); contrast: the sweep-weighted ridge contrast detect uses")
 
-    d = sub.add_parser("detect", help="scan a whole spectrogram for Doppler events and rank them")
+    d = sub.add_parser("detect", help="scan a whole spectrogram for Doppler events and rank them (cached in $DOPPLERTRACK_CACHE/detections)")
     d.add_argument("spec"); d.add_argument("--band", nargs=2, type=float, required=True, metavar=("FLO", "FHI"))
     d.add_argument("--harmonics", type=int, default=1); d.add_argument("--top", type=int, default=20)
     d.add_argument("--window", type=float, default=240.0); d.add_argument("--out", help="write ranked fits as a JSON list")
@@ -82,7 +93,17 @@ def main(argv=None):
     r.add_argument("--point", nargs=2, type=float, metavar=("LAT", "LON"), help="score a single known point instead of a grid")
     r.add_argument("--spacing", type=float, default=200.0); r.add_argument("--harmonics", nargs=2, type=int, default=(1, 1))
     r.add_argument("--no-dem", action="store_true"); r.add_argument("--no-silence", action="store_true")
-    r.add_argument("--tol", type=float, default=6.0)
+    r.add_argument("--tol", type=float, default=6.0, help="pairing gate half-width, s (default 6)")
+    r.add_argument("--convention", choices=["heard", "emission"], default="heard",
+                   help="CPA time the pairing gate compares: heard (t_cpa against t_heard, default) or emission (t_cpa_emit against t_emit)")
+    r.add_argument("--sf-tol", type=float, metavar="S",
+                   help="drop triples whose modelled and fitted steepest-fall gaps differ by more than S seconds (default: off)")
+    r.add_argument("--sf-smooth", type=float, default=3.0, metavar="S", help="steepest fall: moving-average half-width, s")
+    r.add_argument("--sf-window", type=float, default=60.0, metavar="S", help="steepest fall: search half-window around each CPA, s")
+    r.add_argument("--sf-flat-ratio", type=float, default=1.03, metavar="X",
+                   help="steepest fall: a curve whose peak slope is under X times its median slope can't be placed")
+    r.add_argument("--anchor", choices=["heard", "steepest"], default="heard",
+                   help="clock anchor for scoring: event 1's heard CPA (default) or its steepest fall")
     r.add_argument("--cpa-cache", metavar="NPZ", help="cache the (point, flight) CPA table here; reused when the grid (with its elevations), traces, range and speed of sound are identical")
 
     rf = sub.add_parser("refine", help="fine grid around one search result, optionally adding more events")
@@ -106,6 +127,10 @@ def main(argv=None):
     g.add_argument("--spacing", type=float, default=200.0); g.add_argument("--harmonics", type=int, default=1)
     g.add_argument("--no-dem", action="store_true")
 
+    for parser in (d, r, rf, g):
+        parser.add_argument("--jobs", type=_jobs, metavar="N",
+                            help=f"worker processes (default: ${JOBS_ENV}, else the performance-core count); "
+                                 "results don't depend on it")
     for parser in (e, fd, r, rf, g):
         parser.add_argument("--max-range", type=float, default=DEFAULT_MAX_RANGE_M, metavar="METRES",
                             help="search range / extraction margin in metres (default: 12000); use the same value for extraction and search")
@@ -146,10 +171,13 @@ def main(argv=None):
         if a.out:
             open(a.out, "w").write(js)
     elif a.cmd == "detect":
-        from .tracks import detect_events
+        from . import tracks
+        from .cache import cached_detections
         sp = Spectrogram.load(a.spec)
-        evs = detect_events(sp, a.band[0], a.band[1], harmonics=a.harmonics, top=a.top, window_s=a.window, min_score=a.min_score,
-                            progress=lambda k, n: print(f"\r  window {k}/{n}", end="", flush=True))
+        # cached on the spectrogram's contents, the parameters and the detector's source ($DOPPLERTRACK_CACHE)
+        evs = cached_detections(sp, tracks.detect_events, f_lo=a.band[0], f_hi=a.band[1], harmonics=a.harmonics,
+                                top=a.top, window_s=a.window, min_score=a.min_score, workers=a.jobs,
+                                progress=lambda k, n: print(f"\r  window {k}/{n}", end="", flush=True))
         print()
         if not evs:
             print("no flyovers found")
@@ -174,7 +202,13 @@ def main(argv=None):
         res, segs = pipeline.run_search(sp, ev1, ev2, traces, grid, harmonics=tuple(a.harmonics),
                                         silence_d_m=None if a.no_silence else 6000.0, tol_s=a.tol, cpa_cache=a.cpa_cache,
                                         max_range_m=a.max_range, trace_metadata=load_trace_metadata(a.traces),
-                                        search_bbox=tuple(a.bbox) if a.bbox else (a.point[0], a.point[0], a.point[1], a.point[1]))
+                                        search_bbox=tuple(a.bbox) if a.bbox else (a.point[0], a.point[0], a.point[1], a.point[1]),
+                                        workers=a.jobs, time_convention=a.convention, sf_tol_s=a.sf_tol,
+                                        sf_smooth_s=a.sf_smooth, sf_window_s=a.sf_window, sf_flat_ratio=a.sf_flat_ratio,
+                                        clock_anchor=a.anchor)
+        for name, t in res.attrs.get("stages", {}).items():
+            pipeline.log(f"stage {name}: {t['wall_s']:.1f} s wall, {t['cpu_s']:.1f} s CPU")
+        pipeline.log("funnel: " + ", ".join(f"{k} {v}" for k, v in res.attrs.get("funnel", {}).items()))
         res["lat0"] = grid.lat0; res["lon0"] = grid.lon0
         res.to_csv(a.out, index=False)
         print(res.head(20).to_string())
@@ -193,7 +227,8 @@ def main(argv=None):
         row = pipeline.relocate_row(row, segs, ev2.t_cpa - ev1.t_cpa)
         print(f"refining rank {a.rank}: {row.icao1}/{row.icao2} at {row.lat:.5f}, {row.lon:.5f} (score {row.score:.2f})")
         fine = pipeline.refine(sp, ev1, ev2, segs, row, spacing_m=a.spacing, half_m=a.half, harmonics=tuple(a.harmonics),
-                               elevation=elev, extra=extra, extra_harmonics=xh, max_range_m=a.max_range)
+                               elevation=elev, extra=extra, extra_harmonics=xh, max_range_m=a.max_range,
+                               workers=a.jobs)
         fine.to_csv(a.out, index=False)
         b = fine.iloc[0]
         print(f"peak score {b.score:.2f} at {b.lat:.6f}, {b.lon:.6f}" + (f"; extra flights {fine.attrs['extra_icao']}" if extra else ""))
@@ -211,7 +246,7 @@ def main(argv=None):
         grid = Grid.make(*a.bbox, a.spacing, elev)
         res, segs = pipeline.run_single_search(sp, ev, traces, grid, t_unix, tol_s=a.tol, harmonics=a.harmonics,
                                                max_range_m=a.max_range, trace_metadata=load_trace_metadata(a.traces),
-                                               search_bbox=tuple(a.bbox))
+                                               search_bbox=tuple(a.bbox), workers=a.jobs)
         res["lat0"] = grid.lat0; res["lon0"] = grid.lon0
         res.to_csv(a.out, index=False)
         print(res.head(20).to_string())

@@ -1,6 +1,7 @@
 """Extract a Doppler event from a spectrogram window and fit the ideal model."""
 from __future__ import annotations
 
+import contextlib
 from collections.abc import Iterator
 from dataclasses import dataclass, asdict
 
@@ -9,6 +10,7 @@ from scipy.optimize import minimize
 
 from .audio import Spectrogram
 from .doppler import ideal_curve, speed_of_sound
+from .parallel import process_pool, resolve_jobs
 
 
 @dataclass
@@ -267,14 +269,13 @@ def detect_events(sp: Spectrogram, f_lo: float, f_hi: float, c: float | None = N
                   workers: int | None = None, progress=None, min_score: float = 0.0) -> list[EventFit]:
     """Scan a whole recording for Doppler-shaped curves whose fundamental lies in [f_lo, f_hi].
 
-    Each window gets the coarse grid search used by fit_event (windows run in parallel
-    processes) and contributes up to `per_window` local maxima in time. Those are merged
+    Each window gets the coarse grid search used by fit_event (windows run in `workers`
+    processes, parallel.default_jobs() by default; the result doesn't depend on it) and contributes up to `per_window` local maxima in time. Those are merged
     (one event per min_sep_s), the best 2*top are refined with a local grid search plus
     Nelder-Mead, and the best `top` after refinement are returned, sorted by score
     (sweep-weighted ridge contrast, dB). Only finite scores strictly above
     min_score are returned, so the result may be empty. The default rejects zero
     evidence; a useful false-alarm threshold still needs calibration."""
-    from concurrent.futures import ProcessPoolExecutor
     if top < 1:
         raise ValueError("top must be at least 1")
     if not np.isfinite(min_score):
@@ -284,6 +285,7 @@ def detect_events(sp: Spectrogram, f_lo: float, f_hi: float, c: float | None = N
     d_grid = np.geomspace(400, 9000, 10) if d_grid is None else d_grid
     pad = 0.3 * (f_hi - f_lo)
     starts = np.arange(sp.t[0], max(sp.t[-1] - window_s, sp.t[0]) + 1e-9, step_s)
+    workers = min(resolve_jobs(workers), len(starts))         # no idle workers for a short recording
 
     def jobs():
         for t in starts:
@@ -295,18 +297,15 @@ def detect_events(sp: Spectrogram, f_lo: float, f_hi: float, c: float | None = N
                               min_sep_s=min_sep_s)
 
     cands: list[Candidate] = []
-    ex = None
-    if workers == 1:
-        it: Iterator[list[Candidate]] = map(_scan_window, jobs())
-    else:
-        ex = ProcessPoolExecutor(workers)
-        it = ex.map(_scan_window, jobs(), chunksize=2)
-    for k, r in enumerate(it):
-        cands.extend(r)
-        if progress:
-            progress(k + 1, len(starts))
-    if ex is not None:
-        ex.shutdown()
+    with contextlib.ExitStack() as stack:
+        if workers == 1:
+            it: Iterator[list[Candidate]] = map(_scan_window, jobs())
+        else:
+            it = stack.enter_context(process_pool(workers)).map(_scan_window, jobs(), chunksize=2)
+        for k, r in enumerate(it):
+            cands.extend(r)
+            if progress:
+                progress(k + 1, len(starts))
     keep = merge_candidates(cands, min_sep_s, 2 * top if refine else top)
     out = []
     for cnd in keep:

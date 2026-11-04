@@ -65,21 +65,64 @@ def modelled_curve(seg: Segment, obs_enu, c):
     return t_obs, np.where(valid, ratio, np.nan)
 
 
+SF_FLAT_RATIO = 1.03   # the ideal curve at 9 km and 40 m/s peaks at 1.027 times its median slope over ±60 s
+
+
+def steepest_fall(t, ratio, center: float, window_s: float = 60.0, smooth_s: float = 3.0,
+                  flat_ratio: float = SF_FLAT_RATIO) -> float | None:
+    """When a Doppler curve (times t, frequency ratio) falls fastest within ±window_s of center, or None
+    if that can't be placed.
+
+    The curve is resampled to 1 s, averaged over ±smooth_s, differentiated, and the most negative slope
+    refined by a parabola through its neighbours. Fitted and modelled curves go through this same
+    function, so the two are compared like for like. None when fewer than half the window's slopes are
+    finite (holes or the ends of a track), when the steepest point is at the edge of what is finite (it
+    lies outside the window), or when the curve is too flat to place: its peak slope is under flat_ratio
+    times its median slope over the window, or the median isn't a fall."""
+    k = max(0, int(round(smooth_s)))
+    tq = center + np.arange(-window_s - k, window_s + k + 1, 1.0)
+    t = np.asarray(t, float); ratio = np.asarray(ratio, float)
+    ok = np.isfinite(t)
+    if np.count_nonzero(ok) < 2:
+        return None
+    r = np.interp(tq, t[ok], ratio[ok], left=np.nan, right=np.nan)   # invalid samples stay NaN
+    if k:
+        r = np.convolve(r, np.ones(2 * k + 1) / (2 * k + 1), mode="valid")
+        tq = tq[k:-k]
+    g = -np.gradient(r, tq)
+    fin = np.flatnonzero(np.isfinite(g))
+    if len(fin) < len(g) / 2:
+        return None
+    i = int(fin[np.argmax(g[fin])])
+    med = float(np.median(g[fin]))
+    if i in (fin[0], fin[-1]) or med <= 0 or g[i] < flat_ratio * med:
+        return None
+    a, b, cc = g[i - 1], g[i], g[i + 1]
+    den = a - 2 * b + cc
+    return float(tq[i] + (0.5 * (a - cc) / den if np.isfinite(den) and den != 0 else 0.0))
+
+
 def locked_score(ev1: EventWindow, ev2: EventWindow, seg1: Segment, seg2: Segment, obs_enu,
                  t_heard1: float, c: float | None = None,
-                 shifts=np.arange(-8, 8.01, 0.5), f0_scales=np.arange(0.95, 1.0501, 0.005)):
+                 shifts=np.arange(-8, 8.01, 0.5), f0_scales=np.arange(0.95, 1.0501, 0.005),
+                 curves=None, t0_map: float | None = None):
     """Two-event locked scoring.
 
     Event 1's placement is swept over small time shifts and f0 scales (both are
     measurements). Event 2 is placed with the *same* time shift, so its timing
     relative to event 1 is fixed purely by flight geometry.
+    curves: (to1, r1, to2, r2) from modelled_curve, if the caller already has them.
+    t0_map: audio = unix + t0_map; by default the modelled heard CPA of event 1 lands on the measured one.
     Returns (total, s1, s2, best_shift).
     """
     c = speed_of_sound() if c is None else c
     # map unix time -> audio time so that the modelled heard-CPA of event 1 lands on the measured one
-    t0_map = ev1.fit.t_cpa - t_heard1
-    to1, r1 = modelled_curve(seg1, obs_enu, c)
-    to2, r2 = modelled_curve(seg2, obs_enu, c)
+    t0_map = ev1.fit.t_cpa - t_heard1 if t0_map is None else t0_map
+    if curves is None:
+        to1, r1 = modelled_curve(seg1, obs_enu, c)
+        to2, r2 = modelled_curve(seg2, obs_enu, c)
+    else:
+        to1, r1, to2, r2 = curves
     sc1 = ev1.sweep_scores(to1 + t0_map, r1, shifts, f0_scales)
     i, j = np.unravel_index(np.argmax(sc1), sc1.shape)
     s1, sh = float(sc1[i, j]), float(shifts[i])

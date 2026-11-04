@@ -59,7 +59,7 @@ def test_failed_save_leaves_nothing_behind(tmp_path, monkeypatch):
     def fails_part_way(file, **arrays):
         open(file, "wb").write(b"partial")
         raise OSError("disk full")
-    monkeypatch.setattr(search.np, "savez_compressed", fails_part_way)
+    monkeypatch.setattr(search.np, "savez", fails_part_way)
     with pytest.raises(OSError):
         search.save_cpa_table(tmp_path / "cpa.npz", search.empty_cpa_table(), "fp")
     assert list(tmp_path.iterdir()) == []

@@ -170,7 +170,8 @@ its search, so it never builds its table.
    - Measured on the Mac, 4 workers under load, eagle-cam clip, before the run was stopped: the top2 search took
      41 s from a cached table. Four of comparable's ten searches had finished, at 62–170 s each, when the run
      stopped 507 s in.
-   - Each comparable search reloads the case's CPA table (1.15 GB for the eagle cam), so a box's disk speed counts.
+   - Each comparable search reloads the case's CPA table (1.15 GB for the eagle cam), but a load took about 1 s;
+     a search's time is its pairing and scoring, which scale with the workers.
 2. **Tier 2 locate, silence filter on.** The same with `--search-param silence_d_m=6000`. It reuses job 1's CPA
    tables, so run it after job 1 or with job 1's tables copied in.
 3. **Tier 2 saved-fit**, the five development cases with saved fits.
@@ -189,7 +190,7 @@ its search, so it never builds its table.
    - The 788 s run predates the nine background spans. With them, a cold Tier 1 took about 50 minutes under load
      (`docs/experiments/2026-11-04-cache-keys.md`), so the background spans are the bulk of a cold run.
 
-Jobs 1, 2 and 5 are independent of each other. Job 4 waits for the case bump and job 3.
+All five launch at once, one box per case or Tier 1 unit: `tools/experiments/2026-11-04/sde_b_cloud.sh launch`, then `... collect` pulls, merges the shards, compares (silence off against on; legacy against margin-padded cut) and renders the reports. Job 3 runs at the commit before the case bump, from a worktree, so it needs no wait.
 
 ## SDE-A
 
@@ -225,6 +226,33 @@ Every driver runs on `shards.py`:
 | Item 1's timing sweep (`timing-sweep`) | `timing_sweep.py` | 45 `bench run` cells |
 
 Splitting a job across boxes can't bring it under its longest unit.
+
+Each job's `decision:` line names the PLAN decision it informs and what each outcome changes. The jobs are listed
+in the PM's order (2026-11-04); a job whose outcomes change no decision isn't launched.
+- **Stage A comparable score** — decision: whether event choice is the Phase 3 blocker (item 7, stage A).
+  - A1 and A3 met at today's code: ranking a recording's event pairs by Z is the event choice Phase 3 builds on.
+  - Not met: event choice stays the blocker, and the next lever is stage B's joint hypotheses.
+- **B1/B2** — decision: whether the score's input, the fit, is the blocker (item 7, stage B).
+  - B1 still failing at today's code: the fit's bias, not event choice, is what Phase 3 waits on. The levers are
+    item 2's turn model, item 8, or a track that stays on the pass (item 3).
+  - B1 met: hypotheses replace the speed and distance gates.
+- **Stage B A1/A3** — decision: whether stage B's hypotheses ship for event choice.
+  - A1 met: Z with hypotheses picks the eagle cam's true pair, which counts for adopting them, though B1 alone still
+    blocks that.
+  - Not met: they don't ship for event choice.
+  - Inside the null's noise: the N run below decides it.
+- **Item 1's timing sweep** — decision: whether the (16 s, 4 s) emission setting still holds at today's code, after
+  the changes since `51f59ce`.
+  - Holds: it stays the development setting that a default change would cite.
+  - Doesn't hold: item 1's setting reopens.
+- **N = 250,000 null (stage B, `--null-n`)** — decision: whether A1 can be decided at all by the null's size.
+  - It is read only if A1 is inside the null's noise and needs N ≤ 250,000, under the record's rule; otherwise it is
+    a number nobody acts on, and it isn't read.
+  - Decided: that is A1's result.
+  - Still inside the noise: the record says the test can't decide, and a lower-variance scale estimate becomes the
+    later method change.
+- **Event pairs by raw score** — decision: none of its own. Stage A's earlier run already compared Z with the raw
+  score, so it isn't launched.
 
 **Inputs** (from each driver's `--inputs`):
 - **Pairs jobs.** The three cases, plus each case's `detected.json` in

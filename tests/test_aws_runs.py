@@ -3,6 +3,7 @@ import datetime
 import importlib.util
 import io
 import subprocess
+import sys
 import tarfile
 from pathlib import Path
 
@@ -17,6 +18,9 @@ def _load(name, path):
     spec.loader.exec_module(mod)
     return mod
 
+
+sys.path.insert(0, str(AWS.parent.parent))
+from bench import cases  # noqa: E402  (the case manifest, for the latest version of a case)
 
 runs = _load("aws_runs", AWS / "runs.py")
 supervisor = _load("aws_supervisor", AWS / "box" / "supervisor.py")
@@ -120,8 +124,15 @@ def test_job_ids_follow_new_run_and_pulls_never_reuse_a_folder(tmp_path, monkeyp
 
 def test_a_case_brings_its_audio_spectrogram_and_traces():
     got = runs.case_inputs(["oyster-bay"])
-    assert {"raw/audio/youtube/oyster_bay.webm", "derived/oyster_bay/rec.npz", "derived/oyster_bay/traces_ny.npz"} <= set(got)
+    traces = cases.latest_case("oyster-bay")["flight_data"]["traces"]       # the latest version's flight data
+    assert {"raw/audio/youtube/oyster_bay.webm", "derived/oyster_bay/rec.npz", traces} <= set(got)
     assert len(got) == len(set(got)) and not any(p.startswith("raw/adsb") for p in got)
+
+
+def test_a_case_with_one_trace_file_per_day_brings_each_day():
+    days = cases.latest_case("eagle-cam-midnight")["flight_data"]["traces"]
+    got = runs.case_inputs(["eagle-cam-midnight"])
+    assert isinstance(days, list) and set(days) <= set(got) and all(isinstance(p, str) for p in got)
 
 
 def test_the_fleet_request_spans_every_family_and_subnet():

@@ -498,7 +498,7 @@ def known_point(case: dict, out_dir: Path, reference: dict, true_pair, log=print
     from dopplertrack.terrain import Terrain
     from dopplertrack.tracks import EventFit
 
-    from .runner import sound_speed, trace_paths
+    from .runner import geometry_kw, trace_paths
     try:
         ev = _read_hashed(out_dir / EVENTS_FILE)
     except (OSError, IndexError, RecordError, ValueError) as exc:
@@ -513,7 +513,7 @@ def known_point(case: dict, out_dir: Path, reference: dict, true_pair, log=print
     res, _ = pipeline.run_search(sp, ev1, ev2, traces, grid, harmonics=tuple(ev["harmonics"][:2]), tol_s=s["tol_s"],
                                  v_tol=s["v_tol"], d_tol=tuple(s["d_tol"]), silence_d_m=s["silence_d_m"],
                                  max_range_m=s["max_range_m"], progress=False, trace_metadata=meta,
-                                 search_bbox=(lat, lat, lon, lon), workers=1, **sound_speed(case)[0])
+                                 search_bbox=(lat, lat, lon, lon), workers=1, **geometry_kw(case))
     best = res.sort_values("score", ascending=False, kind="stable").drop_duplicates(["icao1", "icao2"])
     pairs = [{"flights": [str(r.icao1), str(r.icao2)], "score": float(r.score), "event_scores": [float(r.s1), float(r.s2)],
               "shift_s": float(r.shift)} for r in best.itertuples()]
@@ -598,7 +598,7 @@ def run_tier1(sets=("development",), run_dir: Path | None = None, log=print, wor
     info_path = run_dir / "run.json"
     info = json.loads(info_path.read_text()) if info_path.exists() else {}
     want = {"tier": "t1", "profile": "tier1", "search_overrides": {}, "code": code}
-    if resume:
+    if resume and any((run_dir / d).exists() for d in ("spans", "known_point")):
         check_resumable(info, want, run_dir)
     unknown = sorted(set(only or []) - set(unit_ids(sets)))
     if unknown:

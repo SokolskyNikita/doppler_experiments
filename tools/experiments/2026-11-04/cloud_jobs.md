@@ -158,7 +158,8 @@ its search, so it never builds its table.
    - Measured on the Mac, 4 workers under load, eagle-cam clip, before the run was stopped: the top2 search took
      41 s from a cached table. Four of comparable's ten searches had finished, at 62–170 s each, when the run
      stopped 507 s in.
-   - Each comparable search reloads the case's CPA table (1.15 GB for the eagle cam), so a box's disk speed counts.
+   - Each comparable search reloads the case's CPA table (1.15 GB for the eagle cam), but a load took about 1 s;
+     a search's time is its pairing and scoring, which scale with the workers.
 2. **Tier 2 locate, silence filter on.** The same with `--search-param silence_d_m=6000`. It reuses job 1's CPA
    tables, so run it after job 1 or with job 1's tables copied in.
 3. **Tier 2 saved-fit**, the five development cases with saved fits.

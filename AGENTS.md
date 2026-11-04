@@ -32,6 +32,9 @@ Doppler curves of propeller aircraft. `README.md` explains the method; `PLAN.md`
   It downloads terrain tiles the first time, so it needs the network on a cold cache.
   `test_detect_output_passes_the_filters_at_truth` is a strict expected failure until PLAN Phase 2 fixes
   that path.
+- The benchmark: `uv run python -m bench run [case ...]` makes a run folder, writes each case's `result.json`
+  and its hash before reading any label, and collects `results.json`; `bench compare <a> <b>` diffs two runs.
+  With a cold CPA table it is a long job: say so first and run it in the background.
 
 ## Data rules
 
@@ -93,6 +96,8 @@ Doppler curves of propeller aircraft. `README.md` explains the method; `PLAN.md`
 | `tools/reference/` | scripts that converted the papers to Markdown |
 | `tools/experiments/<date>/` | scripts behind the numbers in `docs/experiments/`; records, not tools |
 | `bench/manifest.json` | size, SHA-256, source and licence of every raw input |
+| `bench/cases.json` | benchmark cases: sources, start times, recipes for derived files, search parameters, labels |
+| `bench/*.py` | `uv run python -m bench validate\|build\|run\|compare`: rebuild a case's derived files, run cases blind into a run folder, compare two runs |
 | `docs/architecture.md` | edit map: the detector and CPA-build code paths and the tests that check them |
 | `docs/experiments/` | one record per experiment: question, setup, numbers, outcome, script and run folder |
 | `docs/reference/README.md` | reading list for the papers in `$DOPPLERTRACK_DATA/reference/` |

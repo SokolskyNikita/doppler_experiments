@@ -32,8 +32,9 @@ class EventFit:
 
 def local_whiten(sp: Spectrogram, floor: float = 0.0) -> Spectrogram:
     """Remove tones that are stationary over this window (per-bin median), clip at floor."""
-    S = sp.S - np.median(sp.S, axis=1, keepdims=True)
-    return Spectrogram(sp.t, sp.f, np.maximum(S, floor).astype(np.float32))
+    S = np.maximum(sp.S - sp.bin_median(), floor).astype(np.float32)
+    S[:, ~sp.valid] = floor
+    return sp.with_S(S)
 
 
 def ridge(sp: Spectrogram, max_step_bins: int = 3, smooth: float = 1.5) -> np.ndarray:
@@ -112,7 +113,7 @@ def grid_search(sp: Spectrogram, t_start, t_end, f_lo, f_hi, c, harmonics=1,
         raise ValueError(f"unknown objective {objective!r}")
     contrast = objective == "contrast"
     if contrast and fat_bins and fat_bins > 1:
-        sp = Spectrogram(sp.t, sp.f, maximum_filter1d(sp.S, fat_bins, axis=0))
+        sp = sp.with_S(maximum_filter1d(sp.S, fat_bins, axis=0))
     v_grid = np.arange(30, 170, 10.0) if v_grid is None else v_grid
     d_grid = np.geomspace(300, 9000, 14) if d_grid is None else d_grid
     f0_min, f0_max = f0_range or (f_lo * 1.15, f_hi * 0.85)

@@ -40,9 +40,9 @@ def default_jobs() -> int:
         except (OSError, subprocess.CalledProcessError, ValueError):
             pass
     if sys.platform.startswith("linux"):
-        n = linux_physical_cores(os.sched_getaffinity(0))
-        if n:
-            return n
+        cores = linux_physical_cores(os.sched_getaffinity(0))
+        if cores:
+            return cores
     return os.cpu_count() or 1
 
 

@@ -283,7 +283,8 @@
    "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
    "blind": false,
    "date": "2026-11-04",
-   "notes": "the steep 165 to 105 Hz component"
+   "notes": "the steep 165 to 105 Hz component",
+   "line": 0
   },
   {
    "window": "sw-e01",
@@ -305,7 +306,8 @@
    "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
    "blind": false,
    "date": "2026-11-04",
-   "notes": "the slow 205 to 165 Hz component; N110DP, heard 1.6 s apart, fits it as well"
+   "notes": "the slow 205 to 165 Hz component; N110DP, heard 1.6 s apart, fits it as well",
+   "line": 1
   },
   {
    "window": "sw-e02",
@@ -327,7 +329,8 @@
    "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
    "blind": false,
    "date": "2026-11-04",
-   "notes": "may be the tail of sw-e01's slow component"
+   "notes": "may be the tail of sw-e01's slow component",
+   "line": 0
   },
   {
    "window": "sw-e03",
@@ -335,7 +338,8 @@
    "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
    "blind": false,
    "date": "2026-11-04",
-   "notes": "N348D (6.0 km, heard 3883 s) is flat over the window"
+   "notes": "N348D (6.0 km, heard 3883 s) is flat over the window",
+   "line": null
   },
   {
    "window": "sw-e07",
@@ -343,7 +347,8 @@
    "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
    "blind": false,
    "date": "2026-11-04",
-   "notes": "N701NH (10.2 km, heard 4566 s) is flat; the lines fall 16-19 %, so a closer source with no ADS-B"
+   "notes": "N701NH (10.2 km, heard 4566 s) is flat; the lines fall 16-19 %, so a closer source with no ADS-B",
+   "line": null
   },
   {
    "window": "sw-e08",
@@ -351,7 +356,8 @@
    "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
    "blind": false,
    "date": "2026-11-04",
-   "notes": "N8306B (8.3 km, heard 4689 s) and N255SK (10.4 km) are flat near 105 and 180 Hz, close to the lines' frequencies but heard after the window"
+   "notes": "N8306B (8.3 km, heard 4689 s) and N255SK (10.4 km) are flat near 105 and 180 Hz, close to the lines' frequencies but heard after the window",
+   "line": null
   },
   {
    "window": "sw-e09",
@@ -365,7 +371,8 @@
    "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
    "blind": false,
    "date": "2026-11-04",
-   "notes": "a 150 Hz line follows the curve's flat start; its fall is after the span"
+   "notes": "a 150 Hz line follows the curve's flat start; its fall is after the span",
+   "line": 0
   }
  ],
  "overlays": "runs/2026-11-04-blind-labels/swfl_overlay"

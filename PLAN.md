@@ -2,7 +2,7 @@
 
 This is the route from what dopplertrack does today to the tool we want, written from what we currently know. It will change as we learn: each experiment gets a record in [docs/experiments/](docs/experiments/README.md), and its conclusion is folded in here.
 - [AGENTS.md](AGENTS.md) has the working rules.
-- [docs/reference/README.md](docs/reference/README.md) has the papers.
+- [docs/reference/README.md](docs/reference/README.md) has the papers and video-reference guide.
 - Code references are to `dev` at 5a617ff.
 
 ## 1. Destination
@@ -97,7 +97,7 @@ Execution errors (unreadable audio, a missing ffmpeg, a network failure) are rep
   A2O coordinates are obfuscated (default uncertainty is a few hundred metres, custom offsets can differ).
   Sources, licences, inventories and the pending AeroSonicDB 3K access request are in the data root's `MANIFEST.md`;
 - flight data for each recording's day: 2024-04-07 for the Eclipse sites, but not yet 04-08, which two of them run into. The development cases also have the day before, plus METAR reports and upper-air soundings;
-- 16 papers and books.
+- 16 papers and books, plus colsto's Doppler-geolocation walkthrough with a local annotated transcript and visual evidence (see the reference guide).
 
 None of the non-development audio has been searched yet. A recording session in Seattle is being planned.
 

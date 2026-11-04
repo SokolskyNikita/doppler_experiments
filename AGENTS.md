@@ -60,6 +60,8 @@ Doppler curves of propeller aircraft. `README.md` explains the method; `PLAN.md`
 
 ## Parallel work
 
+- Start each new session in a dedicated worktree and topic branch based on `dev` before editing or
+  running jobs; create them without asking. Reuse the session's worktree if one is already assigned.
 - One agent per worktree and branch. The main checkout is the user's: don't switch its branch or commit there
   unless asked.
 - New Claude worktrees start from the HEAD of the checkout they're created from (normally `dev`, set in

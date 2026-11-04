@@ -13,7 +13,9 @@ The sheets use the package's STFT: a 2.048 s Hann window every 0.25 s from 40 to
 3. a 2 s running mean along time;
 4. a 3-bin maximum along frequency.
 
-Each sheet covers 10 min in 2 min strips. Clips were chosen by fixed rules before any flight data was opened:
+Each sheet covers 10 min in 2 min strips. The display smoothing is itself a filter:
+- **Steep ridges are dimmed.** Over the 2 s mean, a ridge sweeping at g Hz/s moves 2g Hz. It stays within the 3-bin (1.46 Hz) maximum only below about 0.7 Hz/s. Above that, its level at the steep part drops by roughly 1.46 / 2g: −2.4 dB at Oyster Bay event 2's 1.26 Hz/s, and −8 dB at 5 Hz/s. On a 0–6 dB scale, a close, fast pass's steepest stretch can therefore fade while its flat tails stay visible.
+- **What "no visible curve" means.** No ridge was seen in the tails either. The tails sweep slowly, so smoothing doesn't hide them; such a tone lies below the sheet's floor, a few dB above each bin's median. A pass seen only in its steep middle could be missed. Clips were chosen by fixed rules before any flight data was opened:
 
 | Clip | Span | Why |
 |---|---|---|

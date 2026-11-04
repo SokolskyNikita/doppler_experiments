@@ -13,6 +13,7 @@ Oyster Bay and the eagle cam shaped the method, so every result on them is devel
 
 | Record | Question | Outcome |
 |---|---|---|
+| [2026-11-04-trace-join](2026-11-04-trace-join.md) | Can flight data be joined across UTC midnight without changing one-day cases? | Yes: ESID 375 joins 5 of its 7 midnight seams and 937 its one; one-day cases are unchanged |
 | [2026-11-04-bench-baselines](2026-11-04-bench-baselines.md) | What do the seed cases give at upstream a16b700, from saved fits and from raw audio, and does the current code match? | Identical on both profiles. Saved fits reproduce the published results; raw audio locates no positive: Oyster Bay's fit is biased (true pair 10th), and the eagle cam's second event is the wrong flyover |
 | [2026-11-04-freqtrack](2026-11-04-freqtrack.md) | Does a local tracker with an off state beat `ridge()` against the trajectory reference on the Livermore passes? | Not met: run 1 had lower error (0.45 % against 0.48 %) and 2.8× fewer bridges but 17× more fragments; the one retune (run 2) failed all three. The off state keeps it on manoeuvring passes (0.84 % against 15 %); ssqueezepy locks onto other lines (14 %) |
 | [2026-11-04-parallel-cpa](2026-11-04-parallel-cpa.md) | Does the parallel CPA build give the serial table byte for byte, and does any output depend on `--jobs`? | Yes and no: every table, search CSV and detection is identical; Oyster Bay's cold CPA build takes 26 s at 10 jobs (405 s before), once the cache is saved uncompressed |

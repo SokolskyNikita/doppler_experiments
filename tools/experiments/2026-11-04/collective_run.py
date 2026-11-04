@@ -10,7 +10,7 @@ find, at +-10 % f0, with the case's box swapped to that day's cut of the same bo
 collective_null.py (day, max_S = the winner's Z, second_S = the best mode 2 km or more from it, lat, lon, n_matched,
 clock_audio_minus_utc_s).
 
-usage: uv run python tools/experiments/2026-11-04/collective_run.py [RUN] [--null] [--shard K/N] [--resume DIR ...] [--merge] [--inputs]
+usage: uv run python tools/experiments/2026-11-04/collective_run.py [RUN] [--null [--null-cases C,...]] [--shard K/N] [--resume DIR ...] [--merge] [--inputs]
 """
 import argparse
 import datetime
@@ -115,18 +115,23 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     shards.add_args(ap)
     ap.add_argument("--null", action="store_true", help="A's other-day draws (verdict_null_days.json) instead of the cases")
+    ap.add_argument("--null-cases", default=None, help="with --null, only these cases' draws (comma-separated)")
     a = ap.parse_args()
-    unit_ids = NULL_UNITS if a.null else UNITS
+    keep = set(a.null_cases.split(",")) if a.null_cases else None
+    if keep and not keep <= {u.split("--")[0] for u in NULL_UNITS}:
+        ap.error(f"--null-cases: {sorted(keep - {u.split('--')[0] for u in NULL_UNITS})} have no null days")
+    unit_ids = [u for u in NULL_UNITS if not keep or u.split("--")[0] in keep] if a.null else UNITS
     if a.inputs:
         from bench import inputs as bench_inputs
         doc = bench_inputs.run_inputs(sorted({u.split("--")[0] for u in unit_ids}), "locate")
-        days = sorted({null_traces(*u.split("--null--")) for u in NULL_UNITS}) if a.null else []
+        days = sorted({null_traces(*u.split("--null--")) for u in unit_ids}) if a.null else []
         shards.print_inputs(doc["cases"], doc["inputs"] + days, [], tuple(doc["cache_kinds"]))
         return
     params = dict(units=unit_ids, detect=DETECT, k=10, c="15 C", weather=False,
                   collective=dict(coarse_m=2000, fine_m=200, keep_top=5, cluster_s=20, agree_s=6, null_n=1000))
     if a.null:
-        params.update(f0_span=0.10, null_days="tools/experiments/2026-11-04/verdict_null_days.json")
+        params.update(f0_span=0.10, null_days="tools/experiments/2026-11-04/verdict_null_days.json",
+                      null_cases=sorted(keep) if keep else None)
     run = shards.open_run(a.run, "collective-null" if a.null else "collective-find",
                           {"script": "tools/experiments/2026-11-04/collective_run.py", "params": params})
     units = shards.Units(run, unit_ids, params, a.shard, a.resume)

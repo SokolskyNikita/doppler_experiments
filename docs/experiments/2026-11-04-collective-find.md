@@ -91,3 +91,71 @@ One counted retune is allowed, of the clock vote's cluster width.
 **Expectation.**
 - The pair rule lands in wrong basins on most turn and both cases at every amplitude, and on some straight ones at 0.02. C's window round 2 found brightness bimodal even on straight synthetic passes, though `detect` and locate's ten searches use contrast.
 - The collective find is within 2 km on all cases at 0.05 and 0.03, and on some at 0.02.
+
+## The own-day rerun: the top 5 coarse cells (40454ae)
+
+Twelve units on 12 spot 8xlarge boxes, the unit shards relaunched after spot interruptions at the same commit, merged into `runs/2026-11-04-collective-find-merge/` (`collective.json`, and `OWN.json` for A's null). Each unit's result was written before any label was read.
+
+| Case | Sweep | Z | Second mode ≥ 2 km off | Distance from truth | True flights matched | Fine stage |
+|---|---|---|---|---|---|---|
+| oyster-bay | ±10 % | 15.30 | 15.10 | 29.6 km | neither | 2,543 s |
+| oyster-bay-hp150-aac32k | ±10 % | 18.38 | 15.08 | 61.1 km | neither | 2,215 s |
+| eagle-cam-clip-18000s | ±10 % | 16.27 | 9.37 | **0.5 km** | **both** (a2baea z 4.95, a336e4 z 1.80) | 1,279 s |
+| eagle-cam-midnight | ±10 % | 8.81 | 8.06 | 19.1 km | – | 977 s |
+| oyster-bay-moved-wsw150 (−) | ±10 % | 19.30 | 17.36 | – | – | 1,571 s |
+| oyster-bay-moved-north150 (−) | ±10 % | 10.37 | 9.91 | – | – | 340 s |
+| oyster-bay-sources-removed (−) | ±10 % | 15.31 | 14.97 | – | – | 2,131 s |
+| xenocanto-xc990819 (−) | ±10 % | 13.36 | 12.93 | – | – | 610 s |
+| oyster-bay | ±5 % | 19.82 | 17.33 | 58.3 km | neither | 777 s |
+| oyster-bay-hp150-aac32k | ±5 % | 21.51 | 21.22 | 58.5 km | neither | 728 s |
+| eagle-cam-clip-18000s | ±5 % | 17.21 | 14.76 | 1.3 km | both (z 6.59, 2.44) | 816 s |
+| eagle-cam-midnight | ±5 % | 10.10 | 9.50 | 23.5 km | – | 553 s |
+
+**Against the criteria.** Criterion 3 waits for A's γ; its draws are the other-day null below.
+1. **Fails on Oyster Bay and its copy at both sweeps; holds on the eagle cam clip at both.** eagle-cam-midnight's winner is 19 km off.
+2. **Holds only trivially.** eagle-cam-midnight's clock puts the recording on 2024-12-28, but 9.3 h from its start.
+3. **Waits for A's γ.**
+4. **Fails.** The fine stage alone takes 6–42 min per case against 2–3 min, though the top-5 rule cut it 2–6× from the first run.
+
+**Why Oyster Bay fails.**
+- **The true cell never reaches the fine stage.** None of the five kept coarse cells is within 14 km of the truth, on any of the three Oyster Bay runs. The kept cells' coarse Z are 18–23 (±10 %), out of 3,876 cells in the case's 100 × 150 km box of New York traffic.
+- **The winner doesn't depend on the true flights.** oyster-bay's winner and matched flights (a0bcb7, a27aab) are sources-removed's exactly: the same point, found with the true pair deleted.
+- **ace391's window is out of the fine sweep's reach.** Detection gives its window a coarse tone of 140 Hz against the true line's 125.5 Hz, 11.5 % off. The fine stage's ±10 % can't reach it even at the true point; the coarse stage's ±12 % just can.
+
+**Against the expectation.** I expected Oyster Bay to pass 1 and the eagle cam to be the doubtful one. The opposite happened:
+- the eagle cam is found with both true flights, weak window included, at both sweeps;
+- Oyster Bay is lost twice over, in the coarse ranking and in the tone sweep.
+
+**Decision line.** "If 1–4 hold" is false, whatever γ shows: step B doesn't become the collective find in this form. The proposal's second line ("if 1 fails on the eagle cam while Oyster Bay passes") doesn't apply either: the failure is the other way round. What the null can still tell:
+- whether the eagle cam's win is significant over SWFL traffic;
+- whether the negatives stay below γ.
+
+## A design step, written before the next rerun: cells by margin, the tone per candidate
+
+**Two causes, both design.** Both lost Oyster Bay, and both repeat the per-event fit's failure: the find inherits a fixed choice made before the evidence is weighed.
+- **The pruning keeps a count, not a margin.** Five cells out of 3,876, whatever the scores.
+- **The tone comes from detection's coarse template.** ace391's window is the second-strongest of ten, and its coarse tone (140 Hz) is 11.5 % off the true line (125.5 Hz). Its estimate isn't weak; it is confidently wrong, so a sweep widened only where the tone estimate is weak wouldn't catch it.
+
+**The step, fixed now.**
+1. **The coarse map is written whole,** every cell's Z, so the true cell's rank is known on each case. The fine stage keeps every coarse cell with Z ≥ Z_max − 2σ_c, where σ_c is 1.4826 × the MAD of the coarse Z over the cells with Z > 0. The count is reported, not fixed, under a cap of 20 cells by Z. Where the cap binds, the record gives the margin it reached.
+2. **The tone is each candidate's own.** For each (point, flight, window), the score is maximised over f0 across ±25 % of detection's coarse tone: the crop's span holds it, and ace391 needs −10.4 %. So each candidate flight's curve picks its own f0 from the window's observed frequencies, instead of starting from detection's.
+   - This is the PM's variant (b). Its look-elsewhere cost is the same as any ±25 % sweep's. Each window's null is drawn with the same rule, so the cost is priced there, and the other-day null redraws on it.
+   - The coarse stage takes the same ±25 % (at 2 % steps); the fine stage steps at 0.5 %.
+
+**The cost, and its bound.**
+- **Today's fine stage** on Oyster Bay is 2,543 s for 5 cells × 41 tone points on an 8xlarge, about 510 s per cell.
+- **The new step at today's sampler** would be 20 cells × 101 tone points, about 21 min per cell and 7 box-hours per case at the cap.
+- **Two implementation items keep that affordable.**
+  - **A log-frequency view of each window:** a scaled f0 becomes an index shift, so the 101 tone points are a gather from one precomputed (log f × time) matrix, not 101 bilinear samplings. Its speed is measured on the unit test before any run.
+  - **The fine stage as fleet units,** one per (case, kept cell). The wall time per case is then one cell's, under 21 min, and the box cost is at most 7 hours per case.
+- **The null at the cap** would be up to 150 × 7 box-hours for New York. That's why the coarse map comes first: it says what the cap needs to be.
+
+**The order.**
+1. **The coarse map,** at ±25 %, on the eight cases. It's cheap, about 5–10 min per case. It reports the true cell's rank on the positives.
+2. **The fine stage** within the margin.
+3. **Only then** the New York draws.
+
+**What it should do to the eagle cam.**
+- **Its z values drop.** Widening the sweep from ±5 % to ±10 % took a2baea from z 6.59 to 4.95, and a336e4 from 2.44 to 1.80, about × 0.75 each. Going to ±25 % should cost a similar factor again: about 3.5 and 1.3.
+- **Both should stay matched.** The margin rule can only add cells, so it can't drop the eagle cam's winning cell. Its second mode (9.37 against 16.27) leaves room.
+- **I expect the eagle cam's location and matched set unchanged,** with lower z, and ace391 reachable at Oyster Bay. Whether Oyster Bay's true cell then wins is what the coarse map's rank says first.

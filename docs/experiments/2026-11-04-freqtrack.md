@@ -91,6 +91,9 @@ error than `ridge()`, with no more false bridges and no more fragments.
 | `crossing_bins` | 1 | 1 | a priori |
 | `harmonic_tol`, `harmonic_iqr`, `max_order` | 1 %, 0.5 %, 6 | same | a priori (hermes's small ratios) |
 
+The module's defaults are run 1's (θ 9.5, birth 6, rise and hop cutting), its best measured
+configuration; run 2's settings remain available through `TrackParams` and `flag=("rise", "hop")`.
+
 So 4 knobs were derived and 19 were set a priori. The retune changed 2 knobs and 2 rules (rise and hop
 from cutting to flagging). None of them was tuned on Livermore.
 

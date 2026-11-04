@@ -33,13 +33,12 @@ from .audio import Spectrogram
 
 @dataclass(frozen=True)
 class TrackParams:
-    """Every knob of the tracker, set on synthetic cases only. theta_db and birth come from the one
-    recorded retune after Livermore run 1 (tools/experiments/2026-11-04/freqtrack_retune.py): a lower
-    per-frame threshold with a higher birth cost, at the same rate of one false track per hour per
-    100 Hz on white noise. Run 1 used theta 9.5 dB and birth 6."""
+    """Every knob of the tracker, set on synthetic cases only. The defaults are Livermore run 1's,
+    the best measured configuration (docs/experiments/2026-11-04-freqtrack.md). Run 2's retune,
+    theta 9 dB with birth 20 and rise and hop flagging, measured worse on all three criteria."""
     peaks_per_frame: int = 8          # Viterbi states per frame, besides "off"
-    theta_db: float = 9.0             # whitened level below which a cell costs; with birth, 1 false track/h/100 Hz on noise
-    birth: float = 20.0               # cost of starting a track (dB)
+    theta_db: float = 9.5             # whitened level below which a cell costs: 1 false track per hour per 100 Hz on noise
+    birth: float = 6.0                # cost of starting a track (dB)
     death: float = 6.0                # cost of ending one (dB)
     jump_cost: float = 0.1            # dB per bin of frequency change between frames
     max_rel_slope: float = 0.25       # physical cap on |df/dt| / f, per second (PLAN 6.1, v <= 110 m/s, R >= 150 m)
@@ -565,9 +564,10 @@ def harmonic_groups(tracks: list[Track], links: list[HarmonicLink]) -> list[dict
 
 # ---- the whole event ---------------------------------------------------------------------
 
-# Rise and hop both cut true curves on Livermore, where the 2.048 s window smears a pass's steep
-# part (docs/experiments/2026-11-04-freqtrack.md), so by default they flag instead.
-FLAG_ONLY = ("rise", "hop")
+# Rules that flag instead of cutting. Rise and hop both cut true curves on Livermore, where the 2.048 s
+# window smears a pass's steep part, but cutting measured better than flagging there
+# (docs/experiments/2026-11-04-freqtrack.md), so by default they cut; pass flag=("rise", "hop") to flag.
+FLAG_ONLY: tuple[str, ...] = ()
 
 def track_window(sp: Spectrogram, stft: SampleSTFT, t_start: float, t_end: float, f_lo: float, f_hi: float,
                  p: TrackParams = TrackParams(), rules: tuple[str, ...] = ("weak", "rise", "hop", "link", "crossing"),

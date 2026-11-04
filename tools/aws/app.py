@@ -10,12 +10,10 @@ What it holds:
   cache-deltas/, data/raw/ and data/derived/, so a job can't touch cache/ or tools/;
 - a launch template per architecture (arm64 for c8g, c8gd, c7g; amd64 for c7a) on the stock Ubuntu 24.04
   image, whose user data is box/bootstrap.sh; `runs launch` starts an instant EC2 Fleet over both;
-- the dev box, a c8g.2xlarge on demand, stopped by an alarm after 30 min below 5 % CPU."""
+- the dev box, a c8g.2xlarge on demand, which stops itself after 30 idle minutes (box/devbox-idle.sh)."""
 from pathlib import Path
 
 import aws_cdk as cdk
-from aws_cdk import aws_cloudwatch as cw
-from aws_cdk import aws_cloudwatch_actions as cwa
 from aws_cdk import aws_ec2 as ec2
 from aws_cdk import aws_iam as iam
 from aws_cdk import aws_s3 as s3
@@ -115,15 +113,7 @@ class FleetStack(cdk.Stack):
             vpc_subnets=ec2.SubnetSelection(subnet_type=ec2.SubnetType.PUBLIC, availability_zones=["us-west-2b"]),
             role=role, security_group=sg, user_data=user_data("devbox.sh", bucket), require_imdsv2=True,
             block_devices=[root_volume(DEV_ROOT_GB, None)])
-        idle = cw.Alarm(
-            self, "DevBoxIdle", alarm_name="dopplertrack-dev-idle", threshold=5, evaluation_periods=6,
-            comparison_operator=cw.ComparisonOperator.LESS_THAN_THRESHOLD,
-            treat_missing_data=cw.TreatMissingData.NOT_BREACHING,
-            alarm_description="stops the dev box after 30 min with no 5-minute CPU maximum above 5 %",
-            metric=cw.Metric(namespace="AWS/EC2", metric_name="CPUUtilization",
-                             dimensions_map={"InstanceId": dev.instance_id}, statistic="Maximum",
-                             period=cdk.Duration.minutes(5)))
-        idle.add_alarm_action(cwa.Ec2Action(cwa.Ec2InstanceAction.STOP))
+        # the idle stop runs on the box itself (box/devbox-idle.sh): a CloudWatch alarm stopped it under running checks
 
         return dev.instance_id
 

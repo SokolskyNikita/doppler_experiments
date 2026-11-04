@@ -565,9 +565,9 @@ The evaluation set is what limits M3, and collecting it takes calendar time rath
 | Eclipse ESID 937 | about 25 h from 05:40 UTC on 2024-04-07, with no prop pass within 20 km that day | a negative that must abstain, once 04-08's flight data is fetched |
 | xeno-canto XC979185 | one prop pass, start time known to the minute | a single-flyover case |
 | xeno-canto XC990819, XC990820, XC986433 | Essex, jets only | development: background negatives for `detect`'s threshold; the first two are one group |
+| Seattle (planned) | your recordings, several devices at one spot | one group per session: it tests devices, not new sites |
 
 ESID 375 and 937 both run past UTC midnight into 2024-04-08, so they also test the midnight case, and they need that day's flight data.
-| Seattle (planned) | your recordings, several devices at one spot | one group per session: it tests devices, not new sites |
 
 Aircraft-audio datasets without location, timing and matching trajectories can train or test detection, but can't validate a location.
 

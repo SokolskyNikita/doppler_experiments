@@ -146,6 +146,33 @@ background is only a handful of null sigmas.
   - The lever is the fit's bias itself: item 2's turn model, item 8, or a track that stays on the pass (item 3).
   - `hypotheses.py` and `run_search(hypotheses=True)` stay as off-by-default library code, at the retune's
     settings, for the re-run after those.
-- **The A1/A3 rerun with the first run's hypotheses** (`runs/2026-11-04-hypotheses-pairs-2/`, from `45d0bd8`)
-  stands as the comparable-score result with hypotheses, and is reported when it finishes. The retune didn't
-  pass B1 and B2, so A1/A3 are not run again on it.
+- **The A1/A3 rerun with the first run's hypotheses** is the comparable-score result with hypotheses. The
+  retune didn't pass B1 and B2, so A1/A3 are not run again on it.
+  - Two Mac attempts were stopped unread, so neither has a ranking: `runs/2026-11-04-hypotheses-pairs-2/` for a
+    reboot at 26 of 30 searches, and `-3` for the move to the AWS fleet at 2 of 30.
+  - It runs on the fleet from `claude/sde-stageb-pairs-45d0bd8`: `45d0bd8`'s code, plus shard support and
+    `null_n`, whose default is 1,000.
+
+## Prepared before the A1/A3 result
+
+Written 2026-11-04, before the fleet run, which is the first A1/A3 run whose ranking will be read.
+
+**When A1 counts as inside the null's noise.** This is [`a1_noise.py`](../../tools/experiments/2026-11-04/a1_noise.py).
+- Each event's z uses its null's median and 1.4826 × MAD from n draws.
+- The script redraws both from their asymptotic sampling errors: 1.2533 σ/√n for the median, 1.1664/√n relative
+  for the MAD. It takes one draw per null, shared by every pair whose search used that null.
+- It then re-ranks the eagle cam's ten pairs, 20,000 times.
+- **Met:** the true pair is first as run, and first in at least 95 % of draws.
+- **Not met:** it is not first as run, and is first in at most 5 % of draws.
+- **Inside the null's noise:** anything else.
+
+**What each outcome leads to:**
+- **Met or not met:** that is A1's result, recorded here with A3. No further run.
+- **Inside the noise:** stage A's one retune is spent on N. The follow-up is the same search with `--null-n`,
+  where N is the n that would put the observed gap at 2 standard deviations, rounded up to a multiple of 10,000.
+  - It is judged by the same script and rule.
+  - If it is still inside the noise, this record says the test can't decide.
+  - Both commands are in [`launch_sde_a.sh`](../../tools/experiments/2026-11-04/launch_sde_a.sh) (`a1`).
+- **The scale to expect.** On a synthetic version of stage A's eagle-cam gap (0.03 in Z, z ≈ 4 per event), the
+  gap's standard deviation at n = 1,000 is about 0.22. The follow-up's N would then be about 220,000. The MAD's error,
+  multiplied by z, is most of that spread.

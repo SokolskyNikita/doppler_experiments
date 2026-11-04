@@ -2,7 +2,7 @@
 
 <!-- index
 question: Does gating each pair's clock on the recording's stated start time reject the wrong clocks locate found, without losing a true pair?
-outcome: Pending: the criterion below was written before the run
+outcome: Yes at both settings: no true pair dropped, every wrong clock gone; with it the eagle cam is located to 0.33–0.39 km and the 15 °C defaults hold
 -->
 
 ## Question
@@ -56,7 +56,7 @@ them: found, a different wrong pair inside the gate, or `no_surviving_candidate`
 cut-short case, `runs/2026-11-04-locate-gate-s4of5/`) ran at 15 °C. Since the Tier 2 runs, SDE-D's change made a case's
 station temperature apply only when a run asks for it (`bench run --weather`), and the Tier 2 finds were made with it
 (Oyster Bay at 25.6 °C, each flight's own speed from its height). At 15 °C Oyster Bay's comparable search ranks the true
-pair third (17.98 against 18.0+ for the winner), with the gate keeping the whole stated day. So the gate is judged
+pair third (the winner, a26f86 + a77707, scores 17.98), with the gate keeping the whole stated day. So the gate is judged
 against Tier 2 at Tier 2's conditions: all ten cases with `--weather`, criterion as above. The 15 °C reading is reported
 beside it, since it says the Tier 2 find depends on the station temperature.
 
@@ -71,13 +71,80 @@ the numbers for the PM to decide, not applied by rule.
 
 ## Results
 
-Pending.
+Three runs of all ten cases with the gate, at 894b27c and db398cd (the same locate code), five boxes each, two cases per
+box: the station temperature with locate's defaults (`runs/2026-11-04-locate-gate-w-merged/`), and 15 °C with
+`--pair-rule both`, the filter on (`-gate-15-merged/`) and off (`-15-off-merged/`). "Clock gate kept" counts the
+triples the chosen search kept; "Outside gate" counts candidates whose clock is outside the stated start's tolerance
+plus 6 s (it must be 0). From `tools/experiments/2026-11-04/locate_tier2.py`, after every record's hash:
+
+| Run | Case | Verdict | Expected | True-pair rank | Top (km) | Refined (km) | top2 pick | comparable pick | top2 / comparable (s) | Start (UTC) | Clock gate kept | Outside gate |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| weather-on | eagle-cam-clip-18000s | ambiguous winner_only_refined | – | none of 5 | 0.86 | 0.33 | – | a13d1e + a2baea | 361 | 19:21:01Z | 508 of 55,016 | 0 |
+| weather-on | oyster-bay-moved-north150 | ambiguous winner_only_refined | – | – of 86 | 135.49 | 135.49 | – | a1d3d1 + a88f95 | 208 | 13:00:04Z | 8,398 of 8,398 | 0 |
+| weather-on | eagle-cam-midnight | insufficient_evidence no_surviving_candidate | – | – of 0 | – | – | – | unavailable | 157 | – | 0 of 1,939 | – |
+| weather-on | oyster-bay-moved-wsw150 | ambiguous winner_only_refined | – | – of 148 | 118.06 | 117.48 | – | ad0d9d + a2311a | 368 | 12:35:25Z | 8,641 of 8,808 | 0 |
+| weather-on | eagle-cam-midnight-days0 | insufficient_evidence no_surviving_candidate | **no** | – of 0 | – | – | – | unavailable | 139 | – | 0 of 824 | – |
+| weather-on | oyster-bay-sources-removed | ambiguous winner_only_refined | – | – of 373 | 77.39 | 77.56 | – | a26f86 + a77707 | 429 | 11:59:48Z | 23,357 of 24,251 | 0 |
+| weather-on | oyster-bay | ambiguous winner_only_refined | – | 1 of 381 | 0.18 | 0.28 | – | **true pair** | 527 | 20:17:30Z | 24,163 of 25,057 | 0 |
+| weather-on | oyster-bay-traces-end-early | insufficient_evidence flight_data_missing_time | yes | – of 0 | – | – | – | – | – | – | – | – |
+| weather-on | oyster-bay-hp150-aac32k | ambiguous winner_only_refined | – | 1 of 381 | 0.18 | 0.28 | – | **true pair** | 516 | 20:17:30Z | 24,050 of 24,940 | 0 |
+| weather-on | xenocanto-xc990819 | insufficient_evidence no_surviving_candidate | – | – of 0 | – | – | – | unavailable | 214 | – | 0 of 1,656 | – |
+| 15C-on | eagle-cam-clip-18000s | ambiguous winner_only_refined | – | 1 of 1 | 0.92 | 0.39 | unavailable | **true pair** | 28 / 374 | 19:21:13Z | 392 of 50,706 | 0 |
+| 15C-on | oyster-bay-moved-north150 | ambiguous winner_only_refined | – | – of 97 | 135.49 | 135.50 | a1d3d1 + a88f95 | a1d3d1 + a88f95 | 26 / 218 | 13:00:04Z | 7,946 of 7,946 | 0 |
+| 15C-on | eagle-cam-midnight | insufficient_evidence no_surviving_candidate | – | – of 0 | – | – | unavailable | unavailable | 25 / 146 | – | 0 of 1,939 | – |
+| 15C-on | oyster-bay-moved-wsw150 | ambiguous winner_only_refined | – | – of 263 | 98.89 | 98.42 | a6b42a + a16cac | ae202c + ab31d7 | 46 / 519 | 16:45:53Z | 11,778 of 11,785 | 0 |
+| 15C-on | eagle-cam-midnight-days0 | insufficient_evidence no_surviving_candidate | **no** | – of 0 | – | – | unavailable | unavailable | 20 / 134 | – | 0 of 824 | – |
+| 15C-on | oyster-bay-sources-removed | ambiguous winner_only_refined | – | – of 431 | 77.47 | 77.49 | a26f86 + a77707 | a26f86 + a77707 | 63 / 463 | 11:59:48Z | 18,151 of 18,605 | 0 |
+| 15C-on | oyster-bay | ambiguous winner_only_refined | – | 3 of 439 | 77.47 | 77.49 | a26f86 + a77707 | a26f86 + a77707 | 70 / 555 | 11:59:48Z | 18,709 of 19,163 | 0 |
+| 15C-on | oyster-bay-traces-end-early | insufficient_evidence flight_data_missing_time | yes | – of 0 | – | – | – | – | – | – | – | – |
+| 15C-on | oyster-bay-hp150-aac32k | ambiguous winner_only_refined | – | 6 of 436 | 77.47 | 77.61 | a26f86 + a77707 | a26f86 + a77707 | 66 / 402 | 11:59:48Z | 18,688 of 19,141 | 0 |
+| 15C-on | xenocanto-xc990819 | insufficient_evidence no_surviving_candidate | – | – of 0 | – | – | unavailable | unavailable | 18 / 203 | – | 0 of 1,513 | – |
+| 15C-off | eagle-cam-clip-18000s | ambiguous winner_only_refined silence_filter_off | – | none of 3 | 0.59 | 0.35 | a68cab + a2baea | a68cab + a2baea | 53 / 637 | 19:21:03Z | 401 of 42,834 | 0 |
+| 15C-off | oyster-bay-moved-north150 | ambiguous winner_only_refined silence_filter_off | – | – of 132 | 135.49 | 135.50 | a1d3d1 + a88f95 | a1d3d1 + a88f95 | 28 / 244 | 13:00:04Z | 12,757 of 12,757 | 0 |
+| 15C-off | eagle-cam-midnight | ambiguous winner_only_refined silence_filter_off | – | – of 1 | 3.58 | 3.94 | a6b714 + aa1ed4 | a6b714 + aa1ed4 | 39 / 260 | 22:30:30Z | 7 of 14,008 | 0 |
+| 15C-off | oyster-bay-moved-wsw150 | ambiguous winner_only_refined silence_filter_off | – | – of 727 | 133.16 | 133.14 | a7c80c + a958d8 | a7c80c + a958d8 | 85 / 1536 | 17:27:23Z | 50,431 of 51,715 | 0 |
+| 15C-off | eagle-cam-midnight-days0 | insufficient_evidence no_surviving_candidate | **no** | – of 0 | – | – | unavailable | unavailable | 32 / 213 | – | 0 of 12,221 | – |
+| 15C-off | oyster-bay-sources-removed | ambiguous winner_only_refined silence_filter_off | – | – of 1020 | 79.94 | 79.37 | a26f86 + a77707 | ab050a + aa9b54 | 138 / 1420 | 12:08:58Z | 88,698 of 90,730 | 0 |
+| 15C-off | oyster-bay | ambiguous winner_only_refined silence_filter_off | – | 19 of 1736 | 77.47 | 77.49 | a26f86 + a77707 | a26f86 + a77707 | 172 / 1862 | 11:59:48Z | 128,055 of 132,348 | 0 |
+| 15C-off | oyster-bay-traces-end-early | insufficient_evidence flight_data_missing_time | yes | – of 0 | – | – | – | – | – | – | – | – |
+| 15C-off | oyster-bay-hp150-aac32k | ambiguous winner_only_refined silence_filter_off | – | 26 of 1730 | 77.47 | 77.61 | a26f86 + a77707 | a26f86 + a77707 | 136 / 995 | 11:59:48Z | 127,753 of 132,150 | 0 |
+| 15C-off | xenocanto-xc990819 | insufficient_evidence no_surviving_candidate | – | – of 0 | – | – | unavailable | unavailable | 22 / 229 | – | 0 of 5,826 | – |
+
+- **Eagle cam.** Located at every setting once the gate is on: refined 0.33 km (station temperature), 0.39 km (15 °C,
+  filter on) and 0.35 km (15 °C, off) from the nest, against 54–71 km without the gate. The gate keeps under 1 % of the
+  triples (392–508 of 42,834–55,016), the ones whose clock agrees with the stream's start. At 15 °C with the filter on
+  the only survivor is the true pair, a2baea + a336e4, whose clock gives 19:21:13Z, the reference clock to 0.1 s. At the
+  other two settings the winner pairs a2baea with another flight (a13d1e, a68cab), in the right place.
+- **Oyster Bay.** The gate can only keep the stated day here, so it changes little: found at the station temperature
+  (true pair first, 278 m, as in Tier 2), not at 15 °C (true pair 3rd and 6th with the filter on, 19th and 26th off;
+  the winner a26f86 + a77707 is 77 km off).
+- **The midnight cases.** No pair's clock survives on `eagle-cam-midnight-days0` at any setting, so it ends at
+  `no_surviving_candidate`, not `past_utc_midnight`: with one day of flight data, a pair from before midnight would have
+  to explain events in a recording that is mostly after it. `eagle-cam-midnight` (both days) ends there too, except at
+  15 °C with the filter off, where 7 triples survive and the winner is 3.9 km off with a clock of 22:30:30Z.
+- **Essex** ends at `no_surviving_candidate` at every setting: none of its 1,513–5,826 triples, all from jets and wrong
+  clocks, has a clock within a minute of the recording's time. The negatives stay 98–135 km off.
 
 ## Outcome
 
-Pending.
+- **The gate passes at both settings.** No true pair is dropped: Oyster Bay keeps its find at the station temperature,
+  and at 15 °C the gate is what lets the eagle cam's true pair through, first and alone. Every wrong clock from the
+  Tier 2 record is gone: no candidate in any of the 30 records lies outside its gate.
+- **locate's defaults hold at 15 °C with the gate.** Pair rule (criterion 3): comparable finds the eagle cam with the
+  filter on; top2 finds no seed case at either filter setting (its eagle-cam search keeps no candidate, its Oyster Bay
+  pick is the 77 km pair). Silence filter (criterion 4): on finds the eagle cam, off finds no seed case, and the
+  negatives stay unlocated. Both defaults stand at the benchmark's present setting, so nothing is put to the PM here.
+- **What it means for step A.** With the gate, step A locates one recording of two at each setting, but not the same
+  one: Oyster Bay at the station temperature, the eagle cam at 15 °C (true pair) and to 0.33–0.39 km at every setting.
+  That one recording's find flips with the speed of sound is the ill-conditioned event fit SDE-D traced, now seen from
+  automatic events too. The midnight check still never fires on these clips: the gate leaves no pair to give it a
+  clock past midnight.
 
 ## Files
 
 `src/dopplertrack/locate.py` (`clock_gate`), `src/dopplertrack/cli.py` (`--start`, `--start-tolerance`),
 `bench/runner.py` (the profile reads the case's start), `tests/test_locate.py`.
+Script: `tools/experiments/2026-11-04/locate_tier2.py` (the table; `table-all.md` in `runs/2026-11-04-locate-15-off-merged/`).
+Runs: `runs/2026-11-04-locate-gate-w-merged/`, `-gate-15-merged/`, `-15-off-merged/` (merged from their
+`-s{1..5}of5` shards); the 15 °C smoke shard `runs/2026-11-04-locate-gate-s4of5/`; launches in
+`runs/2026-11-04-sde-b-fleet-launch/command.txt`.

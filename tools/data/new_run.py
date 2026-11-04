@@ -21,21 +21,40 @@ def git(*args) -> str:
     return subprocess.run(["git", *args], capture_output=True, text=True, check=True).stdout.strip()
 
 
-if len(sys.argv) != 2 or not re.fullmatch(r"[a-z0-9][a-z0-9-]*", sys.argv[1]):
-    sys.exit(__doc__ + "\n\ntopic: lowercase letters, digits and hyphens")
-now = datetime.datetime.now().astimezone()
-base = ROOT / "runs" / f"{now:%Y-%m-%d}-{sys.argv[1]}"
-base.parent.mkdir(parents=True, exist_ok=True)
-for n in range(1, 1000):
-    run = base if n == 1 else base.with_name(f"{base.name}-{n}")
+def code_state() -> dict:
+    return {"git_commit": git("rev-parse", "HEAD"), "git_dirty": bool(git("status", "--porcelain"))}
+
+
+def info(topic: str) -> dict:
+    """What run.json starts with."""
+    return {"topic": topic, "created": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
+            "cwd": os.getcwd(), **code_state()}
+
+
+def make(topic: str) -> Path:
+    """A new run folder for `topic`, with its run.json."""
+    if not re.fullmatch(r"[a-z0-9][a-z0-9-]*", topic):
+        raise ValueError("topic: lowercase letters, digits and hyphens")
+    now = datetime.datetime.now().astimezone()
+    base = ROOT / "runs" / f"{now:%Y-%m-%d}-{topic}"
+    base.parent.mkdir(parents=True, exist_ok=True)
+    for n in range(1, 1000):
+        run = base if n == 1 else base.with_name(f"{base.name}-{n}")
+        try:
+            run.mkdir()
+            break
+        except FileExistsError:
+            continue
+    else:
+        raise FileExistsError(f"no free run folder for {base}")
+    (run / "run.json").write_text(json.dumps(info(topic), indent=1) + "\n")
+    return run
+
+
+if __name__ == "__main__":
+    if len(sys.argv) != 2 or not re.fullmatch(r"[a-z0-9][a-z0-9-]*", sys.argv[1]):
+        sys.exit(__doc__ + "\n\ntopic: lowercase letters, digits and hyphens")
     try:
-        run.mkdir()
-        break
-    except FileExistsError:
-        continue
-else:
-    sys.exit(f"no free run folder for {base}")
-info = {"topic": sys.argv[1], "created": now.isoformat(timespec="seconds"), "cwd": os.getcwd(),
-        "git_commit": git("rev-parse", "HEAD"), "git_dirty": bool(git("status", "--porcelain"))}
-(run / "run.json").write_text(json.dumps(info, indent=1) + "\n")
-print(run)
+        print(make(sys.argv[1]))
+    except FileExistsError as e:
+        sys.exit(str(e))

@@ -14,7 +14,7 @@ It also records, at the grid point nearest the reference, each true flight's mod
 minus its CPA table t_emit (the PLAN item's measurement bullet).
 
 usage: python timing_grid.py --case ID --events EVENTS.json [--pick R1 R2] --cpa TABLE.npz --out OUT.json
-       [--jobs N]
+       [--jobs N]   (default $DOPPLERTRACK_JOBS, else the cores)
 EVENTS.json is a list of EventFit dicts (a detect output, or a runner record's events); --pick takes
 two 1-based ranks from it (default: the first two). The CPA table is only read; if its fingerprint
 doesn't match, the table is built in memory and not saved."""
@@ -29,7 +29,7 @@ import numpy as np
 from dopplertrack import search
 from dopplertrack.adsb import load_traces
 from dopplertrack.doppler import speed_of_sound
-from dopplertrack.parallel import ordered_map
+from dopplertrack.parallel import ordered_map, resolve_jobs
 from dopplertrack.pipeline import fitted_steepest_fall
 from dopplertrack.score import SF_FLAT_RATIO, modelled_curve, steepest_fall
 from dopplertrack.terrain import Terrain
@@ -63,8 +63,9 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--case", required=True); ap.add_argument("--events", required=True)
     ap.add_argument("--pick", nargs=2, type=int); ap.add_argument("--cpa", required=True)
-    ap.add_argument("--out", required=True); ap.add_argument("--jobs", type=int, default=4)
+    ap.add_argument("--out", required=True); ap.add_argument("--jobs", type=int, help="default: $DOPPLERTRACK_JOBS, else the cores")
     a = ap.parse_args()
+    a.jobs = resolve_jobs(a.jobs)
     case = next(c for c in json.loads((REPO / "bench/cases.json").read_text())["cases"] if c["id"] == a.case)
     s, lab = case["search"], case["labels"]
     evs = json.loads(Path(a.events).read_text())

@@ -93,9 +93,10 @@ A dash means 80 % wasn't reached even at the grid's top, +6 dB.
   power than in the first run, and on three real clips C1 never reaches 80 %.
 - **C9 leads.** It is ahead of or level with C1 on every pass in both modes. Today's curve score, T, trails C1 by about
   4 dB on the synthetic tone.
-- **Gate 1's target was probably the wrong theory.** +4.8 dB is the weak-signal law for adding nine powers (√9). At a
-  strict false-alarm rate (P = 1/200 per window, after a search over pitch bins) and P_D = 0.8, adding blocks
-  incoherently loses more than that law (Kay II, §5.3–5.4).
+- **Gate 1's target was probably the wrong theory.** +4.8 dB is the weak-signal law for adding nine powers: Kay II
+  §7.3's energy detector gains 5 log₁₀ N against the matched filter's 10 log₁₀ N. Kay states it valid only when the
+  per-block SNR is much less than 1. At the per-block SNRs a strict threshold (P = 1/200 per window, after a search
+  over pitch bins) and P_D = 0.8 need, that condition fails, and the law needn't hold.
   - The steady 6 dB here, and Codex's 5 dB on its own synthetic, are consistent with that.
   - This doesn't pass the gate, which was fixed before the run. It is the reason a successor would derive gate 1's
     target at the operating point, not from the weak-signal law.

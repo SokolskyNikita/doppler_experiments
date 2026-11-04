@@ -1,108 +1,122 @@
 # dopplertrack (fork)
 
-Acoustic geolocation from the Doppler curves of propeller aircraft: given a recording, its date and a rough
-region, find where it was made.
+Acoustic geolocation from the Doppler curves of propeller aircraft. You give it a recording, the date and a
+rough region, and it works out where the recording was made.
 
-> **Credit.** This is a fork of [mjshiggins/dopplertrack](https://github.com/mjshiggins/dopplertrack) by
-> MacCallister Higgins (MIT), which built the method, the pipeline and both validations below. That project
-> is itself an open reimplementation of the technique in colsto's video
-> ["I discovered a sound that leaks your exact location"](https://www.youtube.com/watch?v=UytYrhYLOKI),
-> which released no code. Fixes that don't depend on the fork go back upstream.
+This is a fork of [mjshiggins/dopplertrack](https://github.com/mjshiggins/dopplertrack) by MacCallister
+Higgins (MIT licence). Higgins wrote the method's implementation, the pipeline and both validations described
+below. That project in turn reimplements the technique colsto demonstrated in the video
+["I discovered a sound that leaks your exact location"](https://www.youtube.com/watch?v=UytYrhYLOKI), which
+came with no code. Fixes that don't need anything from the fork go back upstream as pull requests.
 
-## The idea
+## How it works
 
-Most outdoor recordings carry faint, usually inaudible tones from passing propeller aircraft: the
-blade-pass fundamental and its harmonics, roughly 60–400 Hz. As a plane passes, its tone sweeps down, and
-the exact shape of that sweep depends on where the listener stood relative to the plane's real path.
-Public ADS-B history records every flight that day, so each candidate spot on the ground predicts its own
-curves, and the recording picks out the spot whose curves match. Two flyovers a known time apart (or one,
-if the recording's clock time is known) are usually enough to rule out everywhere else.
+Most outdoor recordings pick up faint tones from propeller aircraft overhead, usually too quiet to hear: the
+blade-pass frequency and its harmonics, somewhere between 60 and 400 Hz. The tone drops as the plane goes
+by. How fast it drops, and when, depends on where the listener stood relative to the plane's actual path.
+Public ADS-B archives have every broadcasting flight for a given day, so each point on the ground predicts
+its own set of curves, and the recording is compared against all of them. Two flyovers a known interval
+apart are usually enough to rule out everywhere else. One is enough if the recording's start time is known.
 
-## What upstream showed
+## Upstream's results
 
-Upstream's numbers, on two recordings with known answers, both searched blind over a 100–150 km box with only the date given:
+Upstream tested on two recordings whose locations were public, searching blind over a 100–150 km box with
+only the date as a hint.
 
-| Recording | True flight pair | Distance from truth |
-|---|---|---|
-| Oyster Bay, NY, 1 h ([source](https://youtu.be/4CxVxuMVkMc)), colsto's reference clip | 1st of 328 pairs, 4.9 % margin | 43 m after a 50 m refinement |
-| Eagle cam, North Fort Myers, FL, 12 h ([source](https://youtu.be/zs2o5Rhlp5w)), windy and near a busy airport | 1st of 607 pairs, 2.5 % margin | 1.7 km from two flyovers; 592 m with three more |
+On colsto's one-hour reference clip from Oyster Bay, NY ([source](https://youtu.be/4CxVxuMVkMc)), the true
+pair of flights ranked first of 328 candidate pairs, ahead of the runner-up by 4.9 %. A 50 m refinement put
+the peak 43 m from the true spot.
 
 ![Modelled curves at the true Oyster Bay location](docs/results/oyster_bay_known_point.png)
 
-*At the true Oyster Bay location, the curves modelled from two real flights' trajectories (a PC-12 at
-6.1 km, a King Air at 3.6 km) sit on the measured ridges with no free parameters but a half-second shift.*
+*At the true Oyster Bay location, curves computed from two real trajectories (a PC-12 at 6.1 km and a King
+Air at 3.6 km) lie on the measured ridges. The only free parameter is a half-second time shift.*
 
-The eagle cam taught two lessons. Aircraft passing nearly overhead pin a location poorly, since the slant
-distance hardly changes as the listener moves; low, off-to-the-side passes pin it well, so long recordings
-with many flyovers help. And scoring must count the whole measured window, or a flight that leaves the data
-mid-pass wins on its bright half. Tables behind these numbers are in [docs/results/](docs/results/).
+The second recording is a 12-hour eagle-cam stream from North Fort Myers, FL
+([source](https://youtu.be/zs2o5Rhlp5w)), with wind on the microphone and a flight school 10 km away. The
+true pair ranked first of 607 by a 2.5 % margin. Two flyovers only got within 1.7 km. Adding three more,
+found by `detect`, brought it to 592 m. Both aircraft in the pair had passed almost straight overhead, and
+from overhead passes the slant distance barely changes as you move the listener around, so they can't pin
+the spot. Low passes off to one side can. The full tables are in [docs/results/](docs/results/).
 
-The fork reproduces both results from the committed event fits (see [PLAN.md](PLAN.md) section 2).
+Starting from upstream's saved event fits, the fork gets the same rankings on both recordings
+([PLAN.md](PLAN.md), section 2).
 
-## What this fork is for
+## What I want from this fork
 
-Upstream is a proof of concept: it works when a person picks the flyover windows, on the two recordings it
-was developed on, and it always returns a top answer, right or not. The aim here is a tool you can trust
-on a recording it has never seen:
+Upstream is a proof of concept. Someone has to pick the flyover windows by eye, it has only been run on the
+two recordings it was developed on and it always prints a top answer whether or not that answer is right.
+I want a tool that can be trusted on a recording it has never seen.
 
-- **One command.** `dopplertrack locate` takes audio, a UTC date and a box (optionally a start time) and
-  does the rest: finds the flyovers, fetches the flight data, searches, and writes a `result.json` and an
-  HTML report showing the matched flights, the measured and modelled curves, and the alternatives.
-- **A verdict, not just a ranking.** `located` with an uncertainty region, `ambiguous` with every
-  plausible location, or `insufficient evidence` with the reason. A wrong answer stated confidently is the
-  failure that matters most.
-- **Claims measured on held-out data.** Oyster Bay and the eagle cam shaped the method, so they're
-  development data only. Accuracy and the confident-wrong rate get measured on independent recordings
-  (Eclipse Soundscapes, xeno-canto, A2O, recordings made for the purpose), against criteria fixed in
-  advance.
-- **Robust to real recordings**: phone codecs, wind, jets and machinery, aircraft that turn or climb.
+Concretely, that means a `dopplertrack locate` command. It takes the audio, a UTC date, a box and
+optionally a start time. It finds the flyovers itself, downloads the flight data, runs the search and
+writes a `result.json` plus an HTML report with the matched flights, the measured and modelled curves and
+the alternatives it rejected. Its answer is one of three verdicts: *located*, with an uncertainty region;
+*ambiguous*, listing each location still plausible; or *insufficient evidence*, with the reason. Silence is
+better than a confident wrong answer, and that confident-wrong rate is the number I most want measured.
 
-Out of scope: aircraft without ADS-B, moving microphones, recordings with no date or region, real time.
+It also has to be measured honestly. Oyster Bay and the eagle cam shaped the method, so they only count as
+development data. Accuracy claims will come from recordings the method was never tuned on (Eclipse
+Soundscapes, xeno-canto, A2O and some I plan to record), scored against criteria written down beforehand.
+And it should keep working on phone audio, in wind, with jets and machinery in the background and when an
+aircraft turns or climbs mid-pass.
 
-## Where it stands (November 2026)
+Some things are out of scope: aircraft without ADS-B, moving microphones, recordings with no date or region
+at all and real-time use.
 
-**Working:** both published results reproduce; a content-keyed CPA cache cuts a re-search from about
-8 min to 2; data lives outside the repo with a hashed manifest, and each experiment gets its own run
-folder and record.
+## Status, November 2026
 
-**Not yet:** from raw audio alone it can't locate even Oyster Bay. `detect` finds the right flyovers, but
-its fits of real passes are biased (event 2's f0 comes out 5–11 % high and its timing 5–10 s short), and
-the search turns every fit into hard gates, so the true answer is filtered out without a word. Widening the
-gates lets wrong pairs win, and narrowing the fit windows helps one recording and breaks the other. The
-leading ideas are pairing on the steepest-fall time instead of the heard CPA, extracting frequency tracks
-to fit by least squares, and using the flyovers a search didn't use as a consistency check. Each
-experiment is written up in [docs/experiments/](docs/experiments/README.md).
+From raw audio alone, the tool can't yet locate even Oyster Bay. `detect` does find the right two flyovers.
+Its curve fits of them are off, though: event 2's frequency comes out 5–11 % high and the time between the
+events 5–10 s short. The search turns each fit into hard limits on timing and frequency, so the true answer
+gets filtered out and nothing says so. Widening those limits let a wrong pair win on both recordings.
+Fitting in narrower windows fixed Oyster Bay and broke the eagle cam. The ideas I'm testing next are pairing
+flyovers on the moment the tone falls fastest instead of the heard closest approach, extracting a frequency
+track to fit by least squares and checking each candidate against the flyovers the search didn't use. Each
+experiment has a write-up in [docs/experiments/](docs/experiments/README.md).
 
-**Route** (detail in [PLAN.md](PLAN.md)):
+What does work: both published results reproduce, a cache of the closest-approach table cuts a repeat
+search from about 8 minutes to 2 and the data sits outside the repo with a hashed manifest and one folder
+per experiment run.
 
-| Milestone | Delivers |
+The roadmap is in [PLAN.md](PLAN.md). In short:
+
+| Milestone | What it delivers |
 |---|---|
-| M1: a measuring stick | small known bugs fixed, a versioned result record, a seed benchmark with baselines |
-| M2: first usable release | `locate`, verdicts with abstention, the report, an installable release |
-| M3: validated claims | error rates and region coverage measured on independent recordings |
-| M4: further out | uncertain dates, larger regions, jets as a signal, single flyovers with a rough time |
+| M1 | the known small bugs fixed, a versioned result format, a seed benchmark with baseline scores |
+| M2 | `locate` with verdicts, the HTML report, an installable release |
+| M3 | error rate and uncertainty-region coverage measured on independent recordings |
+| M4 | uncertain dates, larger regions, jets as a signal source, single flyovers with only a rough time |
 
-## Pipeline today
+## Pipeline
 
-1. `spectrogram`: decode with ffmpeg, a high-resolution STFT of 40–450 Hz, whitened per frequency bin so
-   only *changing* tones stand out.
-2. `detect` / `fit`: grid search plus Nelder–Mead for an ideal straight-pass Doppler curve
-   (f0, speed, closest-approach distance and time), over the whole recording or in one window.
-3. `fetch-day`: stream one UTC day of [adsb.lol](https://github.com/adsblol) history (about 4 GB, nothing
-   stored) and keep the non-jet flights touching the box. `extract-region` does the same from a local
-   archive.
-4. `search`: for every grid point (200 m) and flight, the closest point of approach, its slant distance
-   (with terrain) and propagation-delayed heard time. Keep points that hear the first pass and then, the
-   right interval later, the second with no other prop flight between, and score the curves modelled from
-   the real trajectories against the spectrogram.
-5. `refine`: a 50 m grid around a winner, optionally adding more flyovers locked to the same clock.
+`spectrogram` decodes the file with ffmpeg and computes a fine-grained STFT of 40–450 Hz. Each frequency
+bin is whitened so that steady tones such as mains hum fade and only changing tones stand out.
 
-`search --point LAT LON` scores one known location, the quickest check on a recording whose answer you
-know. `search-single` handles one flyover when the recording's clock time is known.
+`detect` slides a window over the whole recording and fits an ideal straight-pass Doppler curve
+(base frequency, speed, distance and time of closest approach) in each, with a grid search followed by
+Nelder–Mead. `fit` does the same in one window you choose.
+
+`fetch-day` streams one UTC day of [adsb.lol](https://github.com/adsblol) history from GitHub, about 4 GB,
+and keeps the non-jet flights that touch the box without writing the archive to disk. `extract-region` does
+the same with an archive you already have.
+
+`search` lays a 200 m grid over the box. For every point and flight it computes the closest approach, the
+slant distance (using terrain elevation) and when that pass would be heard, allowing for the speed of
+sound. A point survives if it hears something like event 1, then something like event 2 the right interval
+later, with no other propeller flight passing in between. Survivors are scored by how well the curves
+computed from the real trajectories line up with the spectrogram.
+
+`refine` searches a 50 m grid around one winner and can add further flyovers, all on the same clock.
+
+Two shortcuts: `search --point LAT LON` scores a single known location, which is the fastest way to check a
+recording whose answer you already have, and `search-single` works from one flyover when the start time is
+known.
 
 ## Usage
 
-Needs Python 3.12+, [uv](https://docs.astral.sh/uv/) and `ffmpeg` on `PATH`.
+You need Python 3.12 or newer, [uv](https://docs.astral.sh/uv/) and `ffmpeg` on your `PATH`. These are the
+Oyster Bay commands:
 
 ```bash
 uv sync
@@ -117,28 +131,28 @@ uv run dopplertrack refine rec.npz results.csv --events ev1.json ev2.json --trac
     --bbox 40.4 41.3 -74.4 -72.6 --harmonics 2 1 --extra ev3.json ev4.json --out fine.csv
 ```
 
-These are the Oyster Bay commands. `detect` writes a JSON list, while `search` and `refine` take one
-event per file, so for now pick its entries out by hand; the `fit` windows above were chosen by eye.
+The two `fit` windows were picked by eye. `detect` writes all its candidates to one JSON list, but `search`
+and `refine` want one event per file, so for now you copy entries out by hand.
 
-Tests: `uv run pytest -q` (about 45 s, no data or network).
+`uv run pytest -q` runs the tests in about 45 s with no data or network.
 
 ## Repository
 
-| Path | What |
+| Path | Contents |
 |---|---|
 | `src/dopplertrack/` | the package |
 | `tests/` | unit tests, plus an opt-in test on the real Oyster Bay data |
 | `docs/results/` | upstream's committed results |
 | `docs/superpowers/specs/` | upstream's design spec |
-| [PLAN.md](PLAN.md) | the roadmap: destination, open problems, phases, benchmark design |
-| [docs/experiments/](docs/experiments/README.md) | one record per experiment: question, numbers, outcome |
+| [PLAN.md](PLAN.md) | the roadmap: the target, open problems, phases, how progress is measured |
+| [docs/experiments/](docs/experiments/README.md) | one write-up per experiment |
 | [docs/reference/](docs/reference/README.md) | reading list for the papers behind the physics |
-| `tools/`, `bench/` | data handling, experiment scripts, the raw-data manifest |
-| [AGENTS.md](AGENTS.md) | working rules: data layout, branches, how experiments are recorded |
+| `tools/`, `bench/` | data handling, experiment scripts, the manifest of raw inputs |
+| [AGENTS.md](AGENTS.md) | working rules: where data lives, branches, how experiments get recorded |
 
-Branches: `main` mirrors upstream; `dev` is the fork's line and everything branches from it.
+`main` mirrors upstream. `dev` is the fork's own line, and work branches off it.
 
-**Data sources, all free:** adsb.lol daily ADS-B archives, the OpenSky mirror of ICAO Doc 8643 for engine
-classes, and AWS Terrain Tiles for elevation.
+All inputs are free: adsb.lol's daily ADS-B archives, the OpenSky mirror of ICAO Doc 8643 for engine types
+and AWS Terrain Tiles for elevation.
 
-MIT licence, copyright MacCallister Higgins; see [LICENSE](LICENSE).
+MIT licence, copyright MacCallister Higgins. See [LICENSE](LICENSE).

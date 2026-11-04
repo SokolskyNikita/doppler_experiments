@@ -228,11 +228,13 @@ Each phase below gives its goal, the approach we expect to take given what we kn
 4. **Tiers 0–2** (5.4).
 5. **Sets for the clean recordings** (5.2), written into the case manifest before any of them is searched (decision 2).
 6. **Any new cache** (detections, spectrograms) follows the CPA cache's rules: keyed on its inputs' contents and on the hash of the code that produced it (the detector's own source, as hermes does), written atomically and locked. Use `filelock` and a library cache such as `joblib.Memory` or `diskcache` instead of repeating the hand-written pattern.
+7. **Gaps in the audio** (S–M). ESID 740 and 710 record 55 s of every minute, and decision 2 puts one in calibration and one in evaluation, so the benchmark can't run without this. The spectrogram keeps the recording's timeline: frames inside a gap are marked invalid, never dropped, so audio seconds stay convertible to UTC, and tracks, fits, whitening and scoring skip invalid frames. Acceptance: a synthetic pass with 5 s cut from every minute fits to the same parameters as the uncut one within the fit's spread and to within one hop in time, and a gap over a pass's steepest part gives a weak fit, not a confident one.
 
 **Done when:**
 - the seed cases have both baselines, with every input and cache hash recorded;
 - Tier 1 runs in under 3 min and Tier 2 on the seed set in under 15 min;
-- every clean recording has its set.
+- every clean recording has its set;
+- the gap test passes, and ESID 740's spectrogram keeps its timeline.
 
 The benchmark then grows alongside Phases 2–4, as they need cases. **If the budget can't be met:** Tier 1 runs fewer cases.
 
@@ -289,19 +291,27 @@ The experiments run in this order. Each is judged in Tiers 1–2 against labelle
    - **Weak identification.** A flat or one-sided profile marks a weakly identified parameter. A poorly fixed distance widens the distance constraint but keeps the timing evidence. A range that ends where the optimiser hit a bound isn't a range.
    - **Overlapping frames.** Consecutive STFT frames share 88 % of their samples, so counting them as independent would understate the spread roughly threefold.
 
-**Acceptance.** A change is kept only if all of these hold on the development cases and the synthetic failure matrix:
+**Each experiment has its own criterion**, fixed before it runs and measured in Tiers 1–2 on labelled events. A better tracker is kept for better tracks, whether or not the downstream gates are fixed yet:
+- timing convention: the true pair survives the pairing gate on every positive case at no wider a gate than today's;
+- model error: each bias is measured, and a perturbation enters the model only if it moves a fitted parameter by more than the fit's own spread;
+- frequency track: lower frequency error against the trajectory-derived reference on labelled events, and no more false bridges or fragments than `ridge()` makes today;
+- least-squares fit: smaller f0, speed and timing errors than the brightness and contrast fits on the same events, and the reduced fit's optimum matching the full fit on the synthetic cases;
+- window length: the same errors, on the same events;
+- harmonics and extent: fewer duplicate events per pass, and a threshold curve that reaches the chosen false-alarm rate;
+- joint hypotheses: the true flights inside every event's hypotheses on every positive case, with no more hypotheses per event than today's gates admit.
+
+An experiment is kept if it meets its criterion, reverted if it doesn't, and deferred if two recordings can't decide it.
+
+**Phase exit.** The phase is done when all of these hold on the development cases and the synthetic failure matrix:
 - the true flights pass the filters on every positive case, using `detect` output with no hand-picked windows;
 - on Oyster Bay from raw audio, the true pair ranks first, with the refined peak within the practical resolution of the truth;
-- candidate counts stay within 2× the baseline's, and Tier 2 stays within its budget;
+- Tier 2 stays within its time budget (the candidate count is not a criterion: the baseline it would be measured against drops the truth);
 - no wrong pair beats the true one where it didn't before, and the top candidate's location error doesn't grow;
 - partial and degenerate passes give an explicit weak or unusable fit, not a confident one.
 
 These thresholds are provisional, and they are fixed before the experiments run. Every knob tuned on the development cases is counted, because tuning many knobs on two recordings overfits them.
 
-**Stop rule.**
-- An experiment is kept if it meets the criteria and reverted if it doesn't. It is deferred if two recordings can't decide it.
-- If the time box ends without a variant that meets them, the fallback is the best measured variant, or else the ±10 s / ±12 % gates ([gate-tolerances](docs/experiments/2026-11-03-gate-tolerances.md)).
-- Under the fallback, raw-audio localisation is documented as a known limitation, the verdict abstains more and E1 stays open.
+**Stop rule.** If the time box ends before the exit criteria hold, the fallback is the kept experiments as they stand, or else the ±10 s / ±12 % gates ([gate-tolerances](docs/experiments/2026-11-03-gate-tolerances.md)). Under the fallback, raw-audio localisation is documented as a known limitation, the verdict abstains more and E1 stays open.
 
 #### Phase 3: `dopplertrack locate` (M–L; step A can start alongside Phase 2)
 
@@ -311,6 +321,8 @@ These thresholds are provisional, and they are fixed before the experiments run.
 3. search with one automatically chosen pair of adjacent detected flyovers. Tier 2 checks it with and without the silence filter, which is off by default in `locate` (S4);
 4. refine the winner with the other flyovers;
 5. verdict and `result.json`.
+
+Step A refines only the winner, so it never rules out a competing mode. Its verdict is capped at "ambiguous": it reports the candidates and its reasons, and "located" waits for step B's competitor search.
 
 Each failure is an outcome with a stated reason:
 - no usable flyovers;
@@ -346,13 +358,19 @@ Each failure is an outcome with a stated reason:
 
 Motion and edit checks are diagnostics and not part of this.
 
-**If step B slips:** release step A's single-pair `locate`, and document multi-pair search as a known limitation.
+**If step B slips:** release step A's single-pair `locate`, whose verdicts are "ambiguous" or "insufficient evidence" only, and say so in the release's README (Phase 6).
 
 #### Phase 4, machinery: verdicts and abstention (L; time-box 2 weeks)
 
 - **Modes first.** Two candidates are distinct modes when their locations are farther apart than the practical resolution (decision 1), or their clocks differ by more than a pass can resolve.
   - "Ambiguous" then means a distinct mode is still plausible, and no rule depends on the radius being estimated.
   - A single radius is reported only when one mode sums up the result; otherwise every region is listed.
+- **Region construction**, an experiment of its own, since the region decides what can be called "located". Three constructions, compared on the calibration groups:
+  - a sensitivity region: the contour around the refined peak inside which the final score stays within a fixed fraction of the peak, with the clock re-optimised at every point and the flight assignment held fixed;
+  - the pass-level bootstrap region from the feature below, which carries measurement noise but not model error;
+  - a radius calibrated by split conformal on the calibration groups, the only one with stated coverage, and only on groups it wasn't tuned on.
+
+  Alternative assignments give separate modes, never a wider region. Model error enters before the search, through each event's hypothesis: a fit whose approach and recede halves disagree (Phase 2 item 2) widens its own hypothesis, and the region inherits that. Until a construction is calibrated, the record calls its region a sensitivity region, and coverage is stated only for the conformal radius.
 - **A starting feature.** The time-gated extra-flyover consistency is the strongest lead so far ([extra-consistency](docs/experiments/2026-11-03-extra-consistency.md)). Its ±15 s gate is a development hypothesis until it holds on recordings it wasn't chosen on.
 - **Other candidate features:**
   - the margin over the strongest distinct competing mode, from any pair;
@@ -369,7 +387,7 @@ Motion and edit checks are diagnostics and not part of this.
 - **If the time box runs out** before any features separate the calibration positives from the negatives:
   - `locate` uses conservative fixed rules instead: "located" only for a single surviving mode with at least one extra flyover explained within ±15 s and a region inside the resolution;
   - the region is reported as unavailable otherwise;
-  - the limitation is documented.
+  - that rule needs a third flyover, so under it a recording with two flyovers, or one flyover with a known start time, is never "located", only "ambiguous". Section 1 promises those cases, so the release's README lists this as a limit of the release, not of the method (Phase 6).
 
 #### Phase 5: report (S–M; independent once the result record exists)
 
@@ -392,7 +410,8 @@ A README covering install (including ffmpeg), requirements, limits and how to re
 - a clear diagnostic when ffmpeg is missing or too old;
 - progress reporting, and resource estimates (download size, CPA table size, time) before the long stages, with a disk-space check before writing;
 - cancellation at any point, and a re-run that resumes from completed cached stages;
-- defined behaviour for an unavailable archive, a network failure or a partial download: retry a fixed number of times, then stop with an error.
+- defined behaviour for an unavailable archive, a network failure or a partial download: retry a fixed number of times, then stop with an error;
+- the README's stated limits match the shipped fallbacks: no "located" without step B's competitor search, and none for a two-flyover or single-flyover recording while Phase 4's fixed rules are in force.
 
 **Done when** the acceptance test passes on macOS and Linux.
 
@@ -492,11 +511,12 @@ Each group belongs to one set:
 Three layers, labelled separately:
 1. **Acoustic event.** Is a tone or flyover present in the window? The classes are clear, uncertain, overlapping (two flyovers or a crossing tone), masked (wind, birds, an edit) and absent. Labelled from the spectrogram.
 2. **Flight association.** Which ADS-B pass made it, if any. "Unmatched" is a label on both sides (V2).
-3. **Physical truth.** What the observer should hear, from the curve modelled on the actual trajectory: its steepest-fall and heard-CPA times, and the slant range and speed at CPA.
+3. **Trajectory-derived reference.** What the observer should hear, from the curve modelled on the actual trajectory: its steepest-fall and heard-CPA times, and the slant range and speed at CPA. It is a prediction from the trace under the assumptions Phase 2 item 2 tests (interpolation, sound speed, wind, altitude datum), not an observation, which is why it isn't called truth.
    - This is not the parameters of a straight pass, which don't exist for a turning, climbing or descending aircraft. The propeller's rest frequency is never observed directly.
    - A pass whose curve falls fastest far from its geometric CPA is flagged as not straight.
 
 Steps:
+- **Annotate whole clips blind, first.** Before any proposal, label layer 1 across a few complete short clips, say 10–20 min from each development recording and from one Eclipse site, with no ADS-B in view. Windows proposed from passes can't show what the passes miss, so these clips are the only basis for detection precision, and they catch the events with no trace that V2 warns about.
 - **Propose** a window for each ADS-B pass, as one contact sheet per case.
 - **Label blind first.** For every seed window and a sample of the rest, label layer 1 without the modelled curve, then reveal it and label layer 2. Seeing the expected curve first biases the eye toward finding it.
 - **Confirm the rest with the overlay**, which takes minutes per case. A Claude session can do the first pass, with you spot-checking it. Each label records who made it and whether it was blind.
@@ -540,7 +560,7 @@ What it records:
 - the expected outcome, and whether it was met;
 - **detection**: recall on confirmed events, and false alarms per audio hour on background recordings, as a curve over thresholds;
 - **association**: the share of confirmed events assigned to the right flight;
-- **fits**: errors against layer-3 truth by label class, and the known-point result;
+- **fits**: errors against the layer-3 reference by label class, and the known-point result;
 - **the funnel**: candidate counts after each filter, and where the true hypothesis dropped out;
 - **search**: the true pair's rank, the margin, and the location error of the top and refined candidates as quantiles over cases, always beside the error of the box centre, the answer that uses no audio at all;
 - **verdicts**:
@@ -583,7 +603,7 @@ The evaluation set is what limits M3, and collecting it takes calendar time rath
 
 | Source | What it is | Use |
 |---|---|---|
-| Eclipse Soundscapes ESID 375, 740, 710 | AudioMoths with clocks set by a time chime, 2024-04-07; 6, 7 and 19 prop passes within 12 km | calibration or evaluation (decision 2). 740 and 710 record 55 s of every minute, so they need a gap-aware spectrogram first |
+| Eclipse Soundscapes ESID 375, 740, 710 | AudioMoths with clocks set by a time chime, 2024-04-07; 6, 7 and 19 prop passes within 12 km | calibration or evaluation (decision 2). 740 and 710 record 55 s of every minute, so they need the gap-aware spectrogram (Phase 1 item 7) first |
 | Eclipse ESID 937 | about 25 h from 05:40 UTC on 2024-04-07, with no prop pass within 20 km that day | a negative that must abstain, once 04-08's flight data is fetched |
 | xeno-canto XC979185 | one prop pass, start time known to the minute | a single-flyover case |
 | xeno-canto XC990819, XC990820, XC986433 | Essex, jets only | development: background negatives for `detect`'s threshold; the first two are one group |

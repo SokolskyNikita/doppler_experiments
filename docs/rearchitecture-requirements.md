@@ -1,425 +1,360 @@
-# Re-architecture for agent-driven development
+# Architecture preparation for agent-driven development
 
-Draft, 2026-11-03. Status: proposal, not yet in PLAN.md.
+Requirements, revised 2026-11-03. Scheduled after Phase 0 and before Phase 1 in [PLAN.md](../PLAN.md).
+This document specifies future implementation; it does not mark that work complete.
 
 ## Purpose
 
-Most of the code on this project is written by Claude and Codex sessions, reviewed by a human. PLAN.md's
-route to a usable `locate` (Phases 1 to 6) is several thousand lines of new code across every module, and
-every phase after 1 is research: many short experiments, each changing a gate, a score or a fit, each judged
-by a number. The code's shape decides how fast those sessions move and how many of their changes are wrong
-in ways the benchmark catches late or not at all.
+Most code on this project is written by Claude and Codex sessions and reviewed by a human. The next
+phases are research: short experiments that change a detector, fit, gate or score, each judged by a
+number. Architecture should increase the number of trustworthy experiments completed per hour of
+human review, and help those experiments advance the project toward a usable `locate`.
 
-This document is the requirements and the technical task for a restructuring whose only goal is that:
-a session can make a one-concept change by touching one place, a wrong change fails in under a minute on
-this Mac, and the numbers a change produces can be trusted to come from the change and not from a slip.
+A session should be able to find the implementation of a concept, see its inputs and conventions,
+change it without missing another implementation, and get useful feedback in seconds to minutes.
+One concept may require coordinated updates to code, configuration, tests and documentation; the goal
+is one authoritative implementation and an obvious edit path, not a one-file limit.
 
-It excludes everything Phase 0 covers (download margin, data report, elevation no-data, altitude source,
-the `detect` hand-off, empty detections, the ffmpeg check and install smoke test), and everything Phase 1
-already claims (`--jobs` and parallelism, the result record's content, the case manifest and runner,
-library-backed caches, audio gaps). Where Phase 1 items need a place to land, this document provides the
-place and says so.
+This is a bounded preparation phase. It establishes the contracts and feedback needed by Phase 1,
+then ends. Further restructuring needs a concrete downstream task that benefits from it.
 
-## 1. Why sessions are slow and wrong here today
+## 1. Problems this preparation addresses
 
-Each item names the error class, then the evidence in the tree at `dev` 41d77a0.
+The original review inspected the code at `dev` 41d77a0; the implementation baseline is the merged
+Phase 0 at a03ee30. Recheck examples against current `dev` before implementing. Retain Phase 0's
+coverage metadata, evidence masks, CLI hand-off and smoke checks, extending its contracts rather than
+duplicating them.
 
-- **The same fact lives in several places, so a change updates some of them.** The f0 sweep
-  `np.arange(0.95, 1.0501, 0.005)` is spelled out four times (`score.py:65`, `score.py:86`,
-  `pipeline.py:173`, `pipeline.py:219`); the audio-to-UTC offset `t0_map = ev1.t_cpa - t_heard1` is
-  recomputed in four functions; metres per degree of latitude is a literal in `search.py` and
-  `pipeline.py`; the search gates have defaults in `run_search`, `run_single_search` and the CLI.
-  Phase 2 item 7 replaces the gates and Phase 3 fits one clock to every event. Both start by finding
-  every copy.
-- **Positions and tuples carry meaning that the type system can't check.** `run_search` appends
-  16-tuples and names the columns in a parallel list (`pipeline.py:149`); `detect_events` indexes
-  candidate tuples with `o[4]` and sorts them with `cands.sort(reverse=True)`, which silently ties on
-  f0, speed and distance; `_scan_window` unpacks a 14-tuple; `refine` returns its chosen flights in
-  `DataFrame.attrs`, which `to_csv` drops. A session that adds a column or reorders a field produces
-  code that runs and is wrong.
-- **Time conventions are implicit floats.** Audio seconds, unix seconds, emission CPA, heard CPA and
-  steepest fall are all `float`, told apart by variable names that aren't consistent (`t_cpa` is heard
-  time in `EventFit`, `t0` is emission time in `tracks.py`). PLAN's E2 is a bug of exactly this class,
-  and the timing-conventions experiment had to be written to find it.
-- **Nothing fails fast.** There is no lint, no type check and no pytest configuration. Nine unused
-  imports, a `sys` import the CLI never uses and a `top_pairs` argument nothing reads passed review.
-  `pipeline.fit_event` is an accidental import that the CLI calls and a test monkeypatches. A wrong
-  call compiles, runs for the 7 min a search takes, and produces a plausible CSV.
-- **Logic sits where it can't be called.** `cli.main` is one 140-line function; `search` builds the
-  grid and terrain there, `refine` deduplicates rows and picks a rank there, `search-single` parses
-  timestamps there. `locate` (Phase 3) and the benchmark runner (Phase 1) need every one of those steps
-  as a function. Today the CLI test has to monkeypatch to get at them.
-- **Two entry points, two defaults.** `fit_event` defaults to the contrast objective as a function and
-  to brightness through `dopplertrack fit`. Documented, and still a trap for Phase 2's fit experiments.
-- **Library code prints.** `pipeline.log` and the CLI's result tables share stdout. A runner collecting
-  many runs can't separate progress from output, and a session reading a run folder's log has nothing
-  structured to parse.
-- **Tests don't share fixtures.** Synthetic spectrograms and traces are rebuilt per file. PLAN 5.1's
-  synthetic failure matrix is fifteen more such scenes; without a factory each one is fifty lines of
-  setup a session has to get right.
-- **The upstream-parity rule taxes every change and forbids the useful ones.** AGENTS.md requires a
-  commit meant for upstream to touch no fork-only file, and PLAN.md's principle "stay mergeable with
-  upstream" adds that new capabilities go in new modules and upstream defaults are kept. So a session
-  must classify each edit as upstream or fork, split commits accordingly, and leave `cli.py`,
-  `pipeline.py` and the defaults alone, which is where the problems above live. The fork's destination
-  (`locate`, verdicts, a benchmark) diverges from upstream's proof of concept whatever the code's
-  shape, and the one upstream PR so far (#2) has waited on the maintainer since it was opened.
+- **Duplicated semantic settings.** The same f0 sweep is defined in scoring and refinement, and the
+  same audio-to-UTC mapping is reconstructed at several call sites. A change can update some copies
+  and miss others. Some equal-looking settings have different meanings: pair search uses a 6 s time
+  tolerance and known-time single search uses 30 s. Those must remain distinct.
+- **Ambiguous positional records.** Search rows are assembled as 16-tuples beside a separate column
+  list, detection candidates use numeric indices, and a worker receives a 14-tuple. Refinement's
+  chosen flights live in `DataFrame.attrs`, which CSV serialization loses. Field changes can produce
+  plausible but wrong output.
+- **Implicit time conventions.** Audio seconds, Unix seconds, emission CPA and heard CPA are floats
+  distinguished mainly by names. The convention is part of the scientific meaning, and a wrong
+  conversion can still produce plausible scores.
+- **Weak early feedback.** The existing unit suite is useful, but there is no combined lint/type/test
+  command or explicit coverage of the new boundary contracts. A syntax or wiring mistake should not
+  first appear during a long search.
+- **Logic owned by the CLI.** Grid construction, result selection and timestamp interpretation need
+  callable interfaces for the benchmark runner and later `locate`.
+- **Implicit execution context.** CLI fitting uses brightness while library fitting and detection use
+  contrast. Those existing choices need explicit profiles and tests. Progress mixed into stdout and
+  metadata lost during serialization make experiment evidence harder to inspect.
 
-## 2. Scope
+The current AGENTS.md permits fork-only files to share commits with upstream code. Fork architecture
+commits can include source, tests and documentation; retiring an upstream policy is not a prerequisite.
+The upstream relationship is a separate decision and this preparation does not change it.
 
-**In:** the package under `src/dopplertrack/`, `tests/`, `tools/data/`, `pyproject.toml`, AGENTS.md,
-README.md's and PLAN.md's statements of the upstream-parity rule, and a new `docs/architecture.md`. No
-change to any number: the known-point and search outputs for Oyster Bay and the eagle cam must be
-identical before and after every work package.
+## 2. Scope, sequence and stopping condition
 
-**Out:** anything that changes a result (that is Phases 2 to 4); the result record's fields, the case
-manifest, the runner, the tiers and `--jobs` (Phase 1, which lands in the structure defined here);
-`plots.py` and the report (Phase 5); GitHub CI (deferred by Phase 0); the experiment scripts under
-`tools/experiments/`, which are records.
+**Order:** Phase 0 merges and passes its checks → this preparation completes → Phase 1 starts,
+including Phase 1 item 1, parallelism. No required work package runs alongside Phase 0 or Phase 1.
+Independent recording collection can continue. Do not renumber the existing phases.
 
-**Order relative to PLAN.md.** After Phase 0 merges (its PR touches every module, and a restructuring
-in parallel with it would conflict everywhere), the policy commit excepted, and before Phase 1 item 2. Phase 1 item 1 (parallelism)
-can run alongside work packages that don't touch `search.cpa_table` or `tracks.detect_events`.
+**Required:** a trustworthy local gate, safe stage boundary records, explicit time conversion and
+configuration, callable workflows, separated progress/results, regression and independent correctness
+checks, and a short architecture map. These are the acceptance criteria in sections 4 and 6.
 
-## 3. Target architecture
+**Out of scope:** new scientific algorithms or tuned defaults; Phase 0 fixes; Phase 1's parallelism,
+result record, case manifest, runner, benchmark comparisons, new cache implementations and gap-aware
+audio; Phase 5's report and plotting changes; GitHub CI; edits to archived experiment scripts. The
+preparation provides interfaces these features can use, without implementing their future machinery.
 
-### 3.0 The fork owns its code
+Preserve the numerical behavior of every existing entry point at its current parameters. Keep the
+brightness profile for CLI `fit`, contrast for library fitting and detection, and the distinct pair
+and single-search tolerances. Moving progress to stderr, adding explicit metadata and migrating
+schemas are intentional interface changes; test and document them separately from numerical equality.
+Any algorithm or default change belongs in a separate measured change after this preparation.
 
-The restructuring starts by retiring the upstream-parity rule, in writing, before any code moves:
+A larger module reorganization, exhaustive typing of numerical internals, universal fixture migration,
+tools-script cleanup and an automatic CLI generator are optional future work. They do not extend this
+phase or block Phase 1. Stop when the required contracts, checks and navigation recipes pass.
 
-- AGENTS.md's Git section drops "a commit meant for upstream must not touch any of them; keep upstream
-  and fork-only changes in separate commits". The fork-only file list stays as a description of what
-  upstream doesn't have, not as a constraint on commits. The `up/<topic>` cherry-pick recipe stays as
-  the way to send a self-contained physics or data fix upstream when one is worth sending, with the
-  note that such a fix is adapted onto `upstream/main` by hand and that nothing on `dev` is shaped to
-  make that easier. "Commit messages follow upstream's style" stays; it costs nothing.
-- The layout table's "the package (upstream's)" becomes "the package, forked from upstream at a16b700".
-- PLAN.md's principle "Stay mergeable with upstream" is replaced by "Merge upstream, don't mirror it":
-  upstream is merged into `dev` when it has something the fork wants, conflicts in diverged modules are
-  resolved by hand and accepted as the cost, and the fork's modules, defaults and CLI are its own.
-  Section 2's "sending it upstream is deferred" and the risk "Upstream moves fast" are reworded to
-  match. Phase 3's "`search` keeps upstream's default" for the silence filter becomes a choice the fork
-  makes on its own numbers.
-- README.md's "fixes that don't need anything from the fork go back upstream as pull requests" becomes
-  "self-contained fixes may be offered upstream".
+## 3. Architecture and implementation constraints
 
-Until this is merged, nothing in work packages 1 to 7 can be committed under the current rules, since
-each of them edits `cli.py` or `pipeline.py` together with `tests/` and docs.
+### 3.1 Ownership and dependency direction
 
-### 3.1 Layers
+Use these responsibilities to establish the required boundaries. This is not a requirement to create
+a package or file for every row before Phase 1.
 
-Modules are grouped in layers, and a module may import only from its own layer or a lower one. A
-Tier 0 test asserts this from the import graph (an AST walk, no new dependency).
+| Responsibility | Current or prospective owner | Boundary |
+|---|---|---|
+| Physics and geodesy | `geo`, `doppler` | Array calculations; no file access, CLI or workflow dependencies |
+| Stage contracts and settings | Stage-owned dataclasses; small shared `records`, `params`, `clock` modules where useful | No CLI, workflow execution or I/O at construction/import time |
+| Input and persistence adapters | `audio`, `adsb`, `fetch`, `terrain`, `coverage`; storage helpers extracted as needed | Decode, validate, load/save and report coverage; no scoring/search orchestration |
+| Numerical stages | `tracks` or extracted `fit`/`detect`, `score`, `search` | In-memory inputs to fits, candidates and scores; no argv parsing or result-file writes |
+| Workflows | `pipeline`; later `locate` and the benchmark runner | Compose adapters and numerical stages; own stage execution and artifact writing |
+| CLI | `cli` | Parse arguments, invoke workflows, format terminal results and map failures to exit status |
 
-| Layer | Modules | Responsibility | Must not |
+Algorithms must be callable without importing `cli`. Keep settings and record definitions close to
+their stage unless several stages need them. Shared modules must stay small; they must not collect
+every helper, parameter and return value merely because it crosses a function boundary. NumPy and
+pandas types are allowed where a contract genuinely contains arrays or a DataFrame; there is no
+stdlib-only rule that conflicts with those types.
+
+Persistence helpers may lock, fingerprint, load and atomically save a CPA table. The workflow keeps
+responsibility for deciding to compute a miss and calling `search.cpa_table`. Do not move that
+orchestration into a lower data layer that would then depend on search. Preserve the existing cache's
+input identity, atomic writes and locking; replacing its internals remains Phase 1 work.
+
+Extract `fit.py`/`detect.py`, cache storage or scoring helpers only as needed to establish these
+boundaries. Preserve imports used by archived experiments through small compatibility exports where
+practical, or document the old revision and replacement import in the architecture map. Do not edit
+historical scripts to make them appear current. If the duplicate straight-pass shape is consolidated,
+preserve each caller's sampling span, sample count and interpolation behavior.
+
+An import check should guard concrete forbidden dependencies, including numerical modules importing
+CLI/workflows. Do not invent an exhaustive six-layer AST framework or ban justified local imports.
+
+### 3.2 Stage configuration and resolved parameters
+
+Use frozen dataclasses for groups of settings that need propagation or provenance. Likely owners are
+spectrogram, fit, detection, scoring, pair search, single search and refinement. Use immutable values
+or safe factories; `frozen=True` alone does not make a contained NumPy array immutable.
+
+Each shared semantic setting has one authoritative default and is passed explicitly to its consumers.
+Equal numeric literals do not establish that two settings are the same. In particular:
+
+- Keep pair-search and known-time single-search tolerances distinct.
+- Express brightness fitting for the CLI and contrast fitting for detection/library calls as named,
+  tested profiles. Detection's refinement bounds also remain explicit.
+- Keep plotting crops separate from scoring crops; their existing purposes and widths differ, and
+  plotting is out of scope.
+- Name physical constants in `geo` or `doppler`; do not treat them as experiment knobs.
+
+Stage entry points may accept a config object. Small helpers may take explicit scalar arguments when
+that makes their dependency clearer. Do not pass an unrelated application-wide config through every
+function. Keep argparse declarations explicit and obtain defaults from the appropriate profile; no
+parser generation or field-reflection framework is required.
+
+Provide deterministic JSON-safe serialization of the resolved scientific configuration for Phase 1
+to reuse. Test that a CLI override reaches the workflow and numerical stage, including values that
+differ from the defaults. Resolve environment-derived paths/runtime settings at the workflow or CLI
+boundary, allow explicit injection in tests, and avoid environment reads or filesystem effects at
+import time. Define the new `--jobs` behavior in Phase 1, not in this phase.
+
+### 3.3 Named records and persistence contracts
+
+Replace positional structures where field confusion can silently affect a scientific result:
+
+- Detection candidates and window-scan requests/results have named fields. Use named access and an
+  explicit ranking/tie-break key. A NamedTuple alone does not prevent indexing or lexicographic sorting.
+  Preserve the current ordering during this refactor, making its tie behavior explicit and tested.
+- Grid fitting and locked scoring return named records when their several values are ambiguous.
+- Search and refinement expose named result objects. Refinement's selected flights are explicit
+  metadata that survives serialization, not information stored only in `DataFrame.attrs`.
+- A table's schema has one owner defining field names, units, dtypes and the empty-table shape.
+  Construction and serialization use that schema. Explicit column lists are allowed; parallel
+  positional lists that can drift are not. Do not allocate a Python dataclass for every row of a large
+  array/DataFrame solely to meet a structural rule. Dynamic per-event scores need explicit event IDs
+  and an adapter for existing CSV columns.
+
+Use schema versions and explicit loaders for package-owned persistent formats touched by this work.
+Treat existing unversioned files, including saved event fits, as an explicitly supported legacy format.
+Test current, unversioned legacy, supported numbered legacy and unknown versions as applicable.
+Document the migration policy: a persistent
+user result gets a clear unsupported-version diagnostic; a regenerable incompatible cache is a miss
+and rebuild. External source formats are parsed as external inputs, not rewritten to add our schema.
+Do not pre-create Phase 1's `ResultRecord` or choose its fields here.
+
+`EventFit`'s redundant fields must have a defined consistency policy. Its CPA delay and asymptote
+frequencies depend on the sound speed used for fitting. Record that value for new fits before deriving
+or validating those fields; never silently substitute today's default for a historical fit. An old
+record without sound speed retains its stored derived values and marks the model metadata unknown,
+or requires an explicit supplied value for an operation that needs recomputation. The legacy loader
+must preserve its scientific values. Validate array shapes, finite required values and timestamp
+ordering at stage boundaries, allowing explicitly represented invalid samples where Phase 0 requires them.
+
+### 3.4 Time and coordinate conventions
+
+`clock.py` owns conversion between recording-relative audio time and Unix time. Use a named anchor
+such as `audio_start_unix`, with the documented equations:
+
+- `t_unix = audio_start_unix + t_audio`;
+- `t_audio = t_unix - audio_start_unix`.
+
+A constructor from matching audio/Unix anchors is useful when a candidate flight establishes the
+clock. Conversion changes the origin only; converting emission time to heard time is a separate
+physical operation. Preserve today's per-candidate clock anchoring and shift treatment. Joint clock
+fitting and drift remain Phase 3 work.
+
+Use lightweight scalar boundary types, such as `NewType` aliases for audio seconds, Unix seconds and
+durations. State emission/heard convention in fields and signatures, e.g. `t_cpa_heard_audio` and
+`t_cpa_emit_unix`. Arrays retain NumPy representations, with frame, units and emission/heard convention
+in their contract. No per-element wrappers or unit library are needed in numerical loops. Document
+the ENU origin and height convention of position-bearing records as well.
+
+Tests must use independent known values: an epoch-sized audio start maps to audio zero, a later UTC
+anchor maps to its known audio offset, and a nonzero slant range produces the expected `d/c` heard
+CPA delay. Include a non-default sound speed. Round trips are additional checks, not the only oracle.
+Field renames need legacy loading and explicit serialization migration tests.
+
+### 3.5 Callable workflows, outcomes and streams
+
+Expose typed workflow entry points for existing commands. Move grid construction, event/result
+selection and other reusable command behavior there. Keep argparse syntax and terminal rendering in
+`cli.py`; timestamps may be parsed by a small explicit helper shared with the workflow boundary.
+`cmd_<name>` functions may help dispatch, but neither a line limit nor exactly one function call is
+an acceptance criterion.
+
+A short synthetic composition should demonstrate that spectrogram, fitting/detection, search and
+refinement can be invoked without `cli` or monkeypatching accidental re-exports. Use a local fixture
+or injected input adapter; this check must not download data. It is a workflow smoke check, not an
+implementation of automatic `locate` or the Phase 1 benchmark.
+
+Expected empty/no-candidate outcomes carry a named status/reason or a documented empty result.
+They remain distinct from execution errors such as unreadable inputs. Introduce a small domain
+exception hierarchy only where callers need it, and test CLI mapping and existing behavior. Do not
+turn every valid abstention into an execution error or design future verdict thresholds here.
+
+Use standard module logging for progress, configured at the entry point, and send it to stderr.
+Keep requested tables/JSON on stdout or in the named artifact, without progress mixed in. Library
+imports do not configure logging. A captured-output test verifies the separation. Failure messages
+identify the stage and relevant input; cached-data recovery must not swallow programming errors.
+
+### 3.6 A trustworthy fast gate
+
+One documented command, `tools/check.sh`, runs lint, scoped type checks and the ordinary no-data test
+suite offline. Target under 90 s on this Mac, with tests under 60 s. Record the command, environment,
+selected tests and measured durations. Preserve Phase 0's install/ffmpeg smoke checks.
+Separate one-time dependency provisioning from the measured gate; installed-wheel smoke checks use
+prepared local dependencies so the offline gate does not fetch packages.
+
+Configure ruff with a practical initial rule set, including unused imports and unsafe constructs,
+and apply mechanical fixes separately from numerical moves. Add mypy and the needed stubs.
+`check_untyped_defs` checks bodies but does not require annotations: use `disallow_untyped_defs` on
+the public stage/workflow boundaries this phase introduces or changes, and strict checking on the
+small new contract/config/clock modules. Document the precise coverage. Exhaustively typing every
+numerical helper is optional future work.
+
+Register markers with strict marker checking. All ordinary no-data tests must run by default in the
+fast gate; a test must not disappear because an author forgot `@pytest.mark.tier0`. Keep existing
+real-data tests opt-in and skipped without their environment variable. Phase 1 can attach the later
+tier runner to these checks without excluding ordinary tests.
+
+The gate must demonstrate detection of representative mistakes: a missing required record field,
+a scalar audio/Unix type mix-up, a configuration override that fails to propagate, and a forbidden
+CLI dependency. Use small focused tests or temporary negative checks, recording the results without
+committing intentionally failing code. A lint count alone does not establish these properties.
+
+### 3.7 Fixtures, regression and independent correctness
+
+Before changing production code, capture characterization outputs for a small deterministic synthetic
+scene and existing development workflows. Create new run folders under the shared data root using
+`tools/data/new_run.py`; record commands, resolved parameters, input hashes, dependency environment
+and code revision. Never overwrite older runs or use evaluation recordings for this preparation.
+
+A few composable factories for repeated spectrograms, traces and passes are useful. Share them where
+they remove duplication; specialized tests may keep their own builders. Factories take explicit
+seeds/configuration. Keep independent correctness oracles separate from production-model generators.
+Retain or add analytically calculated geometry, asymptote and propagation-delay cases, plus
+missing/empty input outcomes. A fixture rendered with the production curve is a regression aid, not
+independent evidence that the curve is physically correct.
+
+Define comparison rules before each refactor:
+
+- Pin deterministic synthetic results in a recorded environment. Use exact comparison where promised;
+  otherwise declare per-field absolute/relative tolerances justified by units and numerical behavior.
+  Do not apply a universal `1e-9` tolerance to optimizers, scores, coordinates and epoch timestamps.
+- Compare Oyster Bay and eagle-cam scientific payloads: candidate identity, ordering, selected flights,
+  fitted values, scores and refined locations. Require exact equality for unchanged deterministic
+  paths in the same environment; explain any predeclared tolerance and inspect ranking/tie changes.
+- Preserve byte equality for explicitly unchanged legacy artifacts. Compare added schema/provenance
+  metadata separately, and test renamed fields through a migration adapter. Numeric equivalence must
+  not conceal a missing field, changed units or lost refinement metadata.
+- Keep characterization expectations fixed during structural changes. A mismatch is investigated;
+  updating expected values or widening tolerances to make a move pass is not acceptance.
+
+Run focused contract tests per edit and development-data comparisons for each package touching the
+numerical path or its parameter/time wiring. A documentation-only package needs documentation checks,
+not a long audio run. Final acceptance covers both development recordings.
+
+### 3.8 Navigation and evidence of agent usefulness
+
+Start `docs/architecture.md` with the first implementation package and update it as ownership changes.
+Keep it short: actual module map, stage inputs/results/settings, time and coordinate conventions,
+compatibility adapters, dependency boundaries, and commands for focused and full checks. AGENTS.md
+links it and names the fast gate. Put detailed conventions in one linked location rather than
+copying them across module docstrings.
+
+Give concrete edit recipes for adding a search gate, changing a fitting objective, adding an event or
+search output field, and adding a workflow caller. Each names the implementation, settings owner,
+relevant tests and compatibility/provenance obligations. The gate recipe points at focused behavioral
+tests, not an instruction to change a fixed golden baseline.
+
+Before and after preparation, walk representative parameter, record and workflow changes on the same
+small synthetic setup. Record the time to find the edit path, production files involved, missed
+propagation points, review corrections and check duration. A scratch patch may demonstrate the path
+and then be discarded; no new feature or benchmark project is required. Use these observations to
+assess agent usefulness without inventing a percentage-speedup claim or tuning on evaluation data.
+
+## 4. Required outcomes and acceptance
+
+These are semantic checks. Grepping numeric literals, counting command lines or banning all local
+fixtures is not a substitute.
+
+| ID | Required outcome | Acceptance |
+|---|---|---|
+| R1 | Correct sequence and bounded scope | Phase 0 is merged before implementation; every required row here passes before any Phase 1 item starts. Optional work does not delay handoff. |
+| R2 | Trustworthy fast gate | `tools/check.sh` runs lint, declared type checks and all ordinary no-data tests offline in under 90 s; tests take under 60 s. Strict markers and real-data skipping work. |
+| R3 | Useful static contracts | Changed public boundaries are annotated and enforce missing annotations; contract modules pass strict checks. Representative record/type/dependency mistakes are caught. |
+| R4 | Named scientific boundaries | Detection/worker/scoring and search/refinement interfaces expose named fields where confusion was possible. Candidate ranking has an explicit tested tie key. |
+| R5 | Persistent metadata and schemas | Refinement selections survive round trip; table names/dtypes/empty shape have one owner; touched formats handle current, legacy and unsupported versions explicitly. |
+| R6 | Consistent event model metadata | New fits retain sound speed; derived-field validation uses it. Legacy fits retain their stored scientific values without inventing missing model metadata. |
+| R7 | Explicit time and position conventions | Scalar frame types, array contracts and clock anchors are documented. Independent UTC/audio, `d/c` and non-default-sound-speed tests pass. Position records identify their frame/height convention. |
+| R8 | Authoritative resolved settings | Shared semantic defaults have one owner. CLI/library/detection profiles and pair/single tolerances preserve existing behavior; override propagation and config serialization are tested. |
+| R9 | Callable workflows and dependency boundaries | Existing workflows run in process without CLI imports or accidental re-exports. Numerical stages have no CLI/workflow dependency; persistence does not orchestrate search. |
+| R10 | Observable outcomes | Expected empty results and execution errors are distinguishable. Captured CLI stdout contains requested results, stderr contains progress, and refinement metadata is retained. |
+| R11 | Refactor safety | Pre-move characterizations and independent correctness checks pass; both development recordings satisfy the declared payload/legacy-artifact comparisons. Expectations are not rewritten to hide drift. |
+| R12 | Accurate navigation and agent evidence | Architecture map and edit recipes match the tree; AGENTS.md links the check command. Representative change walkthroughs and check durations are recorded. |
+
+## 5. Work packages and handoff
+
+All four packages follow the merged Phase 0. Keep commits reviewable and separate mechanical cleanup
+from contract or numerical moves. Each package leaves the fast gate green and updates the architecture
+map. Record baseline and comparison evidence in new run folders, with commands/parameters as required
+by AGENTS.md; if an experiment is performed, add its record under `docs/experiments/`.
+
+| WP | Deliverable | Requirements | Depends on |
 |---|---|---|---|
-| physics | `geo`, `doppler` | pure functions of arrays; the straight-pass model, trajectory curves, geodesy | read files, log, know about events or grids |
-| records | `records`, `params`, `clock`, `errors` | typed values that cross module boundaries; all tunables; the exception hierarchy | import anything but physics and the standard library |
-| data | `audio`, `adsb`, `fetch`, `terrain`, `coverage`, `cache` | decode, stream, parse, persist; every on-disk format | score or search |
-| model | `fit`, `detect`, `score`, `search` | turn spectrograms and segments into fits, candidates and scores | print, open files, parse argv |
-| workflow | `pipeline` (later `locate`, `bench`) | compose model and data into steps that read and write run artefacts | define parameters or formats |
-| cli | `cli` | argv to workflow calls, exit codes, terminal output | contain logic |
-
-`tracks.py` splits: `fit.py` (`local_whiten`, `grid_search`, `fit_event`) and `detect.py`
-(`detect_events`, the window scan). The straight-pass shape (`tracks._shape`) merges into
-`doppler.ideal_curve`, one implementation parameterised by span and sample count. `ridge` stays in
-`detect.py`, marked as the start of Phase 2 item 3. `plots.py` stays as it is, under workflow.
-
-### 3.2 One place for every tunable
-
-`params.py` holds frozen dataclasses, one per stage, with the current defaults as field defaults:
-
-- `SpectrogramParams`: `nperseg`, `hop_s`, `fmin_hz`, `fmax_hz`, `whiten_window_s`, `sr`;
-- `FitParams`: objective, `v_bounds`, `d_bounds`, the grids, `crop_pad_s`, `band_pad_frac`,
-  Nelder-Mead options;
-- `DetectParams`: `window_s`, `step_s`, `per_window`, `min_sep_s`, `top`, `refine`, plus its
-  own `FitParams` for the refinement stage (today's `v_bounds=(35, 200)` and `d_bounds=(200, 15000)`);
-- `ScoreParams`: the event window's `pad_s` and band factors (today `0.8 × f_post` to
-  `1.25 × f_pre` in `score.py`, and a different `0.7` and `1.3` in `plots.py`, which then reads the
-  same object), `n_samples`, `min_valid`, `shifts`, `f0_scales`;
-- `SearchParams`: `max_range_m` (Phase 0's `DEFAULT_MAX_RANGE_M` moves here), `tol_s`, `v_tol`,
-  `d_tol`, `silence_d_m`, `silence_margin_s`, `spacing_m`, `alive_pad_s`;
-- `RefineParams`: `spacing_m`, `half_m`;
-- `Paths`: the data and cache roots from the environment, resolved once; the only place in the
-  package that reads `os.environ`;
-- `Runtime`: `jobs` and the log level, so Phase 1's `--jobs` has a field waiting.
-
-Every model and workflow function takes its params object, never a spread of keyword arguments with
-their own defaults. The CLI builds its options from the dataclass fields, so a default is typed once.
-Params serialise to JSON and are what the result record's provenance block stores (Phase 1 item 2 then
-has nothing to invent).
-
-Physical constants live in the physics layer with a name: metres per degree in `geo`, the speed of
-sound reference in `doppler`, `FT` and `KT` where they are.
-
-### 3.3 Typed records and versioned formats
-
-`records.py` holds every value that crosses a module boundary or is written to disk:
-
-- `EventFit`: derived fields (`f_pre`, `f_post`, `t_cpa` from `t_cpa_emit`) become properties or are
-  checked in `__post_init__`; `to_json`/`from_json` carry `schema_version`, and the loader rejects
-  a version it doesn't know. Phase 0's `--pick` loader uses this;
-- `DetectionCandidate` (score, f0, v, d, t0) as a NamedTuple, replacing the 5-tuples;
-- `GridSearchResult`, `LockedScore` (total, s1, s2, shift), `PairScore` as small dataclasses
-  replacing tuple returns;
-- `SearchRow`, `RefineRow`: the DataFrames are built from lists of these, and the column list is
-  derived from the fields, never typed by hand. `refine`'s chosen flights become a field of a
-  `RefineResult` that wraps the frame, not `attrs`;
-- `TraceSetMeta`: Phase 0's `extraction_metadata` dict becomes a dataclass with a version;
-- `ResultRecord`: a skeleton with `schema_version`, `provenance`, `params` and `errors`, which
-  Phase 1 item 2 fills.
-
-Rule: no function returns a bare tuple of more than two elements, and no DataFrame column list is a
-string literal list.
-
-### 3.4 Time conventions in the type
-
-`clock.py` defines:
-
-- `Clock(offset_s)` with `to_audio(t_unix)` and `to_unix(t_audio)`, replacing the four `t0_map`
-  computations. `locked_score`, `pick_flight`, `refine` and `run_single_search` take a `Clock`;
-- a naming rule, enforced by review and stated in `docs/conventions.md`: every time-valued name
-  carries its frame and its convention, `t_heard_audio`, `t_emit_unix`, `t_cpa_heard`. Columns and
-  fields follow the same rule. `EventFit.t_cpa` becomes `t_cpa_heard`, with the JSON loader accepting
-  the old name under schema version 1.
-
-This is deliberately lightweight: no unit library, no wrapper around floats in the hot loops. The
-point is that a session reading a signature sees which time it is handed.
-
-### 3.5 Thin CLI
-
-Each subcommand is a function `cmd_<name>(args) -> int` in `cli.py`, registered in a dict, with the
-parser built from the params dataclasses. Everything a command does beyond argv parsing and printing
-is a workflow function with a typed signature. The `fit` command's brightness default becomes a
-field of `FitParams` with one documented value, and the CLI either overrides it explicitly or the
-library default changes to match; not two silent defaults.
-
-Design check, not a deliverable: a 20-line `locate` prototype composing spectrogram, detect, fetch,
-search and refine can be written against the workflow layer without touching `cli.py`. If it can't,
-the layering is wrong.
-
-### 3.6 Errors and logs
-
-`errors.py`: `DopplertrackError` and subclasses `DataError` (unreadable trace, missing coverage,
-missing elevation), `UsabilityError` (no usable flyovers), `NoCandidatesError`, `CacheError`. Model
-and workflow code raise these; the CLI maps them to a message and an exit code; Phase 3's `locate`
-maps them to verdict reasons. A broad `except` is allowed only where it counts what it skipped
-(Phase 0's scan report) and says so in a comment.
-
-The package uses `logging` with one logger per module. `pipeline.log` becomes `logger.info`. Progress
-goes to stderr, results to the paths the user named or to stdout when they asked for it, never both on
-one stream. `-v` and `-q` on every command. The log format carries the stage name so a session reading
-a run folder's log can grep it.
-
-### 3.7 The Tier 0 gate
-
-`pyproject.toml` gains `[tool.ruff]` (line length 120; rules E, F, B, I, UP, with E702 and E701 on so
-the semicolon-joined statements go), `[tool.mypy]` (`check_untyped_defs` everywhere; `strict` on
-`params`, `records`, `clock`, `errors`, `cache`) and `[tool.pytest.ini_options]` (test paths, the
-markers `tier0`, `tier1`, `tier2`, `real_data`, `--durations=10`). The dev dependency group adds
-ruff, mypy, pandas-stubs and types-requests.
-
-One command, `tools/check.sh`, runs ruff, mypy and `pytest -m tier0`, and must finish in under 90 s
-here. AGENTS.md says to run it before every commit. This is the local gate Phase 0 chose instead of
-GitHub CI; it is also where Phase 1's Tier 0 and Tier 1 markers attach.
-
-### 3.8 Fixtures as factories
-
-`tests/conftest.py` provides factories that return typed records:
-
-- `straight_pass(f0, v, d, t_cpa, ...)`: a synthetic `Spectrogram` with the ideal curve rendered on
-  noise, plus the `EventFit` that generated it;
-- `scene(flights, observer, f0s)`: traces, segments and the synthetic recording an observer hears,
-  generalising `test_pipeline_synthetic`;
-- `uniform_spectrogram(level)`.
-
-Every existing test that builds these by hand moves to the factories. They are the base of PLAN
-5.1's synthetic failure matrix: a partial pass or a crossing tone is then one call with different
-arguments.
-
-### 3.9 Golden tests
-
-Before any module moves, a Tier 0 golden test pins the exact numbers of a small synthetic scene:
-`grid_search`'s best score and parameters, `fit_event`'s output, `cpa_table`'s rows, `pair_candidates`'
-survivors and `locked_score`'s total, to 1e-9. Every work package must leave it green without editing
-the expected values. The Oyster Bay known-point and search outputs are the Tier 2 check, byte for byte
-against the run folder from before the work package (the CPA cache has already shown this
-reproducibility holds).
-
-### 3.10 Documentation for the next session
-
-`docs/architecture.md`: the layer table, the import rule, the module map with one line each, the
-naming conventions, the record and params rules, and recipes: "a new gate goes in `SearchParams` and
-`pair_candidates`, with a row in the golden test", "a new on-disk field bumps the schema version and
-extends `from_json`", "a new experiment script imports from `model` and `records`, never from `cli`".
-AGENTS.md links it and stays short. Every module's docstring states its responsibility and what it must
-not do, in the words of the layer table.
-
-## 4. Requirements
-
-Each requirement has its acceptance check. "Grep" means a check that `tools/check.sh` can run.
-
-**Policy**
-
-- R0. The upstream-parity rule is retired as 3.0 describes. Acceptance: AGENTS.md no longer requires
-  separate upstream and fork commits; PLAN.md's principles list has "Merge upstream, don't mirror it"
-  in place of "Stay mergeable with upstream"; README.md and the layout tables match; the user has
-  approved the wording. This is the first commit of the restructuring and touches no code.
-
-**Single source of truth**
-
-- R1. Every tunable is a field of one params dataclass. Acceptance: the literals `6000`, `0.35`,
-  `0.95, 1.0501`, `-8, 8.01`, `111320`, `300.0` (alive pad), `0.8` and `1.25` (the event window's
-  band) and the crop pads each appear once in `src/`, and `os.environ` is read only in `params.py`.
-- R2. CLI defaults are derived from the dataclasses. Acceptance: no `default=<number>` in `cli.py`
-  for a value that a params class holds.
-- R3. One straight-pass model. Acceptance: `tracks._shape` is gone, and the golden test for
-  `grid_search` is unchanged.
-- R4. `fit_event` has one default objective. Acceptance: the test `test_fit_cli_defaults_to_brightness`
-  is rewritten to read the default from `FitParams`.
-
-**Records**
-
-- R5. No function in `model` or `workflow` returns a tuple of more than two elements. Acceptance:
-  review; the module map in `docs/architecture.md` names each return type.
-- R6. DataFrame columns are derived from record fields. Acceptance: `cols = [...]` literals gone from
-  `pipeline.py`.
-- R7. Every on-disk JSON and NPZ record has a schema version and one loader that rejects unknown
-  versions. Acceptance: a Tier 0 test per format loads a current file, a version-1 file and refuses
-  a version-99 file.
-- R8. `EventFit`'s derived fields can't disagree with their sources. Acceptance: constructing one
-  with inconsistent `f_pre` raises, or `f_pre` is a property.
-
-**Conventions**
-
-- R9. A `Clock` type replaces the `t0_map` arithmetic. Acceptance: grep for `t0_map` finds nothing;
-  a Tier 0 test round-trips `to_audio(to_unix(t))`.
-- R10. Time-valued names carry frame and convention. Acceptance: `docs/conventions.md` lists the
-  suffixes; `EventFit`, `SearchRow`, `cpa_table`'s columns and `Segment` follow them.
-
-**Layering**
-
-- R11. The import direction is enforced. Acceptance: `tests/test_layers.py` walks the AST of every
-  module and fails on an upward import; no function-local imports except `fcntl` and matplotlib.
-- R12. `cli.py` contains no logic. Acceptance: every `cmd_*` function is under 25 lines and calls
-  one workflow function; the CLI test suite runs each command in-process on the synthetic scene.
-- R13. `pipeline.py` holds workflow only. Acceptance: `pick_flight` and the refine scoring loop live
-  in `score.py`; `cached_cpa_table` and `_file_lock` live in `cache.py` beside the fingerprint and
-  atomic save, where Phase 1 item 7 then swaps the internals.
-- R14. `tracks.py` is split into `fit.py` and `detect.py`. Acceptance: the experiment scripts'
-  imports are updated in a comment at their top (they are records and aren't run), and
-  `docs/architecture.md`'s module map matches `ls`.
-
-**Errors and logs**
-
-- R15. Failures are typed. Acceptance: `errors.py` exists, every `raise ValueError` in `model` and
-  `workflow` that signals a data or search outcome becomes a subclass of `DopplertrackError`, the
-  CLI exits 2 on `DataError`, 3 on `NoCandidatesError`, 1 otherwise, and `fetch._ChainedHTTP`
-  raises `DataError` when its retries run out instead of falling through to a `TypeError` on `None`.
-- R16. No `print` in the package outside `cli.py`. Acceptance: grep.
-- R17. Progress and results are on different streams. Acceptance: running `search` with stdout
-  redirected to a file yields only the result table.
-
-**The gate**
-
-- R18. ruff, mypy and `pytest -m tier0` pass and run in under 90 s via `tools/check.sh`. Acceptance:
-  timed on this Mac, recorded in `docs/architecture.md`.
-- R19. Every public function in the package is fully annotated and `py.typed` is truthful.
-  Acceptance: mypy `check_untyped_defs` reports nothing; `disallow_untyped_defs` on the strict
-  modules.
-- R20. Hygiene findings are fixed, not ignored: semicolon-joined statements, files opened without
-  `with`, the process pool in `detect_events` as a context manager, `np.arange` in signature
-  defaults, `zip` without `strict`, unused imports, the unread `top_pairs` and the uncalled
-  `grid_lla`, `matplotlib.use("Agg")` moved from import time into the first plotting call, and
-  `__init__.py` reduced to the package docstring and `__version__` from `importlib.metadata` in
-  place of the template's `hello()`. Acceptance: ruff's configured rule set reports nothing and no
-  rule is disabled per line except with a reason.
-
-**Tests**
-
-- R21. Fixture factories exist and the existing tests use them. Acceptance: no test file defines
-  its own synthetic spectrogram or trace builder.
-- R22. Golden tests pin the numbers. Acceptance: they exist before the first module move, and no
-  expected value changes in any work package's diff.
-- R23. The suite is tiered. Acceptance: `pytest -m tier0` under 60 s; `real_data` tests skip without
-  the environment variable as today.
-
-**Documentation**
-
-- R24. `docs/architecture.md` and `docs/conventions.md` exist, AGENTS.md links them, and each
-  module's docstring names its layer. Acceptance: a new session, given only AGENTS.md, can say where
-  a new gate goes.
-
-**Tools**
-
-- R25. `tools/data/extract_boxes.py` and `site_traffic.py` get a `main()` and argparse, and their
-  duplicated `Chained` reader moves into `fetch.py` as the local-file twin of `_ChainedHTTP`.
-  Acceptance: both scripts import it; `KEEP_ALL` becomes a flag.
-
-## 5. Work packages
-
-Each is one session, one branch off `dev`, one or a few commits, merged only with the golden test and
-the Oyster Bay byte-for-byte check green. Sizes are PLAN's S/M/L.
-
-| WP | Content | Requirements | Size | Depends on |
-|---|---|---|---|---|
-| P | Retire the upstream-parity rule in AGENTS.md, PLAN.md and README.md | R0 | S | the user's wording |
-| 0 | Tooling gate, pytest config, markers, `tools/check.sh`, autofixable hygiene, fixture factories, golden tests, the baseline run folders for Oyster Bay and the eagle cam | R18, R20 (part), R21, R22, R23 | S–M | WP P, Phase 0 merged |
-| 1 | `records.py`, `EventFit` schema, NamedTuples and result dataclasses, derived columns | R5–R8 | M | WP0 |
-| 2 | `params.py`, constants named, CLI defaults derived, one fit default | R1–R4 | M | WP0 |
-| 3 | `clock.py`, naming convention, `docs/conventions.md` | R9, R10 | S–M | WP1 |
-| 4 | Layer split: `fit`/`detect`, `cache.py`, slim `pipeline`, `cmd_*` functions, layer test | R11–R14 | M | WP1, WP2, WP3 |
-| 5 | `errors.py`, `logging`, streams | R15–R17 | S | WP4 |
-| 6 | Full annotations, mypy strict on the record modules, `py.typed` truthful | R19, R20 (rest) | S–M | WP4 |
-| 7 | `docs/architecture.md`, module docstrings, AGENTS.md link | R24 | S | WP4 |
-| 8 | Tools scripts | R25 | S | none |
-
-WP P is a documentation commit and can merge today, before Phase 0, since it conflicts with nothing.
-WP1 and WP2 can run in parallel in separate worktrees; they touch different files except `cli.py`,
-whose parser section goes to WP2 and whose loaders go to WP1. WP8 can start at any time. Everything
-else is sequential because each moves code the previous one typed.
-
-Estimated total: three to five sessions over about a week of elapsed time, with the user's review
-between packages. Phase 1 item 2 (the result record) starts after WP1; items 3 and 7 after WP4.
-
-## 6. Acceptance for the whole
-
-- `tools/check.sh` is green and under 90 s; `pytest -m tier0` under 60 s.
-- Oyster Bay known-point and search outputs, and the eagle-cam refined result, are byte-identical to
-  the run folders made before WP0, at upstream's parameters.
-- The golden test's expected values are unchanged from WP0.
-- A `locate` prototype of about 20 lines composes the workflow layer in a scratch file without
-  importing `cli`.
-- `docs/architecture.md` matches the tree, and every module docstring names its layer.
-- The ruff rule count for `src/` and `tests/` is zero with the configured rules.
-
-## 7. Decisions needed
-
-1. **What, if anything, still goes upstream.** R0 retires the rule; this decides the residual
-   practice. Proposed: nothing by default. A self-contained fix in `geo`, `doppler`, `audio`, `adsb` or
-   `fetch` may be offered when the user wants to, adapted by hand onto `upstream/main`; PR #2 stays
-   open as it is. No module is kept clean for that purpose.
-2. **Strictness.** Proposed: mypy `check_untyped_defs` package-wide and `strict` only on the new
-   record modules, so numeric code with pandas isn't blocked on stubs.
-3. **Dependencies.** Proposed: stdlib dataclasses and hand-written JSON, no pydantic or msgspec. The
-   records are few, the fields are floats, and one fewer dependency is one fewer thing a session gets
-   wrong.
-4. **Where the benchmark code lives.** `bench/` is a fork-only data directory. Proposed: Phase 1's
-   runner becomes the subpackage `dopplertrack.bench`, under the workflow layer, so it is importable,
-   typed and covered by the gate. With R0 there is no longer a reason to keep it out of the package.
-
-## 8. Risks
-
-- **Conflicts with Phase 0.** Its PR touches every module. Mitigation: start the code packages after
-  it merges, and keep each work package to one or two sessions so nothing stays open long.
-- **Merging upstream later gets harder.** Once `pipeline` and `cli` are restructured, an upstream
-  change to either is a hand merge. Mitigation: upstream is a proof of concept with one maintainer and
-  the fork already carries the CPA cache and Phase 0 on top of it; the physics and data modules, where
-  upstream fixes are most likely, keep their function names and signatures through this work.
-- **A silent numeric change during a move.** Mitigation: the golden test before any move, and the
-  byte-for-byte Tier 2 check per package.
-- **Over-engineering.** A params tree and record types can grow into a framework. Mitigation: no
-  base classes, no registries, no plugins; a dataclass per stage and a NamedTuple per return, and
-  nothing a session can't read in one screen.
-- **Sessions skipping the gate.** Mitigation: AGENTS.md makes `tools/check.sh` the pre-commit step,
-  and a work package's PR description quotes its timing.
+| A | Baseline characterizations, independent correctness checks, offline gate and initial architecture map | R2, R3 foundation, R11 foundation, R12 foundation | Phase 0 merged and checked |
+| B | Named stage results, table/schema adapters, sound-speed metadata and explicit clock/time contracts | R3–R7 | A |
+| C | Canonical settings/profiles, reusable workflow entry points, dependency guard and streams/outcomes | R8–R10 | B |
+| D | Final synthetic/development compatibility checks, representative agent walkthroughs and finished navigation docs | R1–R12 | C |
+
+Use one topic branch/worktree per implementation agent. Parallelize only independent edits within a
+package with explicit file ownership; different sections of the same central file are not independent
+ownership. There is no prescribed session count. Review scope at each package boundary and remove
+optional cleanup rather than expanding this preparation.
+
+The Phase 1 handoff names the stable workflow entry points, resolved-config serialization, stage
+records, supported format adapters, fast-check command and baseline run folders. Phase 1 starts with
+its own parallelism item, then owns the result record, runner, cases, cache additions and audio gaps.
+No part of that handoff requires a prebuilt future result schema, scheduler or benchmark framework.
+
+## 6. Completion and deferred work
+
+Preparation is complete when all R1–R12 checks pass, the numerical behavior of existing workflows is
+preserved, and a fresh session can follow the edit recipes to identify and validate a parameter,
+record and workflow change. Record remaining optional work and proceed to Phase 1; perfect module
+symmetry, complete numeric typing or universal fixture reuse are not additional exit criteria.
+
+Optional work is considered later only with a concrete benefit to the next task: further splitting
+`tracks` or `pipeline`, broad annotation/style cleanup, `tools/data/` CLI cleanup, fixture expansion,
+and extra import-graph checks. The existing upstream contribution procedure remains in force.
+
+Main risks and controls:
+
+- **Preparation grows into a framework.** Use the required outcomes and four-package stopping rule;
+  avoid registries, generated parsers, plugin systems and speculative future schemas.
+- **Moves hide a scientific change.** Capture post-Phase-0 baselines first, retain independent oracles,
+  preserve explicit profiles and compare scientific payloads as well as serialization.
+- **Central contracts cause parallel conflicts.** Keep ownership stage-local where possible and
+  coordinate shared-file edits; worktrees isolate code, not shared data/caches.
+- **A green gate gives false confidence.** Ensure ordinary tests cannot escape marker selection and
+  demonstrate that representative semantic mistakes are caught. The Phase 1 benchmark remains
+  necessary for scientific quality; this preparation does not replace it.

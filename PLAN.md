@@ -178,17 +178,17 @@ Open problems, grouped by theme. The IDs are used throughout.
 - **Keep evaluation clean.** Development recordings may be tuned on. Evaluation recordings never are, and claims come only from them.
 - **Fail explicitly.** A recording the tool can't locate gets a verdict and a reason, never a guess.
 - **Simple, checkable models first.** Complexity is added only when a measured bias calls for it.
-- **Stay mergeable with upstream.** New capabilities go in new modules, and upstream defaults are kept. Small core fixes go upstream; `AGENTS.md` has the branch recipe.
+- **Stay mergeable with upstream.** Fork internals may be restructured while preserving existing behavior and documented defaults through explicit profiles. Keep self-contained fixes easy to adapt upstream; `AGENTS.md` has the branch recipe.
 
 | Milestone | Delivers | Phases | Depends on | Rough size |
 |---|---|---|---|---|
-| **M1: a measuring stick we can trust** | the small known bugs fixed, the result record, and the seed benchmark with both baselines | 0, 1 | – | 1–2 weeks |
+| **M1: a measuring stick we can trust** | the small known bugs fixed, architecture contracts and a fast gate, the result record, and the seed benchmark with both baselines | 0, architecture preparation, 1 | – | 1–2 weeks + preparation |
 | **M2: first usable release** | `locate`, from audio, date and box to a verdict and a report, with explicit failures and the alternatives it considered, installable from a release in the fork | 2, 3, 5, 6 and the machinery of Phase 4 | M1 | 3–4 more weeks |
 | **M3: validated claims** | the confident-wrong rate and region coverage measured on independent recordings, against criteria fixed in advance | 4 (claims) | M2, plus enough independent recordings (5.6) | no date: it waits on evidence |
 | **M4: toward the destination** | the extensions in section 1, each when a measurement calls for it | Later | M2 | open |
 
-Sizes assume Claude writes most of the code and you review: S is a day or less, M is 2–5 days, L is 1–2 weeks of part-time work. The critical path is Phase 1 → Phase 2 → Phase 3 (step B) → Phase 4. These run in parallel:
-- Phase 0's fixes, alongside Phase 1;
+Sizes assume Claude writes most of the code and you review: S is a day or less, M is 2–5 days, L is 1–2 weeks of part-time work. The critical path is Phase 0 → architecture preparation → Phase 1 → Phase 2 → Phase 3 (step B) → Phase 4. Phase 1, including its parallelism item, starts only after architecture preparation completes. These can run independently of that ordering:
+- Phase 0's individual fixes, alongside each other;
 - Phase 3's step A, alongside Phase 2;
 - Phase 5, once the result record exists;
 - Phase 6's packaging and install test, at any time, though its release test needs `locate`;
@@ -209,6 +209,28 @@ Each phase below gives its goal, the approach we expect to take given what we kn
 - **Platform** (W4). A fresh-install smoke test and a clear error when ffmpeg is missing, both run locally on this Mac as part of Tier 0. No GitHub CI for now: setting it up and waiting on it would slow the work down, and a local run on the development machine covers what it would check. `.github/workflows/` stays as upstream has it until a release needs more.
 
 **Done when** each fix has its test and is in `dev`.
+
+#### Between Phases 0 and 1: architecture preparation (S–M)
+
+After Phase 0 merges and passes its checks, complete the bounded preparation in
+[architecture requirements](docs/rearchitecture-requirements.md) before starting any Phase 1 item,
+including parallelism. Existing phase numbers stay unchanged.
+
+Establish a trustworthy offline lint/type/test gate, named stage results, explicit time and position
+conventions, canonical settings with preserved CLI/library profiles, reusable workflow entry points,
+separate progress/results streams, and an accurate architecture map. Capture post-Phase-0 regression
+baselines before code moves and keep independent physics/time checks beside them. Preserve the
+scientific values and rankings of existing development workflows; document schema migrations separately.
+
+The result record, benchmark runner and cases, new caches, gap-aware audio and parallel execution
+remain Phase 1 work. Broader module reshuffles and universal typing/fixture cleanup are optional and
+do not extend this preparation. Fork restructuring can already combine code, tests and documentation
+under AGENTS.md; no upstream-policy change is a prerequisite.
+
+**Done when** the requirements document's R1–R12 acceptance checks pass, both development recordings
+retain their scientific results under declared comparison rules, and a fresh session can follow the
+documented edit paths for a parameter, record and workflow change. Hand the stable interfaces, check
+command and baseline run folders to Phase 1, then start its parallelism item.
 
 #### Phase 1: minimal benchmark (M)
 

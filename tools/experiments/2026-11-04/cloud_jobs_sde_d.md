@@ -127,7 +127,18 @@ The branch is `claude/sde-c-pm-coordination-cbbe43`. Every change is committed. 
 - **Recorded** in the collective-find record.
 - **Coarse units 2–8** are launched (`2026-11-04-collective-coarse-v2-s2of8` … `s8of8`, 91fb1c1).
 
+**Done since the smoke read** (all recorded in the collective-find record):
+- **The true-cell diagnostic** (`2026-11-04-collective-truth`, 75a8e02). The fine grid reaches Z 17.54 in OB's true cell, so the coarse sampler is the fault; ace391's window is weak (z 1.97).
+- **The eight coarse units,** merged into `runs/2026-11-04-collective-coarse-v2-merge/` (`collective.json`, `KEPT.json`).
+
+**Running:** the fine stage.
+- OB's cells 1–19: `2026-11-04-collective-fine-v2-s1of19` … `s19of19`, 75a8e02, `--fine-from tools/experiments/2026-11-04/collective_kept_ob.json`.
+- The other seven cases' 120 cells: `…-s1of20` … `s20of20`, 80599d3, `--fine-from …/collective_kept_rest.json`.
+- Both run 91fb1c1's `collective.py`.
+
 **Next step:**
-1. Pull the eight coarse units and merge them (`--merge --resume <8 folders>`), which writes `KEPT.json` and each case's `coarse_truth`.
-2. Give the PM the eight coarse ranks.
-3. On their go-ahead, launch the fine stage (`--fine-from KEPT.json`, 19 units per capped case, about 8 min each). Merge it with `--extra-units`.
+1. Pull every fine job.
+2. Merge each case over both stages from a checkout at 80599d3: `collective_run.py <new run> --fine-from tools/experiments/2026-11-04/collective_kept_rest.json --merge --resume <the 20 rest folders> --extra-units <the 19 OB folders> runs/2026-11-04-collective-coarse-v2-merge-inputs…`.
+   - Simpler: give `--extra-units` the 8 coarse folders and the 19 OB fine folders; `--resume` takes the 20 rest folders.
+3. Report each case's best cell.
+4. Then the denser coarse sampler (1 s shift, 1 % f0, 120 samples), cost measured first, and ace391's window checked against the find test.

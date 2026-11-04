@@ -260,3 +260,54 @@ def test_memory_in_use_is_total_less_available(tmp_path, monkeypatch):
     monkeypatch.setattr(builtins, "open", lambda f, *x, **k: real(meminfo if f == "/proc/meminfo" else f, *x, **k))
     total, used = supervisor.memory_gb()
     assert round(total) == 131 and round(used) == 100
+
+
+def test_private_data_never_reaches_the_fleet_or_the_bucket(tmp_path, monkeypatch):
+    monkeypatch.setattr(runs, "DATA_ROOT", tmp_path)
+    for p in ("private/seattle/site.json", "raw/seattle-home/2026-11-04.flac", "incoming/seattle-home/a.wav",
+              "derived/traces/20261104-ha-pilot/area.jsonl", "derived/traces/20261104-ha-pilot-2/area.jsonl",
+              "derived/traces/20261105-pilot/x", "derived/traces/20261104-coexist", "derived/traces/day1.launch.log",
+              "derived/foo/private/x.npz", "runs/2026-11-05-home/private/a.json"):
+        assert runs.is_private(p), p
+        with pytest.raises(SystemExit, match="private data"):
+            runs.refuse_private([p], "--input")
+    for p in ("derived/traces/2026-11-01/seattle.npz", "derived/traces/2024-12-27.log", "derived/traces/2026-09-08",
+              "raw/audio/youtube/oyster_bay.webm", "derived/privateer/x", "derived/oyster_bay/rec.npz"):
+        assert not runs.is_private(p), p
+    # prefixes the private folder lists are private too
+    (tmp_path / "private").mkdir()
+    (tmp_path / "private" / "exclude.txt").write_text("# home sessions\nderived/home-spectrograms/\n")
+    assert runs.is_private("derived/home-spectrograms/a.npz")
+    # the seed's sync of derived/ keeps only day traces under traces/, and excludes the listed prefixes
+    ex = runs.seed_excludes("derived")
+    assert ex[:6] == ["--exclude", "traces/*", "--include", "traces/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/*",
+                      "--include", "traces/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9].log"]
+    assert ex[-2:] == ["--exclude", "home-spectrograms/*"]
+    assert ["--exclude", "seattle-home/*"] == runs.seed_excludes("raw")[-2:]
+    # a case marked private, or naming a site, is refused
+    import json
+    (tmp_path / "bench").mkdir()
+    (tmp_path / "bench" / "cases.json").write_text(json.dumps({"cases": [
+        {"id": "home-1", "private": True, "audio": {"path": "private/seattle/a.flac"}},
+        {"id": "home-2", "site": "seattle-home", "audio": {"path": "raw/audio/x.flac"}}]}))
+    monkeypatch.setattr(runs, "REPO", tmp_path)
+    for cid in ("home-1", "home-2"):
+        with pytest.raises(SystemExit, match="private case"):
+            runs.case_inputs([cid])
+
+
+def test_seed_refuses_while_a_recorder_session_sits_in_derived_traces(tmp_path, monkeypatch):
+    monkeypatch.setattr(runs, "DATA_ROOT", tmp_path)
+    monkeypatch.setattr(runs, "outputs", lambda region=None: pytest.fail("seed went on to upload"))
+    traces = tmp_path / "derived" / "traces"
+    for name in ("2026-11-01", "20261104-ha-pilot-2", "20261105-pilot", "20261104-ha-latency", "20261104-selftest-3"):
+        (traces / name).mkdir(parents=True)
+    a = runs.argparse.Namespace(dry_run=True, run=[])
+    with pytest.raises(SystemExit, match="recorder sessions .*20261104-ha-latency, 20261104-ha-pilot-2, 20261104-selftest-3, 20261105-pilot"):
+        runs.seed(a)
+    # each named on the allow list: seed goes on (here, to the stubbed bucket lookup)
+    (tmp_path / "private").mkdir()
+    (tmp_path / "private" / "seed-allow.txt").write_text("20261104-ha-pilot-2\n20261105-pilot\n20261104-ha-latency\n20261104-selftest-3\n")
+    with pytest.raises(pytest.fail.Exception, match="went on"):
+        runs.seed(a)
+    assert not runs.RECORDER_SESSION.match("2026-11-04") and runs.RECORDER_SESSION.match("20261104-coexist")

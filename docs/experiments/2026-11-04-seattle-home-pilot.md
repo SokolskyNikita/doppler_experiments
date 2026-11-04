@@ -448,6 +448,15 @@ the same case and the same flight data, at boxes of 4, 8, 12 and then 20 km.
 
 ## Outcome
 
+**Locate, from automatic events with the silence filter off:**
+- A 4 km search at 50 m spacing puts the owner's home within 300 m: the top candidate is 294 m away and the refined
+  point 241 m. The winning pair is the 1.8 and 0.8 km piston passes (events 4 and 3).
+- Boxes of 8 and 12 km at 200 m spacing keep the same winner within 500 m of the home, against every other location in
+  the box.
+- The 300 m criterion was written with the case's 200 m grid. At 200 m the 4 km size misses (482 m). At 50 m it passes
+  by 6 m, one grid cell, and is stated with that caveat.
+- No verdict before Phase 4's null of the maximum.
+
 So far, from runs 4, 5 and 7:
 - The tonal check hears 2 of the 11 passes the owner's ear heard, both within 1 km. The rest of the ear's range, 1–3.5
   km, gets nothing.

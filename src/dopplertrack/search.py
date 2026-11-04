@@ -113,10 +113,15 @@ def _nearest_samples(g, gg, p, pp, max_range_m, tile_m):
     and the first sample index attaining it, wherever that distance can be <= max_range_m.
 
     The points are split into tiles of tile_m metres, and each tile is compared only with the samples
-    within max_range_m + 1 m (horizontally) of its bounding box. A sample left out is farther than
-    max_range_m from every point of the tile, so it can't be the nearest one for a point whose CPA is
-    kept; points with no sample in reach get best = inf. The kept entries use the same expression as
-    comparing every point with every sample, so the kept CPAs are bit for bit the same."""
+    within max_range_m + 1 m (horizontally) of its bounding box.
+
+    Invariant: a sample left out is farther than max_range_m from every point of the tile, so it can't
+    be the nearest sample of any kept row (kept rows need r <= max_range_m), and every sample at a kept
+    row's minimum distance is within max_range_m and therefore retained. argmin's first-index rule
+    picks the same sample. Horizontal distance to the tile's bounding box is a lower bound on slant
+    range, so the test is conservative, and the 1 m margin covers rounding in the expression below.
+    Points with no sample in reach get best = inf. The kept entries use the same expression and chunk
+    centre as comparing every point with every sample, so the kept CPAs are bit for bit the same."""
     best = np.full(len(g), np.inf)
     j = np.zeros(len(g), int)
     key = np.floor(g[:, :2] / tile_m).astype(np.int64)

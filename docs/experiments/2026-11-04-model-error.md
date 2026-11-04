@@ -308,4 +308,27 @@ Never judged on the residual: RSS ratios are reported only. Curve D (the publish
 - **The parametrization to use.** (f0, τ, R, K, ω). Its bound needs ω fixed where ω's interval includes 0, since K and ω merge into Kω² there.
 - **Status.** Nothing has run on Livermore. The amendment waits for the PM.
 
+**Numbers** (`runs/2026-11-04-turn-model-fit/`, the design as approved; `runs/2026-11-04-turn-model-profile/`, the identifiable form). Median |R − R*|:
+
+| Curve, passes | Straight | Turn model |
+|---|---|---|
+| A, turning 16 | 287 m (18.0 %) | 882 m (44.2 %) |
+| A, non-turning 24 | 165 m (12.4 %) | 327 m (15.8 %) |
+| A, primary 29 | 229 m (15.6 %) | 373 m (15.6 %) |
+| A, flagged 11 | 193 m (15.3 %) | 512 m (37.9 %) |
+| D, primary 29 | 230 m (15.0 %) | 538 m (26.3 %) |
+
+- **The residual barely moves:** RSS against the straight fit's is 0.97 on the turning passes and 1.00 on the rest.
+- **Identification:** the turn rate is identified on 3 of the 16 turning passes and 6 of the 24 others. On 9 of the turning passes its interval includes 0.
+- **The bound:** the Cramér–Rao bound of R in the identifiable form is a median 8.6 % on the turning passes, against the straight model's 5.0 %; on the non-turning passes both are 4.1 %.
+- **Sign:** the chosen sign matches the trajectory's on 4 of 16, which is unidentifiable by construction as shown above.
+- **The turn rate is real but not constant.** Its fitted size correlates with the trajectory's mean turn rate over ±30 s at r = 0.72 across the turning passes, and with the largest rate at only 0.32. Those passes' mean rate is a median 0.16°/s, against a largest rate of 2.3°/s: they weave rather than hold a turn.
+
+**Outcome: the turn model doesn't enter.**
+- **Criteria 1–4 fail:** 882 m against 201 m, 327 m against 182 m, 373 m against 160 m, and 3 of 16 identified against 11. Criterion 5 can't be met by construction.
+- **The expectation was wrong.** It predicted a third off the turning passes' miss. Instead the miss triples.
+- **Why.** As with η and the acceleration, the extra freedom lowers the residual a little by trading the turn rate against R. A constant-rate turn can't describe a weave, so the fit spends the rate on curve shape it can't explain physically.
+- **Item 2's conclusion.** Three kinematic additions have now been tried (drift, acceleration, turn), and none cuts the model error. Each makes R worse. The per-pass model error isn't reducible by a heavier single-pass model on this data.
+- **What the turn model does give.** Its fitted rate tracks how much a pass weaves (r = 0.72). That makes it a candidate flag for passes whose R to distrust, rather than a correction.
+
 **Scripts (stage 1):** `tools/experiments/2026-11-04/straight_pass_ls.py`, `model_error.py`, `model_error_summary.py`, `crb.py`. **Outputs:** `runs/2026-11-04-model-error-2/` (`fits.csv`, `perturbations.csv`, `halves.csv`, `noise.csv`, `summary.json`) and `runs/2026-11-04-crb-2/` (`crb.csv`, `crb_summary.json`; `runs/2026-11-04-crb/` used the invalid truncated covariance and is superseded). Weather: `raw/aux/metar/KLVK_*`, `RAOB_KOAK_*`.

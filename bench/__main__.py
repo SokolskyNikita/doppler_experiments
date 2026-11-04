@@ -29,6 +29,9 @@ def main(argv=None):
                    "boxes split one run; `bench merge` puts the shards together")
     r.add_argument("--resume", action="store_true", help="continue the stopped run in --run-dir: cases with an "
                    "entry.json are kept, the rest run (same clean commit and settings only)")
+    r.add_argument("--weather", action="store_true", help="apply each case's station temperature (its weather block): "
+                   "the fits at the ground temperature, each flight at its own mid-height speed. Off by default: the 15 C "
+                   "path, the case's reading recorded but not used")
     r.add_argument("--search-param", action="append", default=[], metavar="KEY=VALUE",
                    help="override a search setting for this run (repeatable); VALUE is JSON or a string. tol_s, v_tol, "
                    "d_tol, silence_d_m and harmonics replace the case's; any other key is passed to run_search")
@@ -90,7 +93,8 @@ def main(argv=None):
     elif a.cmd == "run":
         run_dir = runner.run_bench(a.case or cases.case_ids(profile=a.profile), tier=a.tier, run_dir=a.run_dir,
                                    revision=a.revision, profile=a.profile, parallel=a.parallel,
-                                   overrides=runner.parse_overrides(a.search_param), shard=a.shard,
+                                   overrides={**runner.parse_overrides(a.search_param),
+                                              **({runner.WEATHER_KEY: True} if a.weather else {})}, shard=a.shard,
                                    resume=a.resume)
         print(run_dir)
     elif a.cmd == "merge":

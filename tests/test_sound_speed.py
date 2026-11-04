@@ -110,16 +110,24 @@ def test_the_runner_passes_the_case_speed_of_sound_and_records_it():
     kw, rec = runner.sound_speed(_case())
     assert kw == {} and rec["c_m_s"] == doppler.speed_of_sound() and rec["temperature_c"] is None
     case = _case(temperature_c=21.0, source="IEM ASOS", station="KFRG", station_distance_km=12.0)
+    # off by default: the case's reading is recorded, the 15 C path stands
     kw, rec = runner.sound_speed(case)
-    # the fits take the ground temperature's c; the geometry gives each flight its own from its height
+    assert kw == {} and rec["c_m_s"] == doppler.speed_of_sound() and rec["case_temperature_c"] == 21.0
+    assert runner.geometry_kw(case) == {}
+    # with use_case_weather, the fits take the ground temperature's c and each flight its own from its height
+    kw, rec = runner.sound_speed(case, use_weather=True)
     assert kw["c"] == pytest.approx(doppler.speed_of_sound(21.0)) == rec["c_m_s"] and rec["station"] == "KFRG"
-    assert runner.geometry_kw(case) == {"c": kw["c"], "temperature_c": 21.0}
-    assert runner.geometry_kw(_case()) == {}
+    assert runner.geometry_kw(case, use_weather=True) == {"c": kw["c"], "temperature_c": 21.0}
+    assert runner.geometry_kw(_case(), use_weather=True) == {}
+
+
+def test_a_run_ignores_the_case_weather_unless_it_sets_use_case_weather():
     blind = cases.blind_case("oyster-bay")
     assert blind["weather"]["station"].startswith("KFRG") and blind["weather"]["temperature_c"] == 25.6
     d = runner.Draft(blind, {}, "saved-fit", lambda m: None)
+    assert d.c_kw == {} and d.geo_kw == {} and d.params["speed_of_sound"]["basis"].startswith("the pipeline's default")
+    assert d.params["speed_of_sound"]["case_temperature_c"] == 25.6 and runner.WEATHER_KEY not in d.extra_kwargs
+    d = runner.Draft(blind, {}, "saved-fit", lambda m: None, {runner.WEATHER_KEY: True})
     assert d.c_kw["c"] == pytest.approx(346.48, abs=0.01) == d.params["speed_of_sound"]["c_m_s"]
-    assert d.geo_kw["temperature_c"] == 25.6
-    blind["weather"] = dict.fromkeys(blind["weather"])        # no reading: the pipeline's default, untouched
-    d = runner.Draft(blind, {}, "saved-fit", lambda m: None)
-    assert d.c_kw == {} and d.params["speed_of_sound"]["basis"].startswith("the pipeline's default")
+    assert d.geo_kw["temperature_c"] == 25.6 and runner.WEATHER_KEY not in d.extra_kwargs
+    assert d.params["search_overrides"] == {runner.WEATHER_KEY: True}

@@ -86,7 +86,10 @@ Scored triples change by under 0.1 %: Oyster Bay 40,889 to 40,861, the eagle cam
 - **What the per-flight path did.** It recovers most of what one ground-temperature c lost: Oyster Bay goes back to rank 1, and the eagle cam's true pair from rank 6 to rank 2. It doesn't recover the seeds.
 - **The 15 °C default still gives the better seed results.** That isn't evidence the default is right. The committed saved fits were made at 15 °C, so the fits and the search share that c only in the default run.
 - **The next question,** fixed by the PM: are the 15 °C saved fits the mismatch? Refit one case's events at the station temperature, then search them at the per-flight speed.
-- **Until that is answered,** the cases' latest versions should carry no temperature. On dev today they do, so every runner run uses it.
+- **"Weather on" is now a run switch, not a case version.** Each case keeps its station reading as data. The runner uses it only when a run sets `use_case_weather`: `bench run --weather`. That run's overrides, run.json and folder tag record the switch.
+  - The default is the 15 °C path, with the case's reading recorded in the record's `speed_of_sound` (`case_temperature_c`) but unused.
+  - Tier 1 always runs the default.
+  - The compare above is now one flag: `bench run --profile saved-fit` against the same with `--weather`.
 
 
 **Script:** `tools/experiments/2026-11-04/case_weather.py` (`--apply` writes the version 2 cases). **Run:** `runs/2026-11-04-case-weather/`, with the station lists, `weather.json` (every case's numbers and the fetch URLs) and the logs. **Fetched:** `raw/aux/metar/KAOH_2024-04-06.csv`, `KPIA_2024-04-06.csv`, `KMWA_2024-04-06.csv`, `KPOF_2024-04-06.csv`, `EGMC_2025-03-09.csv`, `EGMC_2025-04-06.csv` and `EGMC_2025-04-19.csv`, in the data root's MANIFEST.md. KFRG and KFMY were already there.

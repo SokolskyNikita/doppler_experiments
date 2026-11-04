@@ -8,7 +8,9 @@ Both drivers use [`tools/data/shards.py`](../../data/shards.py), the repo's shar
 - **Inputs.** `--inputs` prints the data-root paths a box needs.
 - **Workers.** From `$DOPPLERTRACK_JOBS`. No result depends on them.
 
-A sharded job is N launches with `--shard k/N`, each into its own `$RUN`. After `runs pull`, the merge runs on the Mac: the same
+Both jobs launch at once from one script, [`launch_sde_d.sh`](launch_sde_d.sh): `launch_sde_d.sh launch` (20 boxes each by default; `SHARDS_BOOT`, `SHARDS_ALASKA`), then after `runs pull`, `launch_sde_d.sh merge boot|alaska S1 ... SN`. The Alaska merge also writes the three-setting table (`model_error_alaska_summary.py`, which counts weak fits and errors per setting).
+
+Under the hood a sharded job is N launches with `--shard k/N`, each into its own `$RUN`. After `runs pull`, the merge runs on the Mac: the same
 command with `--merge RUN_1 --resume RUN_2 ... RUN_N`. A spot interruption is resumed by a new launch with `--resume` on the
 pulled folder.
 

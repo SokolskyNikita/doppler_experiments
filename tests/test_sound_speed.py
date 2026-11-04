@@ -117,5 +117,10 @@ def test_the_runner_passes_the_case_speed_of_sound_and_records_it():
                                        aircraft_height_m=1000.0))
     assert kw["c"] == pytest.approx(doppler.speed_of_sound(21.0 - 3.25)) == rec["c_m_s"]
     assert rec["effective_temperature_c"] == pytest.approx(17.75) and rec["station"] == "KFRG"
-    d = runner.Draft(cases.blind_case("oyster-bay"), {}, "saved-fit", lambda m: None)
+    blind = cases.blind_case("oyster-bay")
+    assert blind["weather"]["station"].startswith("KFRG") and blind["weather"]["temperature_c"] == 25.6
+    d = runner.Draft(blind, {}, "saved-fit", lambda m: None)
+    assert d.c_kw["c"] == pytest.approx(346.48, abs=0.01) == d.params["speed_of_sound"]["c_m_s"]
+    blind["weather"] = dict.fromkeys(blind["weather"])        # no reading: the pipeline's default, untouched
+    d = runner.Draft(blind, {}, "saved-fit", lambda m: None)
     assert d.c_kw == {} and d.params["speed_of_sound"]["basis"].startswith("the pipeline's default")

@@ -1,5 +1,10 @@
 # Station temperatures for the bench cases (2026-11-04)
 
+<!-- index
+question: Which station temperature belongs in each bench case's `weather` block?
+outcome: The nearest ASOS within 1 h of the recording's midpoint, 4.9–24.3 km away, as version 2 of every case; one reading serves the short recordings to 1 °C, but the day-long Eclipse recordings swing 9–15 °C (±1.3 % in c)
+-->
+
 **Question.** Which air temperature belongs in each bench case's `weather` block ([sound-speed](2026-11-04-sound-speed.md)), and how well does one reading stand for its recording?
 
 **Method.**

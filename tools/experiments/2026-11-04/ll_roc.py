@@ -14,9 +14,10 @@ knobs, before any Livermore pass is tracked.
    qualifying stops the round before any real recording is tracked.
 
 Units: constants.json; one file per (a, beta, noise window or weak-pass case) under RUN/ll_roc/, written when it
-finishes and skipped if present; chosen.json. Workers: DOPPLERTRACK_JOBS.
+finishes and skipped if present; ll_chosen.json. Workers: DOPPLERTRACK_JOBS; `runs launch --shards n` splits the grid
+points across boxes (units.shard).
 
-usage: ll_roc.py RUN constants
+usage: ll_roc.py RUN constants [retune1]
        ll_roc.py RUN roc [A ...]
        ll_roc.py RUN pick"""
 import json
@@ -45,9 +46,16 @@ UNDER = np.log(10.0)
 _NOISE: dict = {}
 
 
+# Retune 1 (counted; written after the first ROC, where no grid point qualified: every point, even beta 1e-12, made
+# exactly one whole-window track per family in noise). The evidence treated each of the eightfold-overlapping frames
+# as independent, so a noise peak persists over about eight frames and adds up like a tone. Retune 1 tempers each
+# frame's evidence by Harris's overlap correlation (lltrack.harris_weight); the grid, kernel and pick are unchanged.
+RETUNES = {"retune1": lambda: dict(frame_weight=ll.harris_weight(N, int(round(HOP * SR))))}
+
+
 def params(constants: dict, a: float, beta: float) -> ll.LLParams:
     return ll.with_params(ll.LLParams(), design_snr=a, birth_prior=beta, t_pass_s=constants["t_pass_s"],
-                          t_run_s=constants["t_run_s"], t_dip_s=constants["t_dip_s"])
+                          t_run_s=constants["t_run_s"], t_dip_s=constants["t_dip_s"], **constants.get("overrides", {}))
 
 
 # ---- 1. constants from the development events ---------------------------------------------------------------
@@ -66,7 +74,7 @@ def _runs(mask: np.ndarray, value: bool) -> list[int]:
     return out
 
 
-def constants(run: Path) -> dict:
+def constants(run: Path, retune: str | None = None) -> dict:
     refs_path = run / "dev_references.json"
     if not refs_path.exists():
         HL.references(run)
@@ -95,7 +103,8 @@ def constants(run: Path) -> dict:
                          runs_above=_runs(mask, False), runs_under=_runs(mask, True))
         print(name, per[name]["under_frac"], flush=True)
     out = dict(t_pass_s=float(np.median(spans)), t_run_s=float(np.median(above) * HOP),
-               t_dip_s=float(np.median(under) * HOP), events=per, under_z=float(UNDER))
+               t_dip_s=float(np.median(under) * HOP), events=per, under_z=float(UNDER),
+               retune=retune, overrides=RETUNES[retune]() if retune else {})
     U.write(run / "constants.json", out)
     print({k: out[k] for k in ("t_pass_s", "t_run_s", "t_dip_s")})
     return out
@@ -133,11 +142,11 @@ def _unit(job):
 def roc(run: Path, chosen_a: list[float]) -> None:
     c = json.loads((run / "constants.json").read_text())
     jobs = []
-    for a in [x for x in A_GRID if not chosen_a or x in chosen_a]:
-        for beta in BETA_GRID:
-            root = run / "ll_roc" / f"a{a:g}_b{beta:.0e}"
-            jobs += [("noise", i, a, beta, c, U.path(root, f"noise_{i}")) for i in range(int(HOURS * 6))]
-            jobs += [("weak", i, a, beta, c, U.path(root, f"weak_{i}")) for i in range(3 * len(FR.PASSES))]
+    points = [(a, beta) for a in A_GRID if not chosen_a or a in chosen_a for beta in BETA_GRID]
+    for a, beta in U.shard(points):                                       # runs launch --shards: grid points per box
+        root = run / "ll_roc" / f"a{a:g}_b{beta:.0e}"
+        jobs += [("noise", i, a, beta, c, U.path(root, f"noise_{i}")) for i in range(int(HOURS * 6))]
+        jobs += [("weak", i, a, beta, c, U.path(root, f"weak_{i}")) for i in range(3 * len(FR.PASSES))]
     jobs = [j for j in jobs if not j[-1].exists()]
     jobs.sort(key=lambda j: j[0] != "noise")                              # noise first: its workers share one image
     with ProcessPoolExecutor(U.jobs()) as ex:
@@ -175,7 +184,7 @@ def pick(run: Path) -> dict:
 if __name__ == "__main__":
     run, step = Path(sys.argv[1]), sys.argv[2]
     if step == "constants":
-        constants(run)
+        constants(run, sys.argv[3] if len(sys.argv) > 3 else None)
     elif step == "roc":
         roc(run, [float(x) for x in sys.argv[3:]])
     elif step == "pick":

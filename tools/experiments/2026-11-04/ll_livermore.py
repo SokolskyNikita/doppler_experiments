@@ -6,7 +6,7 @@ noise level needs. Definitions and criterion are round 1's (freqtrack_livermore.
 oracle band, the development events (round 2's references, dev_references.json) and runtimes are reported.
 
 Units: one per Livermore pass and one per development event under RUN/ll/a<a>_b<beta>/, written when finished and
-skipped if present. Workers: DOPPLERTRACK_JOBS.
+skipped if present. Workers: DOPPLERTRACK_JOBS; `runs launch --shards n` splits passes and events across boxes.
 
 usage: ll_livermore.py RUN livermore|dev [PASS or EVENT ...]       (the knobs from RUN/ll_chosen.json)
        ll_livermore.py RUN merge"""
@@ -140,11 +140,11 @@ if __name__ == "__main__":
     run, step, chosen = Path(sys.argv[1]), sys.argv[2], sys.argv[3:]
     p, root = knobs(run)
     if step == "livermore":
-        pids = U.select(sorted(r["id"] for r in csv.DictReader(open(FL.AUDIT / "passes.csv"))), chosen)
+        pids = U.shard(U.select(sorted(r["id"] for r in csv.DictReader(open(FL.AUDIT / "passes.csv"))), chosen))
         HL._pool(livermore_one, [(pid, p, U.path(root, "livermore", pid)) for pid in pids], HL._liv_init)
     elif step == "dev":
         refs = json.loads((run / "dev_references.json").read_text())
-        names = U.select([e[0] for e in HL.DEV], chosen)
+        names = U.shard(U.select([e[0] for e in HL.DEV], chosen))
         HL._pool(dev_one, [(e, r, p, U.path(root, "dev", e[0].replace(" ", "_"))) for e, r in zip(HL.DEV, refs) if e[0] in names])
     elif step == "merge":
         print(summarise(root, U.read_all(root / "livermore") or None, U.read_all(root / "dev") or None))

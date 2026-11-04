@@ -37,6 +37,7 @@ class LLParams:
     slope_scale: float = 0.02          # Laplace scale of |df/dt| / f, per second
     max_rel_slope: float = 0.25        # cap on |df/dt| / f, per second (PLAN 6.1)
     grid_frac: float = 0.25            # fundamental grid step, as a fraction of a bin
+    frame_weight: float = 1.0         # evidence per frame; harris_weight() tempers it for overlapping frames
     harmonics: int = 3
     exclusion_bins: int = 4
     families: int = 2
@@ -48,6 +49,15 @@ class LLParams:
 
 def with_params(p: LLParams, **kw) -> LLParams:
     return dataclasses.replace(p, **kw)
+
+
+def harris_weight(nperseg: int, hop: int) -> float:
+    """1 / (1 + 2 sum_m rho(m hop)^2): the share of a frame's evidence that is its own when Hann frames overlap,
+    with rho the window's overlap correlation (Harris 1978) and rho^2 the correlation of the cells' powers."""
+    w = np.hanning(nperseg)
+    e = float(np.dot(w, w))
+    rho = [float(np.dot(w[:-m * hop], w[m * hop:])) / e for m in range(1, (nperseg - 1) // hop + 1)]
+    return 1.0 / (1.0 + 2.0 * sum(r * r for r in rho))
 
 
 def llr(z: np.ndarray, a: float) -> np.ndarray:
@@ -80,7 +90,7 @@ def evidence(z: np.ndarray, f: np.ndarray, f0s: np.ndarray, p: LLParams, exclude
         if exclude is not None:
             mask &= ~exclude[:, bb]
         out += np.where(mask, term, 0.0)
-    return out
+    return p.frame_weight * out
 
 
 def _kernel(step_hz: float, f_ref: float, dt: float, p: LLParams) -> np.ndarray:

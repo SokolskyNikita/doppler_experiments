@@ -133,6 +133,15 @@ decision: whether the package's window and hop change from the 2.048 s Hann wind
 Inputs: none; the noise and the passes are synthetic. The real-data stage runs on copies of the cases, never by
 editing the committed fits.
 
+## 6. PLAN item 2's provisional bound: the measured frame covariance (`cov_measure.py`)
+
+decision: which slant-range bound PLAN items 2 and 4 quote, and whether "provisional" comes off.
+
+| Step | Units | Command |
+|---|---|---|
+| measure | one geometry × amplitude per box (`--shards 9`), three seeds each | `cov_measure.py "$RUN" measure [CELL ...]` |
+| bound | — | `cov_measure.py "$RUN" bound`, over the collected units, with job 3's Livermore inputs |
+
 ## SDE-B
 
 # SDE-B's benchmark jobs for the fleet (2026-11-04)

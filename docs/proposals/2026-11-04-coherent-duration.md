@@ -5,8 +5,8 @@ From the outside reviewer's advice (2026-11-04), as the PM adopted it. This is a
 **decision:** whether a 6 s or 18 s coherent scorer earns a test on the locator's shortlist, in the collective find's
 weak-window case (the eagle cam's event 2, at 6 dB on half its frames). Otherwise the shortlist keeps today's scorer.
 
-**Prior work.** Codex's [doppler-integration-coverage](/Users/nsokolsky/.codex/worktrees/60b9/doppler_track/docs/experiments/2026-11-04-doppler-integration-coverage.md)
-record, read in place.
+**Prior work.** Codex's doppler-integration-coverage (`runs/2026-11-04-codex-worktrees-archive/60b9/untracked/docs/experiments/2026-11-04-doppler-integration-coverage.md`, to land on dev)
+record.
 - With the true flight and clock supplied, 18 s of coherent integration against nine 2 s power blocks on eight real
   Livermore passes won 3, tied 2 and lost 3.
 - On 28 passes, the 18 s phase concentration had a median of 0.36 with a ±2 Hz constant-offset search, and 0.11

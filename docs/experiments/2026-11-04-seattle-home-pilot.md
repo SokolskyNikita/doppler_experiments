@@ -2,7 +2,7 @@
 
 <!-- index
 question: What does the owner's indoor phone recorder hear of the propeller traffic around it, and what does locate make of a 2.3 h session?
-outcome: Tonal check hears 2 of the 11 passes the owner's ear heard, both within 1 km; locate refused (flight data short of the day); broadband check and locate rerun pending
+outcome: Tonal check hears 2 of the 11 passes the owner's ear heard, both within 1 km; locate's time join finds the true pair and the silence filter removes it; filter-off run and broadband check pending
 -->
 
 ## Question
@@ -147,7 +147,7 @@ the site.
 
 ### Locate
 
-**As it stands: the pipeline refused, and nothing was searched.** Run 4 (`private/runs/2026-11-04-seattle-home-pilot-4/locate/`, 541 s for the box, $0.05): `locate` detected 10
+**Run 4: the pipeline refused, and nothing was searched.** Run 4 (`private/runs/2026-11-04-seattle-home-pilot-4/locate/`, 541 s for the box, $0.05): `locate` detected 10
 flyovers, all 10 usable, on a recording with every frame valid. It then stopped before searching, `insufficient_evidence`
 with `flight_data_missing_time`. The case's ADS-B cut was fetched on the day itself and ends at 20:13Z, while
 `locate` required data for the whole UTC day, and that rule doesn't depend on the clock gate. There are no candidates,
@@ -158,20 +158,51 @@ gate in the criteria above, every triple whose start is more than the stated 1 s
 is dropped, so only the recording's own window of flight data can reach a candidate. `locate` now asks for that
 window when a start is stated: the stated start ± (its tolerance + `tol_s` + 300 s) across the recording, capped at the
 whole-day bounds, so no case it passed before now fails. The cut covers the window. One thing changes slightly: the
-comparable score's null draws wrong flights from the whole CPA table, which here lacks the day after 20:13Z. Run 5
-runs at 34fab9e, which includes the fix: the spectrogram, the known point (seeded, so the same result) and `locate`.
-The broadband check runs on its own box, with the launch script's `broadband` mode.
+comparable score's null draws wrong flights from the whole CPA table, which here lacks the day after 20:13Z. 
+
+**Run 5: the silence filter removed the true pair.** Run 5 (`private/runs/2026-11-04-seattle-home-pilot-5/`, at 34fab9e
+with the fix, 661 s, $0.06) searched and ended `insufficient_evidence` with `no_surviving_candidate`. The funnel:
+
+| Stage | Count |
+|---|---|
+| CPA records | 129,069 |
+| After the speed and distance gates | 2,315 (event 1), 2,330 (event 2) |
+| Time join | 44 |
+| Silence filter | 0 |
+| Scored | 0 |
+
+The clock gate acts on scored triples, so it never ran. The comparable rule searched one event pair.
+
+**The 44 time-join triples (read afterwards, as a diagnosis):**
+- They are a single flight pair, and both of its flights are the two passes the known-point check heard: the true pair.
+- They sit at 44 grid points from 200 m to several km from the site, median 1.4 km, 6 of them within 500 m. The grid
+  node nearest the site is not among them.
+- The filter drops a triple whenever another flight's CPA within 6 km of the grid point falls between the two events'
+  CPAs, more than 40 s from each. The pair's two events are tens of minutes apart, and about 105 aircraft passed within
+  6 km in the 2.3 h, so at this site some flight always falls in between.
+
+The filter took S4's risk (PLAN section 4): it assumes every flight within 6 km is heard. Here the indoor phone heard
+2 of the 23 propeller passes, and none of the 83 jets were scored. The filter was made the default on one recording,
+Oyster Bay, and is judged again on the next positive; this is a recording where it is certain to fire.
+
+**Run 7:** `locate` with the filter off on the same case. The launch script's `locate --silence off` runs it, into
+`locate-silence-off/`. If that yields candidates, the default should depend on the site, with the filter off wherever
+the traffic density makes it certain to fire, and the density itself, not a hand setting, would be the switch.
+
+**Run 6** (at b8802ee, the full command with the broadband check) is on its box.
 
 ## Outcome
 
-So far, from run 4:
+So far, from runs 4 and 5:
 - The tonal check hears 2 of the 11 passes the owner's ear heard, both within 1 km. The rest of the ear's range, 1–3.5
   km, gets nothing.
-- `locate` refused before searching, because the flight data stopped short of the whole day. That was a defect in its
-  coverage rule, now fixed.
+- Run 4: `locate` refused before searching. The flight data stopped short of the whole day, a defect in its coverage
+  rule, now fixed.
+- Run 5: `locate`'s time join found the true pair, the two heard passes, and then the silence filter removed it. The
+  traffic here, about one aircraft within 6 km every 80 s, makes that certain for events tens of minutes apart.
 
-Run 5 adds `locate`'s first search, and the next run adds the broadband check. Whether the box series follows depends on whether
-`locate`'s region holds the site.
+Run 7 (filter off) decides whether `locate` places the site. Run 6 adds the broadband check. Whether the box series
+follows depends on run 7's region holding the site.
 
 ## Files
 

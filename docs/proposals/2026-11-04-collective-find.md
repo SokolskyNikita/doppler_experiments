@@ -62,6 +62,8 @@ The silence filter is out of scope here and stays as it is.
 
 ## 4. Cost, and what is reused
 
+> **Correction (before the build).** The bound below is wrong: today's 197,177 and 84,441 time-joined triples are counted after the speed and distance gates (v ±35 %, d ×0.4–2.5), which leave 16.35 M of Oyster Bay's 86.2 M CPA rows per event, and the design drops those gates. At 200 m the clock vote keeps on the order of 10⁸–10⁹ window pairs. The build therefore takes the PM's coarse-to-fine lever as a design step: a 2 km grid scored as the maximum over each cell's span (shift ±14 s, f0 ±12 %), then 200 m inside the cells at ≥ 0.7 of the coarse maximum ([collective-find record](../experiments/2026-11-04-collective-find.md)).
+
 Measured today on the saved-fit Tier 2 cases:
 - **Grid points:** 378,500 (Oyster Bay) and 430,882 (the eagle cam) at 200 m.
 - **CPA records:** 86.2 M and 35.9 M.

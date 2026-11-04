@@ -58,9 +58,9 @@ launch)
     BOX='$DOPPLERTRACK_DATA'      # expanded on the box
     for job in ${@:-b sweep a b12 n}; do
         case "$job" in
-        b) launch hypotheses-pairs "$SHARDS_B" "--on-demand --size $SIZE_B --repo $PIN" \
+        b) launch hypotheses-pairs "$SHARDS_B" "--size $SIZE_B --repo $PIN" \
                "$PY $(pairs "$DATA") $ARGS_B --inputs" $PY $(pairs "$BOX") $ARGS_B ;;
-        n) launch hypotheses-pairs-n$NULL_N_CAP "$SHARDS_N" "--on-demand --size $SIZE_N --repo $PIN" \
+        n) launch hypotheses-pairs-n$NULL_N_CAP "$SHARDS_N" "--size $SIZE_N --repo $PIN" \
                "$PY $(pairs "$DATA") $ARGS_N --inputs" $PY $(pairs "$BOX") $ARGS_N ;;
         a) launch comparable-score "$SHARDS_A" "--size $SIZE_A --repo $HERE" "$PY $(pairs "$DATA") $ARGS_A --inputs" \
                $PY $(pairs "$BOX") $ARGS_A ;;

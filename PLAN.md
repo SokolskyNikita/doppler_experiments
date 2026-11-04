@@ -255,6 +255,8 @@ The [preparation spec](docs/phase1-preparation.md) describes the worker change a
 
 The benchmark then grows alongside Phases 2–4, as they need cases. **If the budget can't be met:** Tier 1 runs fewer cases.
 
+**Phase 1 exit met, 2026-11-04** ([tier1](docs/experiments/2026-11-04-tier1.md), Phase 1 exit section): both baselines with every hash recorded (bench-baselines); Tier 1 warm in 108 s and Tier 2 on the seed set in 368 s, both on a loaded machine, with the Oyster Bay CPA table built cold in 26 s (parallel-cpa); every clean recording in its set (decision 2, cases.json); the gap test passing and ESID 740's spectrogram keeping its timeline (gap-aware-spectrogram). The seed results reproduce exactly, and the true pair reaches scoring within 250 m of the reference on all three positives. M1 is the measuring stick; what it measures (6.2) is that the shipped pipeline locates neither development recording from raw audio.
+
 ### M2: first usable release
 
 #### Phase 2: event evidence that survives real passes (M–L; research, time-box 2 weeks)

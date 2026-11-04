@@ -24,6 +24,14 @@ So a single brightness fit was never a safe find, even on straight passes. Does 
 - **Not enforced:** "one window per pass". The record reports any pass matched twice.
 - **The PM's note (1):** the positives run a second time with the f0 sweep at ±5 %, so that the record can say which change did what.
 
+**A design step, recorded before the rerun: the top 5 coarse cells.** The first run's fine stage kept every coarse cell with Z ≥ 0.7 of the coarse maximum.
+- That is 141 cells on north150, a negative, against 12–16 on the positives, and it made the fine stage take 1,400–6,300 s.
+- The rerun keeps the top 5 coarse cells by Z instead. k = 5 is fixed now, not tuned.
+- The own-day cases rerun with it, and the other-day null for Z is drawn only on that search.
+- The first run's results (commit a002696) are reported as the superseded configuration.
+
+**The f0 sweep is load-bearing.** The eagle cam is found at ±10 % and lost at ±5 %: in the first run, ±5 % left a2baea unmatched. So the wider sweep is a change in its own right. The collective find is judged at ±10 %, and the ±5 % result is reported beside it.
+
 **Cases.**
 - Positives: oyster-bay, oyster-bay-hp150-aac32k, eagle-cam-clip-18000s, eagle-cam-midnight.
 - Negatives: oyster-bay-moved-wsw150, oyster-bay-moved-north150, oyster-bay-sources-removed, xenocanto-xc990819.
@@ -37,6 +45,8 @@ So a single brightness fit was never a safe find, even on straight passes. Does 
 One counted retune is allowed, of the clock vote's cluster width.
 
 **The eagle cam's event 2,** the weak window, is reported explicitly: its z at the winning clock, and whether the maximum lands within 2 km while it contributes nothing.
+
+**From the first run, said plainly.** The eagle cam at ±10 % is the first time any method has put both true flights in the matched set from automatic windows: 0.5 km from the nest, with the weak window contributing (a336e4 at z 1.96). But north150, a negative, reaches Z = 16.7 against the eagle cam's 17.2. So the sum alone is not yet a verdict, and A's null is what decides.
 
 **Expectation, written before the run.**
 - Oyster Bay and its copy pass 1, with event 2 matched through ace391's own curve.

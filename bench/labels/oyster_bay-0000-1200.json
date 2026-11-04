@@ -5,8 +5,9 @@
   "source": "raw/audio/youtube/oyster_bay.webm",
   "sha256": "6884324b4fb9babbc89b10de71f283dd338766a15d2fbd1aeedb52216276692d",
   "t0_utc": "2026-09-08T20:17:30.34Z",
-  "case": null,
-  "t0_note": "from the known-point fit's clock (runs/2026-11-03-issue-1); used for layer 2 only"
+  "case": "oyster-bay",
+  "t0_note": "from the known-point fit's clock (runs/2026-11-03-issue-1); used for layer 2 only",
+  "case_note": "case audio seconds are these recording seconds (offset 0 s); the degraded and moved-box cases share this audio, but the labels belong to oyster-bay (case ids from SDE-B's bench/cases.json at f5ccdfe, not yet on dev)"
  },
  "span": [
   0,

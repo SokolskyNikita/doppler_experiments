@@ -113,3 +113,51 @@ tests, in [tests/test_cache.py](../tests/test_cache.py):
 [tests/test_search_pairs.py](../tests/test_search_pairs.py) checks pairing and a save/load round trip,
 and [tests/test_pipeline_synthetic.py](../tests/test_pipeline_synthetic.py) builds a table for two
 synthetic flights and requires the true observer to rank first.
+
+## Caches
+
+Every cache lives under `$DOPPLERTRACK_CACHE` (default `~/.cache/dopplertrack`), outside the repo, and
+everything in it can be rebuilt. A cache follows four rules:
+- **Keyed on contents.** The key covers the SHA-256 of every input, file or array, and every parameter
+  that changes the result. Sizes and modification times never stand in for contents.
+- **Keyed on the code.** The key covers the hash of the source that produces the artefact, so editing
+  that code invalidates its entries. It also covers the versions of libraries that can change the
+  result (ffmpeg, numpy, scipy).
+- **Atomic writes.** An entry is written under a temporary name and renamed into place, so a reader
+  sees the old entry or the complete new one.
+- **Locked, and fails safe.** One lock per entry makes a second process wait instead of building the
+  same thing twice. An entry that won't load, or whose stored description differs from the request,
+  is a miss and is rebuilt.
+
+| Folder | What | Code | Keyed on |
+|---|---|---|---|
+| `spectrogram/` | spectrograms of an audio file or an AudioMoth folder | `audio.cached_spectrogram` | each file's name, SHA-256 and offset; the start time; every `spectrogram_from_blocks` parameter, defaults filled in; `audio.py`'s source; the ffmpeg, numpy and scipy versions |
+| `detections/` | `detect_events` results | `cache.cached_detections` | the spectrogram's t, f, S, mask and start time; every detect parameter except `workers` and `progress`; the source of `tracks.py`, `doppler.py` and `audio.py`; the numpy and scipy versions |
+| `cpa/` (path given by `--cpa-cache`) | the (point, flight) CPA table | `pipeline.cached_cpa_table` | `search.cpa_fingerprint` and `CPA_CACHE_VERSION` (see above), with an `fcntl` lock on `<path>.lock` |
+| `terrarium/<zoom>/` | elevation tiles | `terrain.Terrain` | tile coordinates; written atomically, and an unreadable tile is fetched again |
+| `doc8643AircraftTypes.csv` | the aircraft type list | `adsb.AircraftTypes` | nothing: downloaded once |
+
+**`spectrogram/` and `detections/`** both go through `cache.cached(kind, parts, produce)`. `parts` is
+a dict describing every input. Its canonical JSON (sorted keys, arrays replaced by their hash) is the
+entry's description, and the description's SHA-256 is the key.
+- [joblib.Memory](https://joblib.readthedocs.io/en/stable/memory.html) stores each entry as plain
+  files: a folder under `<kind>/dopplertrack/cache/_build/`, holding `output.pkl` (the description
+  and the value) and `metadata.json` (the call's arguments, the description among them). joblib was
+  chosen over diskcache because diskcache keeps its index in SQLite, which can't be read with `ls`
+  and `cat`.
+- joblib has no lock, so `<kind>/locks/<key>.lock` (`filelock`) is held around the load and the
+  build.
+- A lock file stays behind after its entry is built. Removing lock files while another process might
+  use them is unsafe, so `locks/` is only cleared along with the whole folder.
+
+**Using it.** To cache a new artefact, call `cache.cached` with a new kind, and include
+`cache.source_sha256(<the producing modules>)` in `parts`. `detect_events` is not yet wired to
+`cached_detections`; the call is `cached_detections(sp, detect_events, f_lo=..., f_hi=..., ...)`.
+
+Tests, in [tests/test_artefact_cache.py](../tests/test_artefact_cache.py):
+- a hit, then a miss when an input file's contents or a parameter change;
+- a truncated entry rebuilt;
+- a detections miss when the spectrogram's mask, a parameter or the detector's source changes, and
+  a hit when only `workers` or `progress` change;
+- two processes contending for one entry building it once;
+- the spectrogram cache hitting, and matching the uncached spectrogram.

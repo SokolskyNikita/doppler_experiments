@@ -136,11 +136,33 @@ by the same method. True gaps: 922.96 s and 331.61 s.
   Their weighted fits rise. In windows of 110–240 s holding other tones, `ridge()` follows the strongest
   path, and the weights favour exactly the stronger, wrong line.
 
-**Outcome: not met. The estimator is right; the track is the limit.**
-- **The estimator.** It recovers noiseless passes exactly and matches the full four-parameter fit (tests).
-  SDE-D's item 2 independently finds a straight-pass fit at the Cramér–Rao bound, with model error, not the
-  estimator, setting what real passes allow.
-- **Prediction.** On the straight passes the prediction held for speed and distance, not for f0. On the
-  flagged passes and the development recordings it was too kind: there the fit is only as good as
-  `ridge()`'s track, and `ridge()` leaves the pass.
-- **Not spent.** The one allowed retune is not spent here (see the report).
+**Outcome: not met; deferred until a track meets item 3's criterion.** The retune was not spent.
+- **The weighted fit is the better measurement of speed and distance.** On the 29 primary passes it beats
+  both objectives on speed and slant range by a clear margin: 6.7 % against brightness's 9.8 % and
+  contrast's 12.3 %, and 15.2 % against 18.6 % and 27.1 %. It misses only f0 and the event-2 timing, and
+  both failures are the track following another line: R12 and R45 among the passes, and event 2 on both
+  development recordings. That moves item 3 up the route. A track that stays on the pass is what this fit
+  needs, and it is what the comparison will be re-run on, with the criterion unchanged.
+- **The estimator is right.**
+  - It recovers noiseless passes exactly.
+  - Its optimum matches a direct four-parameter fit, weighted and not.
+  - It agrees with SDE-D's independent implementation (`straight_pass_ls.py`) to 10⁻⁷ on ideal curves,
+    and to a thousandth of its own SD on a noisy one (`tests/test_track_fit.py`).
+  - SDE-D's item 2 finds a straight-pass fit at the Cramér–Rao bound, with model error setting what real
+    passes allow.
+- **The prediction** held on the straight passes for speed and distance, not for f0. On the flagged passes
+  and the development recordings it was too kind: there the fit is only as good as `ridge()`'s track, and
+  `ridge()` leaves the pass.
+- **Kept as library code**, not wired into `detect`: `fit_track`, `ridge_track` and `Track`.
+
+**Changes after run 2 was read.** The re-run after item 3 counts these together as its one change.
+- **The positive-speed bound.** It was in PLAN item 4's safeguards ("physical bounds on speed and
+  distance") and was missing, as the rising fits showed. The reduced fit now enforces β ≤ 0 inside the
+  variable projection: where the best unbounded β would be positive, the bounded optimum is a flat line.
+  A time-reversed pass now fits as flat and not identified, never with a negative speed.
+- **A polish of the best optimum.** `least_squares`, to numerical precision, which the agreement test with
+  SDE-D's fit needed: Nelder-Mead alone stopped at about 10⁻⁷ relative on ideal curves.
+- **Their effect on run 2's tracks** (`bound_polish_change.json`, parameters only):
+  - The bound changes exactly the 8 fits that rose (6 Livermore fits, and the two weighted event-2 fits).
+    They now fit flat or barely falling curves on the same wrong line.
+  - The polish moves the other 80 by at most 1.2 × 10⁻⁵ relative and 3 × 10⁻⁵ s.

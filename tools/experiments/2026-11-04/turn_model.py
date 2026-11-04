@@ -293,42 +293,122 @@ def bound_R(t, par, s, sigma, rho, fixed_phi):
     return float(np.sqrt(np.linalg.inv(I)[3, 3]))
 
 
+# ---------------------------------------------------------------- the identifiable form
+# For this path r(u)^2 = R^2 + 2K(1 - cos wu), K = (v/w)(v/w + s R cos phi): one microphone hears the range history only,
+# so the curve fixes R, w and K and nothing else (record: "the synthetic check finds the design over-parametrized").
+# Written with Q = K w^2, which is v^2 for a straight pass: r^2 = R^2 + Q u^2 sinc^2(wu / 2pi), w >= 0.
+Q_B = (-300.0 ** 2, 300.0 ** 2)
+W_GRID = np.radians(np.linspace(0, 6, 13))
+
+
+def heard_q(tau, R, Q, w, span=400.0, n=8001):
+    u = np.linspace(-span, span, n)
+    S = np.sinc(w * u / (2 * np.pi))
+    r2 = R * R + Q * u * u * S * S
+    if np.any(r2 <= 0):
+        return None
+    r = np.sqrt(r2)
+    rd = Q * u * np.sinc(w * u / np.pi) / r          # d(r^2)/du / 2r = Q sin(wu)/w / r
+    th = tau + u + r / C
+    g = 1.0 / (1.0 + rd / C)
+    ok = np.r_[True, np.diff(th) > 0] & (C + rd > 0)
+    return th[ok], g[ok], r[ok]
+
+
+def fit_q(t, f, start, w_fixed=None):
+    """(tau, log R, Q[, w]) by least squares, f0 in closed form; from the straight fit and (w free) w starts."""
+    ok = np.isfinite(f); t, f = t[ok], f[ok]
+    t_ref = float(t[0]); tt = t - t_ref
+
+    def unpack(x):
+        return x[0], np.exp(x[1]), x[2], (w_fixed if w_fixed is not None else x[3])
+
+    def res(x):
+        h = heard_q(*unpack(x))
+        if h is None:
+            return np.full(len(tt), 1e3)
+        g0 = np.interp(tt, h[0], h[1], left=np.nan, right=np.nan)
+        if not np.all(np.isfinite(g0)):
+            return np.full(len(tt), 1e3)
+        return f - float(np.dot(g0, f) / np.dot(g0, g0)) * g0
+
+    lo = [tt[0] - 300, np.log(R_B[0]), Q_B[0]] + ([] if w_fixed is not None else [0.0])
+    hi = [tt[-1] + 300, np.log(R_B[1]), Q_B[1]] + ([] if w_fixed is not None else [W_MAX])
+    best = None
+    q0 = float(np.clip(start["v"] ** 2, Q_B[0] + 1, Q_B[1] - 1))
+    for w0 in ([None] if w_fixed is not None else [start.get("w", 0.0), *W_STARTS]):
+        x0 = [start["tau"] - t_ref, float(np.log(np.clip(start["R"], R_B[0] * 1.01, R_B[1] * 0.99))), q0] + \
+             ([] if w0 is None else [float(np.clip(w0, 1e-4, W_MAX - 1e-4))])
+        try:
+            r = so.least_squares(res, x0, bounds=(lo, hi), x_scale=[1.0, 0.05, 100.0] + ([] if w0 is None else [0.01]),
+                                 xtol=1e-10, ftol=1e-10, gtol=1e-10, max_nfev=300)
+        except ValueError:
+            continue
+        if best is None or r.cost < best.cost:
+            best = r
+    tau, R, Q, w = unpack(best.x)
+    rr = res(best.x)
+    h = heard_q(tau, R, Q, w)
+    m = (h[0] >= tt[0] - 30) & (h[0] <= tt[-1] + 30)
+    return dict(tau=float(tau + t_ref), R=float(R), Q=float(Q), w=float(w), rss=float(rr @ rr), n=int(len(tt)),
+                rmin=float(h[2][m].min()) if m.any() else float(R))
+
+
+def curve_q(t, f0, tau, R, Q, w):
+    h = heard_q(tau, R, Q, w)
+    return f0 * np.interp(t, h[0], h[1], left=np.nan, right=np.nan)
+
+
+def bound_R_q(t, par, sigma, rho, fix_w):
+    """CRB of R in (f0, tau, R, Q[, w]) with the pass's ridge noise; w fixed where its interval includes 0."""
+    import scipy.linalg as sl
+    names = ["f0", "tau", "R", "Q"] + ([] if fix_w else ["w"])
+    h = dict(f0=1e-5 * par[0], tau=1e-3, R=1e-4 * par[2], Q=1e-4 * max(abs(par[3]), 100.0), w=1e-4)
+    idx = dict(f0=0, tau=1, R=2, Q=3, w=4)
+    cols = []
+    for n in names:
+        e = np.zeros(5); e[idx[n]] = h[n]
+        a, b = np.array(par, float) + e, np.array(par, float) - e
+        if n == "w" and b[4] < 0:
+            b[4] = 0.0; cols.append((curve_q(t, *a) - curve_q(t, *b)) / (a[4] - b[4])); continue
+        cols.append((curve_q(t, *a) - curve_q(t, *b)) / (2 * h[n]))
+    J = np.stack(cols, 1); ok = np.all(np.isfinite(J), axis=1); J = J[ok]
+    col = np.zeros(len(J)); col[:len(rho)] = rho[:len(J)]
+    I = J.T @ sl.solve(sigma ** 2 * sl.toeplitz(col), J, assume_a="sym")
+    return float(np.sqrt(np.linalg.inv(I)[2, 2]))
+
+
 def unit_profile(key):
+    """On A plus stage 1's first noise replicate: the profile of the turn rate w >= 0 (0-6 deg/s, 13 points), Delta against
+    3.84; identified if Delta <= 3.84 only on an interval with both ends inside (0, 6) deg/s. Plus the CRB of R in the
+    identifiable form at the A fit, beside the straight model's."""
     pid = key
     p = P()[pid]
     t, fN = p["t"], p["fA"] + p["e0"]
     st = straight(t, fN)
-    best = fit(t, fN, st)
+    best = fit_q(t, fN, st)
     sc = p["sigma2"] * p["kappa"]
-    start = dict(tau=best["tau"], v=best["v"], R=best["R"], w=best["w"], phi=best["phi"], s=best["s"])
-    prof_sw = []
-    for sw in SW_GRID:
-        r = fit(t, fN, st, fixed_sw=float(sw), start=start, multi=False)
-        r2 = fit(t, fN, st, fixed_sw=float(sw), multi=True)
-        prof_sw.append(min(x["rss"] for x in (r, r2) if x))
-    prof_phi = []
-    for ph in PHI_GRID:
-        r = fit(t, fN, st, fixed_phi=float(ph), start=start, multi=False)
-        r2 = fit(t, fN, st, fixed_phi=float(ph), multi=True)
-        prof_phi.append(min(x["rss"] for x in (r, r2) if x))
-    rmin = min(best["rss"], min(prof_sw), min(prof_phi))
-    d_sw = (np.array(prof_sw) - rmin) / sc; d_phi = (np.array(prof_phi) - rmin) / sc
-    id_sw, lo_sw, hi_sw = interval(np.degrees(SW_GRID), d_sw)
-    id_phi, lo_phi, hi_phi = interval(np.degrees(PHI_GRID), d_phi)
-    includes0 = lo_sw is not None and lo_sw <= 0 <= hi_sw
-    # bounds on curve A at the A fit (the criterion's curve), with the pass's ridge noise
-    fa = fit(t, p["fA"], straight(t, p["fA"]))
-    sig = float(np.sqrt(p["sigma2"]))
-    tb = t[np.isfinite(p["fA"])]
-    par = [fa["f0"], fa["tau"], fa["v"], fa["R"], fa["s"] * fa["w"], fa["phi"]]
-    b_turn = bound_R(tb, par, fa["s"], sig, p["ac"], fixed_phi=includes0)
+    prof = []
+    for w in W_GRID:
+        r1 = fit_q(t, fN, dict(tau=best["tau"], R=best["R"], v=np.sqrt(abs(best["Q"]))), w_fixed=float(w))
+        r2 = fit_q(t, fN, st, w_fixed=float(w))
+        prof.append(min(r1["rss"], r2["rss"]))
+    rmin = min(best["rss"], min(prof))
+    delta = (np.array(prof) - rmin) / sc
+    ident, lo, hi = interval(np.degrees(W_GRID), delta)
+    includes0 = lo is not None and lo <= 0.0
     sA = straight(t, p["fA"])
+    fa = fit_q(t, p["fA"], sA)
+    tb = t[np.isfinite(p["fA"])]
+    sig = float(np.sqrt(p["sigma2"]))
+    b_turn = bound_R_q(tb, [sA["f0"], fa["tau"], fa["R"], fa["Q"], fa["w"]], sig, p["ac"], includes0)
     b_straight = float(crb.bound(tb, np.array([sA["f0"], sA["v"], sA["R"], sA["tau"]]), sig, p["ac"])[2])
-    return dict(unit=f"profile:{pid}", **base(p), best_sw_dps=best["sw_dps"], best_phi_deg=float(np.degrees(best["phi"])),
-                sw_identified=id_sw, sw_lo_dps=lo_sw, sw_hi_dps=hi_sw, sw_interval_includes_0=includes0,
-                phi_identified=id_phi, phi_lo_deg=lo_phi, phi_hi_deg=hi_phi,
-                profile_sw=[round(float(x), 3) for x in d_sw], profile_phi=[round(float(x), 3) for x in d_phi],
-                bound_R_turn_m=b_turn, bound_R_turn_pct=100 * b_turn / fa["R"], bound_phi_fixed=includes0,
+    ref = p["ref"]
+    return dict(unit=f"profile:{pid}", **base(p), w_best_dps=float(np.degrees(best["w"])), Q_best=best["Q"],
+                w_identified=ident, w_lo_dps=lo, w_hi_dps=hi, w_interval_includes_0=includes0,
+                profile_w=[round(float(x), 3) for x in delta],
+                A_fit_w_dps=float(np.degrees(fa["w"])), A_fit_Q=fa["Q"], A_fit_rmin=fa["rmin"], A_fit_err_R_pct=100 * (fa["rmin"] / ref["R"] - 1),
+                bound_R_turn_m=b_turn, bound_R_turn_pct=100 * b_turn / fa["R"], bound_w_fixed=includes0,
                 bound_R_straight_m=b_straight, bound_R_straight_pct=100 * b_straight / sA["R"])
 
 
@@ -366,7 +446,7 @@ def unit_keys(stage, reps):
 def params(stage, reps):
     """Everything that decides a unit's result; merging refuses units run with other values."""
     return dict(stage=stage, c=C, v_bounds=V_B, R_bounds=R_B, w_max_dps=6.0, w_starts_dps=[0.5, 1.5, 3.0],
-                phi_starts_deg=[15.0, 45.0, 75.0], sw_grid_dps=[-6.0, 6.0, 25], phi_grid_deg=[0.0, 90.0, 10],
+                phi_starts_deg=[15.0, 45.0, 75.0], w_grid_dps=[0.0, 6.0, 13], q_bounds=Q_B,
                 stage1=str(STAGE1.relative_to(me.DATA)), replicates=reps if stage == "boot" else None)
 
 
@@ -441,11 +521,11 @@ def report(fit_run, profile_run):
     sign_ok = [r for r in turn if int(r["turn_s"]) == int(r["traj_s"]) and np.sign(f(r, "turn_sw_dps")) == np.sign(f(r, "traj_sw_dps"))]
     x = np.array([f(r, "turn_sw_dps") for r in turn]); y = np.array([f(r, "traj_sw_dps") for r in turn])
     corr = float(np.corrcoef(x, y)[0, 1]) if len(turn) > 2 and x.std() > 0 and y.std() > 0 else None
-    ident = [r for r in turn if prof.get(r["id"], {}).get("sw_identified") == "True"]
+    ident = [r for r in turn if prof.get(r["id"], {}).get("w_identified") == "True"]
     A = out["A"]
     c = {"1_turning_le_201m": A["turning"]["turn_m"] <= 201.0, "2_non_turning_le_182m": A["non_turning"]["turn_m"] <= 182.0,
          "3_primary_le_160m": A["primary"]["turn_m"] <= 160.0,
-         "4_sw_identified_ge_11_of_16": len(ident) >= 11 if prof else None, "n_sw_identified": len(ident) if prof else None,
+         "4_w_identified_ge_11_of_16": len(ident) >= 11 if prof else None, "n_w_identified": len(ident) if prof else None,
          "5_sign_ge_11_and_corr_ge_0.5": len(sign_ok) >= 11 and corr is not None and corr >= 0.5, "n_sign": len(sign_ok), "corr": corr}
     c["enters"] = all(v for k, v in c.items() if k[0].isdigit()) if prof else None
     out["criterion"] = c

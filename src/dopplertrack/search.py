@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import os
 import threading
+import warnings
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -34,12 +35,21 @@ class Grid:
         la, lo = np.meshgrid(np.arange(lat_min, lat_max, dlat), np.arange(lon_min, lon_max, dlon), indexing="ij")
         la, lo = la.ravel(), lo.ravel()
         el = elevation_fn(la, lo) if elevation_fn else np.zeros_like(la)
+        valid = np.isfinite(el)
+        if not valid.all():
+            warnings.warn(f"excluding {np.count_nonzero(~valid)} grid points with unavailable terrain elevation",
+                          RuntimeWarning, stacklevel=2)
+            la, lo, el = la[valid], lo[valid], np.asarray(el)[valid]
+        if not len(la):
+            raise ValueError("no grid points with valid terrain elevation; use --no-dem to explicitly assume sea level")
         el = np.maximum(el, 0.0)
         return cls(la, lo, el, lla_to_enu(la, lo, el, lat0, lon0), lat0, lon0)
 
     @classmethod
     def points(cls, lat, lon, elev, lat0=None, lon0=None):
         lat = np.atleast_1d(np.asarray(lat, float)); lon = np.atleast_1d(np.asarray(lon, float)); elev = np.atleast_1d(np.asarray(elev, float))
+        if not np.all(np.isfinite(elev)):
+            raise ValueError("terrain elevation is unavailable at the point; use --no-dem to explicitly assume sea level")
         lat0 = float(lat.mean()) if lat0 is None else lat0; lon0 = float(lon.mean()) if lon0 is None else lon0
         return cls(lat, lon, elev, lla_to_enu(lat, lon, elev, lat0, lon0), lat0, lon0)
 
@@ -54,22 +64,25 @@ class Segment:
     t: np.ndarray       # emission times (unix s), 1 Hz
     enu: np.ndarray     # (N,3)
     speed: np.ndarray   # (N,) m/s
+    valid: np.ndarray | None = None  # original trace supports acoustic evidence here; geometry may interpolate a hole
 
 
 def build_segments(traces: list[Trace], lat0: float, lon0: float, dt: float = 1.0, min_len: int = 20,
                    clip_enu: tuple[float, float, float, float] | None = None) -> list[Segment]:
     """1 Hz ENU segments. clip_enu=(e_min, e_max, n_min, n_max) keeps only the parts of a
-    track inside that box (split where it leaves), which bounds memory in cpa_table."""
+    track inside that box (split where it leaves), which bounds memory in cpa_table.
+    Geometry keeps the trace's 90 s gap bound for CPA proposals; valid retains
+    the stricter 30 s evidence support through resampling and clipping."""
     segs = []
     for i, tr in enumerate(traces):
         for sl in tr.segments():
-            t, enu = tr.enu(sl, lat0, lon0, dt)
+            t, enu, valid = tr.enu(sl, lat0, lon0, dt, return_valid=True)
             if len(t) < min_len or not np.all(np.isfinite(enu)):
                 continue
             vel = np.gradient(enu, t, axis=0)
             spd = np.linalg.norm(vel, axis=1)
             if clip_enu is None:
-                segs.append(Segment(i, tr.icao, t, enu, spd))
+                segs.append(Segment(i, tr.icao, t, enu, spd, valid))
                 continue
             inside = (enu[:, 0] >= clip_enu[0]) & (enu[:, 0] <= clip_enu[1]) & (enu[:, 1] >= clip_enu[2]) & (enu[:, 1] <= clip_enu[3])
             if not inside.any():
@@ -77,7 +90,7 @@ def build_segments(traces: list[Trace], lat0: float, lon0: float, dt: float = 1.
             edges = np.flatnonzero(np.diff(inside.astype(int))) + 1
             for a, b in zip(np.r_[0, edges], np.r_[edges, len(t)]):
                 if inside[a] and b - a >= min_len:
-                    segs.append(Segment(i, tr.icao, t[a:b], enu[a:b], spd[a:b]))
+                    segs.append(Segment(i, tr.icao, t[a:b], enu[a:b], spd[a:b], valid[a:b]))
     return segs
 
 

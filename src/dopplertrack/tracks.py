@@ -197,6 +197,8 @@ def fit_event(sp: Spectrogram, t_start: float, t_end: float, f_lo: float, f_hi: 
 def _scan_window(args):
     """Up to k local maxima (separated by min_sep seconds) of the coarse search in one window."""
     win, t, t1, f_lo, f_hi, c, harmonics, v_grid, d_grid, f0_step, t0_step, n_curve, k, min_sep = args
+    if not np.any(win.S > 0):
+        return []
     t0s, bs, bp = grid_search(win, t, t1, f_lo, f_hi, c, harmonics, v_grid, d_grid,
                               f0_step=f0_step, t0_step=t0_step, n_curve=n_curve, per_t0=True)
     out = []
@@ -213,15 +215,21 @@ def detect_events(sp: Spectrogram, f_lo: float, f_hi: float, c: float | None = N
                   window_s: float = 240.0, step_s: float = 120.0, v_grid=None, d_grid=None,
                   f0_step: float = 2.0, t0_step: float = 2.0, n_curve: int = 80, top: int = 20,
                   per_window: int = 3, min_sep_s: float = 60.0, refine: bool = True,
-                  workers: int | None = None, progress=None) -> list[EventFit]:
+                  workers: int | None = None, progress=None, min_score: float = 0.0) -> list[EventFit]:
     """Scan a whole recording for Doppler-shaped curves whose fundamental lies in [f_lo, f_hi].
 
     Each window gets the coarse grid search used by fit_event (windows run in parallel
     processes) and contributes up to `per_window` local maxima in time. Those are merged
     (one event per min_sep_s), the best 2*top are refined with a local grid search plus
     Nelder-Mead, and the best `top` after refinement are returned, sorted by score
-    (whitened brightness under the curve, dB)."""
+    (sweep-weighted ridge contrast, dB). Only finite scores strictly above
+    min_score are returned, so the result may be empty. The default rejects zero
+    evidence; a useful false-alarm threshold still needs calibration."""
     from concurrent.futures import ProcessPoolExecutor
+    if top < 1:
+        raise ValueError("top must be at least 1")
+    if not np.isfinite(min_score):
+        raise ValueError("min_score must be finite")
     c = speed_of_sound() if c is None else c
     v_grid = np.arange(40, 170, 13.0) if v_grid is None else v_grid
     d_grid = np.geomspace(400, 9000, 10) if d_grid is None else d_grid
@@ -261,7 +269,8 @@ def detect_events(sp: Spectrogram, f_lo: float, f_hi: float, c: float | None = N
         else:
             ef = EventFit(t_cpa=t0 + d / c, t_cpa_emit=t0, f0=f0, v=v, d=d, t_start=t0 - 120, t_end=t0 + 120,
                           score=score, f_pre=f0 * c / (c - v), f_post=f0 * c / (c + v))
-        out.append(ef)
+        if np.isfinite(ef.score) and ef.score > min_score:
+            out.append(ef)
     out.sort(key=lambda e: -e.score)
     final = []
     for e in out:          # refined fits can converge onto the same event; keep the best

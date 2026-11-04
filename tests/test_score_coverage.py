@@ -31,3 +31,14 @@ def test_sweep_matches_curve_score():
     s = w.sweep_scores(t, ridge, [0.0, 20.0], [1.0])
     assert np.isclose(s[0, 0], w.curve_score(t, ridge))
     assert s[1, 0] < 0.5 * s[0, 0]         # shifted 20 s off the ridge
+
+
+def test_invalid_curve_samples_do_not_become_interpolated_evidence():
+    w, t, ridge = _window()
+    full = w.curve_score(t, ridge)
+    masked = ridge.copy()
+    masked[(t >= 80) & (t <= 120)] = np.nan
+    partial = w.curve_score(t, masked)
+    assert 0.55 * full < partial < 0.75 * full
+    assert w.curve_score(t, np.full_like(ridge, np.nan)) == 0
+    assert w.curve_score(np.array([0.0]), np.array([100.0])) == 0

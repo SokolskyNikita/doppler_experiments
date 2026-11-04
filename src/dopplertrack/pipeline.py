@@ -12,6 +12,8 @@ import pandas as pd
 
 from .adsb import AircraftTypes, Trace, load_region, load_traces, save_traces
 from .audio import Spectrogram, compute_spectrogram, load_audio
+from .coverage import (DEFAULT_MAX_RANGE_M, ScanReport, extraction_metadata, padded_bbox,
+                       report_altitude_sources, report_candidate_gaps, report_coverage)
 from .doppler import speed_of_sound
 from .score import EventWindow, locked_score
 from .search import Grid, Segment, build_segments, cpa_fingerprint, cpa_table, pair_candidates, save_cpa_table, load_cpa_table
@@ -65,36 +67,52 @@ def make_spectrogram(audio_path, out_path, hop_s=0.25, fmin=40, fmax=450, nperse
     return sp
 
 
-def extract_region(archive_dir, bbox, out_path, prop_only=True, workers=None) -> list[Trace]:
-    log(f"scanning {archive_dir} for traces in {bbox}")
-    traces = load_region(archive_dir, bbox, workers=workers)
+def extract_region(archive_dir, bbox, out_path, prop_only=True, workers=None,
+                   max_range_m=DEFAULT_MAX_RANGE_M) -> list[Trace]:
+    envelope = padded_bbox(bbox, max_range_m)
+    report = ScanReport()
+    log(f"scanning {archive_dir} for traces in {envelope} (search box plus {max_range_m:g} m)")
+    traces = load_region(archive_dir, envelope, workers=workers, report=report)
     log(f"{len(traces)} traces touch the region")
     if prop_only:
         types = AircraftTypes()
         traces = [t for t in traces if types.is_prop(t.typ)]
         log(f"{len(traces)} after dropping known jets")
-    save_traces(traces, out_path)
+    report.excluded_types = report.kept - len(traces)
+    report.kept = len(traces)
+    metadata = extraction_metadata(bbox, max_range_m, report, archive_dir=str(archive_dir))
+    save_traces(traces, out_path, metadata=metadata)
+    report_coverage(metadata, bbox, max_range_m, log)
+    report_altitude_sources(traces, log)
     return traces
 
 
-def fetch_region(date: str, bbox, out_path, prop_only=True, pod="planes-readsb-prod-0") -> list[Trace]:
-    """Stream the adsb.lol archive for one UTC day from GitHub and save the traces touching bbox."""
+def fetch_region(date: str, bbox, out_path, prop_only=True, pod="planes-readsb-prod-0",
+                 max_range_m=DEFAULT_MAX_RANGE_M) -> list[Trace]:
+    """Save traces touching bbox padded by the search range, with extraction diagnostics."""
     from .fetch import fetch_day
-    log(f"streaming adsb.lol {date} ({pod}) for traces in {bbox}")
+    envelope = padded_bbox(bbox, max_range_m)
+    report = ScanReport()
+    log(f"streaming adsb.lol {date} ({pod}) for traces in {envelope} (search box plus {max_range_m:g} m)")
     t0 = time.time()
     def prog(n, nbytes):
         log(f"  {n} trace files scanned, {nbytes / 1e9:.2f} GB read, {nbytes / 1e6 / max(time.time() - t0, 1):.1f} MB/s")
-    traces = fetch_day(date, bbox, pod=pod, progress=prog)
+    traces = fetch_day(date, envelope, pod=pod, progress=prog, report=report)
     log(f"{len(traces)} traces touch the region")
     if prop_only:
         types = AircraftTypes()
         traces = [t for t in traces if types.is_prop(t.typ)]
         log(f"{len(traces)} after dropping known jets")
-    save_traces(traces, out_path)
+    report.excluded_types = report.kept - len(traces)
+    report.kept = len(traces)
+    metadata = extraction_metadata(bbox, max_range_m, report, date=date, pod=pod)
+    save_traces(traces, out_path, metadata=metadata)
+    report_coverage(metadata, bbox, max_range_m, log)
+    report_altitude_sources(traces, log)
     return traces
 
 
-def segments_for_search(traces: list[Trace], bbox, lat0: float, lon0: float, max_range_m=12000.0) -> list[Segment]:
+def segments_for_search(traces: list[Trace], bbox, lat0: float, lon0: float, max_range_m=DEFAULT_MAX_RANGE_M) -> list[Segment]:
     """The airborne segments a search over bbox used, rebuilt without the grid: same origin,
     same clip box (bbox corners padded by max_range)."""
     from .geo import lla_to_enu
@@ -120,8 +138,8 @@ def relocate_row(row, segs: list[Segment], dt_s: float):
 
 def run_search(sp: Spectrogram, ev1: EventFit, ev2: EventFit, traces: list[Trace], grid: Grid,
                harmonics=(1, 1), tol_s=6.0, v_tol=0.35, d_tol=(0.4, 2.5), silence_d_m=6000.0,
-               max_range_m=12000.0, c=None, top_pairs=None, progress=True,
-               cpa_cache=None) -> tuple[pd.DataFrame, list[Segment]]:
+               max_range_m=DEFAULT_MAX_RANGE_M, c=None, top_pairs=None, progress=True,
+               cpa_cache=None, trace_metadata=None, search_bbox=None) -> tuple[pd.DataFrame, list[Segment]]:
     """Rank grid points for a two-event recording.
 
     cpa_cache: optional .npz path. The (grid point, flight) CPA table depends only on the grid
@@ -129,6 +147,10 @@ def run_search(sp: Spectrogram, ev1: EventFit, ev2: EventFit, traces: list[Trace
     the slow part; with a path given it is reused when those inputs are identical, else computed
     and saved (see cached_cpa_table)."""
     c = speed_of_sound() if c is None else c
+    bbox = search_bbox if search_bbox is not None else (grid.lat.min(), grid.lat.max(), grid.lon.min(), grid.lon.max())
+    log(f"{len(traces)} loaded traces")
+    report_coverage(trace_metadata or {}, bbox, max_range_m, log)
+    report_altitude_sources(traces, log)
     e0, e1 = grid.enu[:, 0].min() - max_range_m, grid.enu[:, 0].max() + max_range_m
     n0, n1 = grid.enu[:, 1].min() - max_range_m, grid.enu[:, 1].max() + max_range_m
     segs = build_segments(traces, grid.lat0, grid.lon0, clip_enu=(e0, e1, n0, n1))
@@ -151,11 +173,12 @@ def run_search(sp: Spectrogram, ev1: EventFit, ev2: EventFit, traces: list[Trace
             log(f"scored {k + 1}/{len(pairs)} ({(time.time() - t0) / (k + 1) * 1000:.0f} ms each)")
     cols = ["gidx", "lat", "lon", "seg1", "seg2", "icao1", "icao2", "t_heard1", "d1", "v1", "d2", "v2", "score", "s1", "s2", "shift"]
     res = pd.DataFrame(out, columns=cols).sort_values("score", ascending=False).reset_index(drop=True)
+    report_candidate_gaps(traces, res, sp, ev1, max_range_m, c, log)
     return res, segs
 
 
 def pick_flight(sp: Spectrogram, ev: EventFit, segs: list[Segment], obs_enu, t0_map: float, shift: float,
-                harmonics: int = 1, c=None, max_range_m=12000.0, alive_pad_s=300.0) -> tuple[int, float]:
+                harmonics: int = 1, c=None, max_range_m=DEFAULT_MAX_RANGE_M, alive_pad_s=300.0) -> tuple[int, float]:
     """Which flight does an observer at obs_enu hear as `ev`, given the recording's time map
     (audio = unix + t0_map) and the time shift already chosen for event 1? Returns
     (segment index, locked score); (-1, 0) if no flight is near at that time."""
@@ -177,7 +200,8 @@ def pick_flight(sp: Spectrogram, ev: EventFit, segs: list[Segment], obs_enu, t0_
 
 
 def refine(sp, ev1, ev2, segs, res_row, spacing_m=50.0, half_m=400.0, harmonics=(1, 1), elevation=None, c=None,
-           extra: list[EventFit] | None = None, extra_harmonics: list[int] | None = None):
+           extra: list[EventFit] | None = None, extra_harmonics: list[int] | None = None,
+           max_range_m=DEFAULT_MAX_RANGE_M):
     """Fine grid around one result row for one flight pair.
 
     extra: further measured events (beyond the two the search used). For each, the flight is
@@ -197,12 +221,15 @@ def refine(sp, ev1, ev2, segs, res_row, spacing_m=50.0, half_m=400.0, harmonics=
     seg1, seg2 = segs[int(res_row.seg1)], segs[int(res_row.seg2)]
     w1 = EventWindow.from_fit(sp, ev1, harmonics[0]); w2 = EventWindow.from_fit(sp, ev2, harmonics[1])
     # choose the flight for each extra event at the candidate point itself
-    el0 = float(elevation(np.array([lat]), np.array([lon]))[0]) if elevation else 0.0
-    obs0 = lla_to_enu(lat, lon, el0, res_row.lat0, res_row.lon0)
+    if extra:
+        el0 = float(elevation(np.array([lat]), np.array([lon]))[0]) if elevation else 0.0
+        if not np.isfinite(el0):
+            raise ValueError("terrain elevation is unavailable at the refinement centre; use --no-dem to explicitly assume sea level")
+        obs0 = lla_to_enu(lat, lon, el0, res_row.lat0, res_row.lon0)
     t0_map0 = ev1.t_cpa - float(res_row.t_heard1)
     xsegs, xwins = [], []
     for ev, h in zip(extra, extra_harmonics):
-        k, sc = pick_flight(sp, ev, segs, obs0, t0_map0, float(res_row["shift"]), h, c)
+        k, sc = pick_flight(sp, ev, segs, obs0, t0_map0, float(res_row["shift"]), h, c, max_range_m=max_range_m)
         if k < 0:
             raise ValueError(f"no flight near the candidate at the time of the extra event at {ev.t_cpa:.0f} s")
         log(f"extra event at {ev.t_cpa:.0f} s: {segs[k].icao} (score {sc:.2f} at the candidate)")
@@ -226,11 +253,15 @@ def refine(sp, ev1, ev2, segs, res_row, spacing_m=50.0, half_m=400.0, harmonics=
 
 def run_single_search(sp: Spectrogram, ev: EventFit, traces: list[Trace], grid: Grid, t_cpa_unix: float,
                       tol_s: float = 30.0, harmonics: int = 1, v_tol=0.35, d_tol=(0.4, 2.5),
-                      max_range_m=12000.0, c=None) -> tuple[pd.DataFrame, list[Segment]]:
+                      max_range_m=DEFAULT_MAX_RANGE_M, c=None, trace_metadata=None,
+                      search_bbox=None) -> tuple[pd.DataFrame, list[Segment]]:
     """One event whose absolute time is known (±tol_s): rank grid points by how well the
     curve they would hear from each nearby flight matches the spectrogram."""
     from .score import single_score
     c = speed_of_sound() if c is None else c
+    bbox = search_bbox if search_bbox is not None else (grid.lat.min(), grid.lat.max(), grid.lon.min(), grid.lon.max())
+    report_coverage(trace_metadata or {}, bbox, max_range_m, log)
+    report_altitude_sources(traces, log)
     e0, e1 = grid.enu[:, 0].min() - max_range_m, grid.enu[:, 0].max() + max_range_m
     n0, n1 = grid.enu[:, 1].min() - max_range_m, grid.enu[:, 1].max() + max_range_m
     segs = build_segments(traces, grid.lat0, grid.lon0, clip_enu=(e0, e1, n0, n1))

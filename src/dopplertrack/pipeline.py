@@ -169,17 +169,19 @@ def _null_scores(task) -> list[float]:
     """single_score of one event against a chunk of (observer ENU, segment, heard time) rows: each wrong
     flight anchored on the event's heard CPA, as locked_score anchors event 1, with the same sweeps."""
     obs, seg, t_heard = task
-    w, segs, c = _SCORE_STATE["w"], _SCORE_STATE["segs"], _SCORE_STATE["c"]
-    return [single_score(w, segs[int(k)], o, float(t), c=c) for o, k, t in zip(obs, seg, t_heard)]
+    w, segs, c, sweep = _SCORE_STATE["w"], _SCORE_STATE["segs"], _SCORE_STATE["c"], _SCORE_STATE.get("f0_scales")
+    kw = {} if sweep is None else {"f0_scales": sweep}
+    return [single_score(w, segs[int(k)], o, float(t), c=c, **kw) for o, k, t in zip(obs, seg, t_heard)]
 
 
 def event_null(w: EventWindow, cpa: pd.DataFrame, segs: list[Segment], enu: np.ndarray, c: float,
-               n: int = NULL_N, workers: int | None = None) -> dict:
+               n: int = NULL_N, workers: int | None = None, f0_scales=None) -> dict:
     """The comparable score's null for one event: its single_score against n (grid point, flight) rows drawn
     uniformly, with replacement, from the CPA table, each anchored on the event. Nearly all are wrong
     flights, so the median and 1.4826*MAD are the event's own floor and spread (Axelrad 2011 normalises
     each satellite's correlogram this way before summing). The draw's seed comes from the event's fit,
-    so every search containing the event uses the same null."""
+    so every search containing the event uses the same null. f0_scales, if given, is the f0 sweep the event's
+    candidates get, so that the null has the same chances to match."""
     f = w.fit
     seed = int(hashlib.sha256(repr((round(f.t_cpa, 6), round(f.f0, 6), round(f.v, 6), round(f.d, 3), w.harmonics))
                               .encode()).hexdigest()[:16], 16)
@@ -189,7 +191,7 @@ def event_null(w: EventWindow, cpa: pd.DataFrame, segs: list[Segment], enu: np.n
     used = np.unique(cols[1])
     tasks = [(enu[cols[0][a:a + SCORE_CHUNK]], cols[1][a:a + SCORE_CHUNK], cols[2][a:a + SCORE_CHUNK])
              for a in range(0, n, SCORE_CHUNK)]
-    state = {"w": w, "segs": {int(k): segs[k] for k in used}, "c": c}
+    state = {"w": w, "segs": {int(k): segs[k] for k in used}, "c": c, "f0_scales": f0_scales}
     try:
         s = np.array([x for part in ordered_map(_null_scores, tasks, min(resolve_jobs(workers), max(len(tasks), 1)),
                                                 _set_score_state, (state,)) for x in part])
@@ -198,6 +200,7 @@ def event_null(w: EventWindow, cpa: pd.DataFrame, segs: list[Segment], enu: np.n
     med = float(np.median(s))
     sigma = float(1.4826 * np.median(np.abs(s - med)))
     return {"median": med, "sigma": sigma, "n": n, "seed": seed,
+            "f0_sweep": None if f0_scales is None else [float(f0_scales[0]), float(f0_scales[-1]), len(f0_scales)],
             "sample_sha256": hashlib.sha256(np.ascontiguousarray(idx).tobytes()).hexdigest()}
 
 
@@ -246,8 +249,9 @@ def fitted_steepest_fall(ev: EventFit, c: float, window_s: float = 60.0, smooth_
 def _pair_hypotheses(cpa: pd.DataFrame, hyps: list, tol_s: float, emission: bool, silence_d_m, funnel: dict,
                      triples: dict | None) -> pd.DataFrame:
     """Triples for every pair of the two events' hypotheses: each pair's admitted rows, joined at its own time
-    offset (and at the window's reach when either tau profile was flat), then the silence filter. A triple
-    found by several hypothesis pairs is kept once, from the first (the hypotheses come best first)."""
+    offset (and at the window's reach when either tau profile was flat), then the silence filter. A triple is
+    kept once per event-1 hypothesis, since that sets the clock it is scored at; run_search keeps each triple's
+    best clock after scoring. The funnel counts distinct triples."""
     time_col = "t_emit" if emission else "t_heard"
     gate = "emission_gate" if emission else "time_join"
     funnel.update(cpa_rows=len(cpa), event1_gates=int(admitted(cpa, hyps[0]).sum()),
@@ -267,14 +271,15 @@ def _pair_hypotheses(cpa: pd.DataFrame, hyps: list, tol_s: float, emission: bool
     cols = list(cpa.columns)
     empty = pd.DataFrame({**{f"{k}{n}": pd.Series(dtype=cpa[k].dtype) for k in cols if k != "gidx" for n in (1, 2)},
                           "gidx": pd.Series(dtype=cpa.gidx.dtype), "h1": pd.Series(dtype=int), "h2": pd.Series(dtype=int)})
-    pairs = (pd.concat(parts, ignore_index=True) if parts else empty).drop_duplicates(["gidx", "seg1", "seg2"]).reset_index(drop=True)
+    pairs = (pd.concat(parts, ignore_index=True) if parts else empty).drop_duplicates(["gidx", "seg1", "seg2", "h1"]).reset_index(drop=True)
+    distinct = pairs.drop_duplicates(["gidx", "seg1", "seg2"])
     g = pd.DataFrame({k: np.concatenate([x[k] for x in gated]) if gated else np.zeros(0, np.int32) for k in ("gidx", "seg1", "seg2")})
     g = g.drop_duplicates()
     funnel[gate] = len(g)
-    funnel["silence"] = len(pairs)
+    funnel["silence"] = len(distinct)
     if triples is not None:
         triples[gate] = {k: g[k].to_numpy(np.int32) for k in ("gidx", "seg1", "seg2")}
-        triples["silence"] = stage_triples(pairs)
+        triples["silence"] = stage_triples(distinct)
     return pairs
 
 
@@ -415,12 +420,19 @@ def run_search(sp: Spectrogram, ev1: EventFit, ev2: EventFit, traces: list[Trace
         cols = ["gidx", "lat", "lon", "seg1", "seg2", "icao1", "icao2", "t_heard1", "d1", "v1", "d2", "v2", "score", "s1", "s2", "shift"]
         res = pd.DataFrame(out, columns=cols)
         if comparable:      # PLAN Phase 2 item 7, stage A: each event's score against its own null
-            if nulls is None:
+            if hypotheses:  # the wrong flights get the same widened f0 sweep the candidates got
+                nulls = [event_null(w, cpa, segs, grid.enu, c, workers=workers, f0_scales=sw)
+                         for w, sw in zip((w1, w2), state["f0_scales"])]
+            elif nulls is None:
                 nulls = [event_null(w, cpa, segs, grid.enu, c, workers=workers) for w in (w1, w2)]
             res["raw_score"] = res["score"]
             for k, nl in ((1, nulls[0]), (2, nulls[1])):
                 res[f"z{k}"] = (res[f"s{k}"] - nl["median"]) / nl["sigma"] if nl["sigma"] > 0 else np.nan
             res["score"] = res["z1"] + res["z2"]
+        if hypotheses:      # one row per triple: the best of the clocks its event-1 hypotheses gave it
+            res = res.sort_values("score", ascending=False, kind="stable")
+            funnel["scored_clocks"] = len(res)
+            res = res.drop_duplicates(["gidx", "seg1", "seg2"])
         res = res.sort_values("score", ascending=False).reset_index(drop=True)
         funnel["scored"] = len(res)
     with _stage(stages, "gap_report"):

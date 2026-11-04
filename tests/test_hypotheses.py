@@ -99,3 +99,46 @@ def test_run_search_pairs_every_hypothesis_pair(monkeypatch):
     assert len(res.attrs["hypotheses"]["event2"]) == 2
     with pytest.raises(ValueError):
         pipeline.run_search(None, ev1, ev2, [], grid, progress=False, workers=1, hypotheses=True, sf_tol_s=4.0)
+
+
+def test_a_triple_is_scored_at_every_clock_its_hypotheses_give_and_keeps_the_best(monkeypatch):
+    """Two event-1 hypotheses 20 s apart both admit the same triple; its clock depends on which one, so both are
+    scored and the better kept, whatever the hypotheses' order (an outside review's reproduction)."""
+    rows = [(0, 1, 1000.0, 1008.0, 3000, 100), (0, 2, 1918.0, 1926.0, 3000, 100)]
+    cpa = pd.DataFrame(rows, columns=["gidx", "seg", "t_emit", "t_heard", "d", "v"]).astype(
+        {"gidx": np.int32, "seg": np.int32, "d": np.float32, "v": np.float32})
+    segs = [search.Segment(k, f"s{k}", np.zeros(2), np.zeros((2, 3)), np.zeros(2)) for k in range(3)]
+    early = _hyp(100, 3000, 990, (90, 110), (3.0, 3.7), (0, 1e12))
+    late = _hyp(100, 3000, 1010, (90, 110), (3.0, 3.7), (0, 1e12))
+    second = [_hyp(100, 3000, 1918, (90, 110), (3.0, 3.7))]
+    monkeypatch.setattr(pipeline, "build_segments", lambda *a, **k: segs)
+    monkeypatch.setattr(pipeline, "cached_cpa_table", lambda *a, **k: cpa)
+    monkeypatch.setattr(pipeline.EventWindow, "from_fit", staticmethod(lambda sp, fit, h=1: EventWindow(fit, None, h)))
+    monkeypatch.setattr(pipeline, "event_null", lambda *a, **k: {"median": 0.0, "sigma": 1.0})
+    monkeypatch.setattr(pipeline, "modelled_curve", lambda *a: (np.zeros(2), np.zeros(2)))
+    # the score depends on the clock: the late hypothesis's anchor fits better
+    monkeypatch.setattr(pipeline, "locked_score", lambda *a, t0_map=None, **k: (5.0 if t0_map > -4 else 1.0, 0.0, 0.0, 0.0))
+    for name in ("report_coverage", "report_altitude_sources", "report_candidate_gaps"):
+        monkeypatch.setattr(pipeline, name, lambda *a, **k: None)
+    grid = search.Grid.points([40.0], [-74.0], np.zeros(1))
+    ev1 = EventFit(1008.8, 1000.0, 120, 100, 3000, 950, 1050, 5, 150, 90)
+    ev2 = EventFit(1926.8, 1918.0, 120, 100, 3000, 1870, 1970, 5, 150, 90)
+    for order in ([early, late], [late, early]):
+        monkeypatch.setattr(pipeline, "event_hypotheses", lambda sp, w, ev, c, s, h, o=order: o if ev.t_cpa < 1500 else second)
+        res, _ = pipeline.run_search(None, ev1, ev2, [], grid, silence_d_m=None, progress=False, workers=1,
+                                     hypotheses=True, tol_s=30.0)
+        assert len(res) == 1 and res.score[0] == 5.0
+        assert res.attrs["funnel"]["scored"] == 1 and res.attrs["funnel"]["scored_clocks"] == 2
+        assert res.attrs["funnel"]["silence"] == 1
+
+
+def test_the_null_gets_the_candidates_f0_sweep(monkeypatch):
+    seen = []
+    monkeypatch.setattr(pipeline, "single_score", lambda w, seg, o, t, c=None, f0_scales=None: seen.append(f0_scales) or 1.0)
+    cpa = pd.DataFrame({"gidx": np.int32([0, 0]), "seg": np.int32([0, 1]), "t_emit": [1.0, 2.0], "t_heard": [1.0, 2.0],
+                        "d": np.float32([1, 1]), "v": np.float32([1, 1])})
+    segs = [search.Segment(k, f"s{k}", np.zeros(2), np.zeros((2, 3)), np.zeros(2)) for k in range(2)]
+    ev = EventFit(1008.8, 1000.0, 120, 100, 3000, 950, 1050, 5, 150, 90)
+    sweep = np.arange(0.9, 1.1, 0.005)
+    out = pipeline.event_null(EventWindow(ev, None), cpa, segs, np.zeros((1, 3)), C, n=20, workers=1, f0_scales=sweep)
+    assert all(s is sweep or np.array_equal(s, sweep) for s in seen) and out["f0_sweep"][2] == len(sweep)

@@ -657,11 +657,15 @@ def bench_case(case_id: str, case_dir: Path, execute=execute_case, labels=case_l
     if private:
         from . import private as priv
         case = priv.resolve_case(case)
+        if not reveal:              # the log and summary say where locate's point is only as an offset from the site
+            site, plain = priv.load_site(case["site"]), log
+            log = lambda *a: plain(*(priv.redact(str(x), site) for x in a))   # noqa: E731
     case_dir.mkdir(parents=True, exist_ok=True)
     with private_cache(case):
         record = execute(case, case_dir, log=log, code=code or code_revision())
     if private and not reveal:
-        site = priv.load_site(case["site"])
+        if (case_dir / "summary.txt").exists():
+            (case_dir / "summary.txt").write_text(priv.redact((case_dir / "summary.txt").read_text(), site))
         record = priv.to_site_relative(record, case["site"], site, case_dir)
         priv.assert_no_site(record, site)
     elif private:
@@ -797,7 +801,24 @@ def execute_case_locate(case: dict, case_dir: Path, log=print, code: dict | None
     assert "labels" not in case, "the runner must be given the blind case"
     overrides = dict(overrides or {})
     weather = bool(overrides.get(WEATHER_KEY, False))
-    unknown = set(overrides) - {"pair_rule", "silence_d_m", "clock_gate", WEATHER_KEY}
+    unknown = set(overrides) - {"pair_rule", "silence_d_m", "clock_gate", "box_m", "box_offset_m", "extraction_box",
+                                WEATHER_KEY}
+    if "box_m" in overrides:       # a private case's box, as a square around its site (box series); its own CPA table
+        if "site" not in case:
+            unknown.add("box_m (private cases only)")
+        else:
+            from . import private as priv
+            side, off = float(overrides["box_m"]), [float(x) for x in overrides.get("box_offset_m", [0.0, 0.0])]
+            cache = Path(case["search"]["cpa_cache"])
+            case = {**case, "search": {**case["search"], "bbox": priv.site_box(priv.load_site(case["site"]), side, off),
+                                       "cpa_cache": str(cache.with_name(f"{cache.stem}_box{side:g}m{cache.suffix}"))}}
+    elif "box_offset_m" in overrides:
+        unknown.add("box_offset_m (without box_m)")
+    if "extraction_box" in overrides:   # the flight data's declared envelope, for a file whose own isn't measured
+        if "site" not in case:
+            unknown.add("extraction_box (private cases only)")
+        else:
+            case = {**case, "flight_data": {**case["flight_data"], "extraction_box": list(overrides["extraction_box"])}}
     st = case["start_time"]
     gate = overrides.get("clock_gate", True)
     start_utc = (datetime.datetime.fromisoformat(str(st["utc"]).replace("Z", "+00:00")).timestamp()
@@ -815,7 +836,8 @@ def execute_case_locate(case: dict, case_dir: Path, log=print, code: dict | None
     record = None
     try:
         if unknown:
-            raise ValueError(f"the locate profile takes only pair_rule and silence_d_m overrides, not {sorted(unknown)}")
+            raise ValueError(f"the locate profile takes only pair_rule, silence_d_m, clock_gate and (private) box_m, "
+                             f"box_offset_m and extraction_box overrides, not {sorted(unknown)}")
         out = loc.locate(resolve(case["spectrogram"]), case["flight_data"]["date"], s["bbox"], paths, cfg,
                          out_dir=case_dir, code=code or code_revision(), log=log)
         record = out.record

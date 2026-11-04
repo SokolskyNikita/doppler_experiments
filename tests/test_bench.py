@@ -478,6 +478,10 @@ def test_a_private_case_runs_with_its_caches_under_private(tmp_path, monkeypatch
     seen = {}
     (tmp_path / "data" / "private" / "cases").mkdir(parents=True)
     (tmp_path / "data" / "private" / "cases" / "home.json").write_text("{}")
+    (tmp_path / "data" / "private" / "sites").mkdir()
+    (tmp_path / "data" / "private" / "sites" / "a-site.json").write_text(json.dumps({"site_json": "incoming/site.json"}))
+    (tmp_path / "data" / "incoming").mkdir()
+    (tmp_path / "data" / "incoming" / "site.json").write_text(json.dumps({"lat": 1.0, "lon": 2.0, "ground_m": 0, "mic_height_m": 1}))
 
     def execute(case, case_dir, log=print, code=None):
         seen[case["id"]] = cache_root()
@@ -602,3 +606,55 @@ def test_private_and_incoming_paths_resolve_under_the_data_root(monkeypatch, tmp
     for p in ("private/traces/x/area.npz", "incoming/seattle-home/site.json", "raw/a", "derived/b"):
         assert cases.resolve(p) == tmp_path / p
     assert cases.resolve("docs/results/x.json") == cases.REPO / "docs/results/x.json"
+
+
+def test_a_box_override_squares_a_private_case_around_its_site_and_off_the_grid(tmp_path, private_home, monkeypatch):
+    """box_m (the box series): the box is a square of that side around the site, its centre box_offset_m away so the
+    site is off every grid node, with a CPA table of its own; a public case refuses it."""
+    import numpy as np
+    from bench import private
+    from dopplertrack import locate as loc
+    from dopplertrack.search import Grid
+    site = private.load_site("home")
+    box = private.site_box(site, 8000.0, (73.0, 131.0))
+    s, n, w, e = private._offset_box(box, site)
+    assert abs((n - s) - 8000.0) < 1 and abs((e - w) - 8000.0) < 1
+    assert abs((s + n) / 2 + 131.0) < 1 and abs((w + e) / 2 + 73.0) < 1      # the site sits 73 m east, 131 m north
+    g = Grid.make(*box, 200.0)
+    east, north = private._enu(g.lat, g.lon, site)
+    assert np.hypot(east, north).min() > 20.0                                   # no node on the site
+    seen = {}
+
+    def fake_locate(spec, date, bbox, paths, cfg, **kw):
+        seen.update(bbox=bbox, cache=cfg.cpa_cache, envelope=cfg.envelope)
+        raise RuntimeError("stop here")
+    monkeypatch.setattr(loc, "locate", fake_locate)
+    case = private.resolve_case(runner.blind_case("home-1", path=private_home))
+    case["flight_data"]["extraction_box"] = [40.0, 42.0, -75.0, -72.0]
+    case["derived"] = []
+    rec = runner.execute_case_locate(case, tmp_path, log=lambda *a: None,
+                                     overrides={"box_m": 8000, "box_offset_m": [73.0, 131.0],
+                                                "extraction_box": [39.0, 43.0, -76.0, -71.0]})
+    assert seen["bbox"] == box and seen["cache"].endswith("_box8000m.npz") and "stop here" in rec["execution"]["errors"][0]
+    assert seen["envelope"] == [[39.0, 43.0, -76.0, -71.0]]
+    public = {**case}
+    del public["site"]
+    rec = runner.execute_case_locate(public, tmp_path, log=lambda *a: None, overrides={"box_m": 8000})
+    assert "private cases only" in rec["execution"]["errors"][0]
+
+
+def test_a_private_runs_log_and_summary_give_locates_point_only_as_an_offset(tmp_path, private_home):
+    from bench import private
+    site = private.load_site("home")
+    line = f"refined {site['lat'] + 0.001:.5f}, {site['lon'] - 0.002:.5f} with 3 extra flyover(s); far 51.50000, -0.12000"
+    out = private.redact(line, site)
+    assert f"{site['lat'] + 0.001:.5f}" not in out and "m north of the site" in out and "51.50000, -0.12000" in out
+    logged = []
+
+    def execute(case, case_dir, log=print, code=None):
+        log(line)
+        (case_dir / "summary.txt").write_text(line + "\n")
+        return _private_execute(case, case_dir)
+    runner.bench_case("home-1", tmp_path / "out", execute=execute, cases_path=private_home, log=logged.append)
+    assert "m north of the site" in logged[0] and f"{site['lat'] + 0.001:.5f}" not in logged[0]
+    assert f"{site['lat'] + 0.001:.5f}" not in (tmp_path / "out" / "summary.txt").read_text()

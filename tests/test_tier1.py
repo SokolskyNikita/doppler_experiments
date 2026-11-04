@@ -192,3 +192,16 @@ def test_a_non_finite_fit_is_a_missing_fit(tmp_path, monkeypatch):
     tier1._set_fit_crop(sp, spectrogram_sha256(sp))
     fit = tier1._fit_window((0, 0, 1.0, 8.0, 100.0, 200.0, "contrast"))["fit"]
     assert "non-finite" in fit["unavailable"]
+
+
+def test_a_weak_fit_is_a_missing_fit_with_its_reason(tmp_path, monkeypatch):
+    import numpy as np
+    from dopplertrack import tracks
+    from dopplertrack.audio import Spectrogram
+    from dopplertrack.cache import spectrogram_sha256
+    monkeypatch.setenv("DOPPLERTRACK_CACHE", str(tmp_path))
+    monkeypatch.setattr(tracks, "fit_event", lambda *a, **k: tracks.EventFit.unfit(1.0, 8.0, "band too narrow"))
+    sp = Spectrogram(np.arange(10.0), np.arange(5.0), np.zeros((5, 10), np.float32))
+    tier1._set_fit_crop(sp, spectrogram_sha256(sp))
+    assert tier1._fit_window((0, 0, 1.0, 8.0, 100.0, 200.0, "contrast"))["fit"] == \
+        {"unavailable": "fit_event's weak fit: band too narrow"}

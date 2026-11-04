@@ -150,9 +150,6 @@ def execute_span(span: dict, out_dir: Path, code: dict, log=print, workers: int 
 _FIT_CROP = {}
 
 
-FIT_MODULES = ("dopplertrack.tracks", "dopplertrack.doppler", "dopplertrack.audio")
-
-
 def _set_fit_crop(crop, crop_sha256):
     _FIT_CROP.update(sp=crop, sha256=crop_sha256)
 
@@ -162,7 +159,7 @@ def _fit_window(task) -> dict:
     on the crop's contents, the window, the band, the objective and fit_event's source, under the cache rules."""
     import scipy
 
-    from dopplertrack.cache import cached, source_sha256
+    from dopplertrack.cache import DETECTOR_CODE, cached, code_sha256
     from dopplertrack.tracks import fit_event
     window, line, t0, t1, lo, hi, objective = task
 
@@ -172,10 +169,12 @@ def _fit_window(task) -> dict:
         except Exception as exc:
             return unavailable(f"{type(exc).__name__}: {exc}")
     parts = {"spectrogram": _FIT_CROP["sha256"], "window_s": [t0, t1], "band_hz": [lo, hi], "objective": objective,
-             "producer": "tracks.fit_event", "source": source_sha256(*FIT_MODULES),
+             "producer": "tracks.fit_event", "code": code_sha256(DETECTOR_CODE),
              "versions": {"numpy": np.__version__, "scipy": scipy.__version__}}
     fit = cached("window_fits", parts, produce)
-    if "unavailable" not in fit and not all(np.isfinite(v) for v in fit.values()):
+    if "unavailable" not in fit and fit.get("weak"):
+        fit = unavailable(f"fit_event's weak fit: {fit['weak']}")
+    elif "unavailable" not in fit and not all(np.isfinite(v) for v in fit.values() if not isinstance(v, str)):
         fit = unavailable("fit_event returned a non-finite fit: no curve to follow in this window and band")
     return {"window": window, "line": line, "band_hz": [lo, hi], "objective": objective, "fit": fit}
 

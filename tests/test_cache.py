@@ -80,3 +80,58 @@ def test_unreadable_tile_is_fetched_again(tmp_path, monkeypatch):
     t._path(1, 2).write_bytes(b"cut short")
     assert np.allclose(t._tile(1, 2), 0.0)
     assert [p.name for p in t.cache.iterdir()] == ["1_2.png"]
+
+
+def _reachable(roots, modules):
+    """(module, name) of every top-level definition in `modules` that the roots can reach, by following each name a
+    definition reads to a definition of its own module or to one imported from another listed module."""
+    import ast
+    import importlib.util
+    from pathlib import Path
+    trees = {m: ast.parse(Path(importlib.util.find_spec(m).origin).read_text()) for m in modules}
+    defs = {m: {n.name: n for n in t.body if isinstance(n, (ast.FunctionDef, ast.ClassDef))} for m, t in trees.items()}
+    imports = {m: {} for m in modules}
+    for m, t in trees.items():
+        for n in t.body:
+            if isinstance(n, ast.ImportFrom) and n.level == 1:
+                src = "dopplertrack." + n.module
+                for alias in n.names:
+                    imports[m][alias.asname or alias.name] = (src, alias.name)
+    seen, todo = set(), list(roots)
+    while todo:
+        m, name = todo.pop()
+        if (m, name) in seen or m not in defs or name not in defs[m]:
+            continue
+        seen.add((m, name))
+        for n in ast.walk(defs[m][name]):
+            if isinstance(n, ast.Name):
+                if n.id in defs[m]:
+                    todo.append((m, n.id))
+                elif n.id in imports[m]:
+                    todo.append(imports[m][n.id])
+    return seen
+
+
+def test_the_detector_code_key_lists_everything_detect_and_fit_can_reach():
+    from dopplertrack.cache import DETECTOR_CODE
+    reach = _reachable([("dopplertrack.tracks", "detect_events"), ("dopplertrack.tracks", "fit_event")],
+                       list(DETECTOR_CODE))
+    listed = {(m, n) for m, names in DETECTOR_CODE.items() for n in names}
+    assert reach <= listed, f"add to DETECTOR_CODE: {sorted(reach - listed)}"
+
+
+def test_the_code_key_ignores_docstrings_and_messages_but_not_code_or_constants(tmp_path, monkeypatch):
+    import importlib
+    import sys
+    from dopplertrack.cache import code_sha256
+    monkeypatch.syspath_prepend(str(tmp_path))
+
+    def key(src):
+        (tmp_path / "kmod.py").write_text(src)
+        importlib.invalidate_caches()
+        sys.modules.pop("kmod", None)
+        return code_sha256({"kmod": ("f",)})
+    base = key('K = 2\n\ndef f(x):\n    """Doc."""\n    if x < 0:\n        raise ValueError(f"bad {x}")\n    return K * x\n')
+    assert key('K = 2\n\ndef f(x):\n    """Another doc."""\n    if x < 0:\n        raise ValueError(f"x must be >= 0, got {x}")\n    return K * x  # a comment\n') == base
+    assert key('K = 2\n\ndef f(x):\n    """Doc."""\n    if x < 0:\n        raise ValueError(f"bad {x}")\n    return K * x + 1\n') != base
+    assert key('K = 3\n\ndef f(x):\n    """Doc."""\n    if x < 0:\n        raise ValueError(f"bad {x}")\n    return K * x\n') != base

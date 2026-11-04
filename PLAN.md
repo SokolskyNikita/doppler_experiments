@@ -206,14 +206,21 @@ Each phase below gives its goal, the approach we expect to take given what we kn
 - **Data report** (D2). `fetch-day` and `search` report traces kept, traces skipped as malformed and gaps near the candidates. A curve modelled from a trajectory carries a validity mask: inside the trace's span, no local gap over 30 s and a converged retarded-time solve. Today `curve_from_trajectory` bridges gaps silently. The report also says what it can't know: a complete download doesn't mean every aircraft overhead broadcast ADS-B (L2).
 - **Elevation no-data** (D3). Mask −32768 in `Terrain`, with a test on the ESID 937 pixel.
 - **Altitude source** (D4). Keep each point's altitude source (geometric, barometric, none) and its position source (ADS-B, MLAT, TIS-B: slot 9 of the trace), and honour the trace flags: bit 1 marks a stale position and bit 8 a geometric altitude in slot 3. The data report (D2) gives the share of barometric-only points, and the result record names the height datum (5.5). A geoid correction waits for Phase 2's altitude perturbation to show it matters.
-- **Platform** (W4). A macOS CI job, a fresh-install smoke test, and a clear error when ffmpeg is missing. If `dev` is ever pushed, CI has to run on it too.
+- **Platform** (W4). A fresh-install smoke test and a clear error when ffmpeg is missing, both run locally on this Mac as part of Tier 0. No GitHub CI for now: setting it up and waiting on it would slow the work down, and a local run on the development machine covers what it would check. `.github/workflows/` stays as upstream has it until a release needs more.
 
 **Done when** each fix has its test and is in `dev`.
 
 #### Phase 1: minimal benchmark (M)
 
-1. **Result record v1** (5.5).
-2. **A case manifest, a runner, and the four seed cases** from 5.1. Each case's entry carries:
+1. **Parallelism first** (S–M). Everything after this is measured against the Tier budgets in 5.4, so the machine has to be used properly before the budgets mean anything. Today trace loading and `detect`'s window scan use a process pool and nothing else does; the CPA table, 5.5 of the search's 7.6 minutes, is single-threaded geometry over grid points, flights and samples.
+   - One knob, `--jobs`, with an environment default of the performance-core count (10 on this M4 Pro; its 4 efficiency cores would set the pace for 14 equal workers).
+   - Parallelism at the coarsest independent level only: cases in the runner, windows in `detect`, grid chunks in the CPA table. A worker always runs with jobs=1 and its BLAS threads pinned to 1, so pools never nest and 14 cores never carry 100 threads.
+   - The CPA table build vectorised over a chunk of grid points at a time, then chunks across the pool.
+   - The scoreboard's stage timings (5.5) record wall time and CPU time per stage, so a missed budget points at a stage.
+   - Acceptance: a CPA table for the Oyster Bay box in under 1 min from a cold cache; Tier 1 on the seed set under 3 min with the performance cores busy; the same results, byte for byte, at jobs=1 and jobs=10.
+   - Not the GPU. The Metal backends (MLX, PyTorch MPS) have no float64, our timestamps are seconds since 1970 and our coordinates span 100 km, and the CPA table is built once per case-day and cached. The GPU is considered in M4 only if a Tier budget is still missed after this item, and only for the CPA table, curve scoring or the STFT.
+2. **Result record v1** (5.5).
+3. **A case manifest, a runner, and the four seed cases** from 5.1. Each case's entry carries:
    - exact source identifiers and acquisition details;
    - the start time's source and its uncertainty in seconds, with no default: a case without one can't be built;
    - clip offsets and transformation recipes;
@@ -224,15 +231,15 @@ Each phase below gives its goal, the approach we expect to take given what we kn
    - links to its raw files' entries in `bench/manifest.json`.
 
    Changing a case makes a new version of it. A fetch script rebuilds `raw/` on another machine.
-3. **Both baselines** at upstream a16b700, and `bench compare`.
-4. **Tiers 0–2** (5.4).
-5. **Sets for the clean recordings** (5.2), written into the case manifest before any of them is searched (decision 2).
-6. **Any new cache** (detections, spectrograms) follows the CPA cache's rules: keyed on its inputs' contents and on the hash of the code that produced it (the detector's own source, as hermes does), written atomically and locked. Use `filelock` and a library cache such as `joblib.Memory` or `diskcache` instead of repeating the hand-written pattern.
-7. **Gaps in the audio** (S–M). ESID 740 and 710 record 55 s of every minute, and decision 2 puts one in calibration and one in evaluation, so the benchmark can't run without this. The spectrogram keeps the recording's timeline: frames inside a gap are marked invalid, never dropped, so audio seconds stay convertible to UTC, and tracks, fits, whitening and scoring skip invalid frames. Acceptance: a synthetic pass with 5 s cut from every minute fits to the same parameters as the uncut one within the fit's spread and to within one hop in time, and a gap over a pass's steepest part gives a weak fit, not a confident one.
+4. **Both baselines** at upstream a16b700, and `bench compare`.
+5. **Tiers 0–2** (5.4).
+6. **Sets for the clean recordings** (5.2), written into the case manifest before any of them is searched (decision 2).
+7. **Any new cache** (detections, spectrograms) follows the CPA cache's rules: keyed on its inputs' contents and on the hash of the code that produced it (the detector's own source, as hermes does), written atomically and locked. Use `filelock` and a library cache such as `joblib.Memory` or `diskcache` instead of repeating the hand-written pattern.
+8. **Gaps in the audio** (S–M). ESID 740 and 710 record 55 s of every minute, and decision 2 puts one in calibration and one in evaluation, so the benchmark can't run without this. The spectrogram keeps the recording's timeline: frames inside a gap are marked invalid, never dropped, so audio seconds stay convertible to UTC, and tracks, fits, whitening and scoring skip invalid frames. Acceptance: a synthetic pass with 5 s cut from every minute fits to the same parameters as the uncut one within the fit's spread and to within one hop in time, and a gap over a pass's steepest part gives a weak fit, not a confident one.
 
 **Done when:**
 - the seed cases have both baselines, with every input and cache hash recorded;
-- Tier 1 runs in under 3 min and Tier 2 on the seed set in under 15 min;
+- Tier 1 runs in under 3 min and Tier 2 on the seed set in under 15 min, with the Oyster Bay CPA table built in under 1 min;
 - every clean recording has its set;
 - the gap test passes, and ESID 740's spectrogram keeps its timeline.
 
@@ -406,7 +413,7 @@ One HTML page per `result.json`:
 A README covering install (including ffmpeg), requirements, limits and how to read the verdict, including what "experimental" means. Release in the fork, and send upstream PRs as the author accepts them.
 
 **Acceptance test**, run before each release:
-- install the built package in a clean environment on macOS and Linux (in CI), run the quickstart, and check its expected output;
+- install the built package in a clean environment on macOS, and on Linux in a container, run the quickstart, and check its expected output. GitHub CI is set up for this only when a release warrants it;
 - a clear diagnostic when ffmpeg is missing or too old;
 - progress reporting, and resource estimates (download size, CPA table size, time) before the long stages, with a disk-space check before writing;
 - cancellation at any point, and a re-run that resumes from completed cached stages;
@@ -445,6 +452,7 @@ Each item waits for a measurement that calls for it:
 - jets as a signal source, with their own detection and matching;
 - choosing extra flyovers by how well their geometry pins down the location;
 - downloads that resume across restarts;
+- the GPU, through MLX or PyTorch's Metal backend, for the CPA table, curve scoring or the STFT, only if a Tier budget is still missed after Phase 1's parallelism;
 - multipath delays, microphone arrays, and advanced time-frequency methods, each if a measured bottleneck points to it.
 
 ## 5. Measuring progress
@@ -604,7 +612,7 @@ The evaluation set is what limits M3, and collecting it takes calendar time rath
 
 | Source | What it is | Use |
 |---|---|---|
-| Eclipse Soundscapes ESID 375, 740, 710 | AudioMoths with clocks set by a time chime, 2024-04-07; 6, 7 and 19 prop passes within 12 km | calibration or evaluation (decision 2). 740 and 710 record 55 s of every minute, so they need the gap-aware spectrogram (Phase 1 item 7) first |
+| Eclipse Soundscapes ESID 375, 740, 710 | AudioMoths with clocks set by a time chime, 2024-04-07; 6, 7 and 19 prop passes within 12 km | calibration or evaluation (decision 2). 740 and 710 record 55 s of every minute, so they need the gap-aware spectrogram (Phase 1 item 8) first |
 | Eclipse ESID 937 | about 25 h from 05:40 UTC on 2024-04-07, with no prop pass within 20 km that day | a negative that must abstain, once 04-08's flight data is fetched |
 | xeno-canto XC979185 | one prop pass, start time known to the minute | a single-flyover case |
 | xeno-canto XC990819, XC990820, XC986433 | Essex, jets only | development: background negatives for `detect`'s threshold; the first two are one group |

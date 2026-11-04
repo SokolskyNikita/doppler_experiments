@@ -66,10 +66,21 @@ PRIVATE_PREFIXES = ("private/", "incoming/", "raw/seattle-home/")
 DAY_TRACE = re.compile(r"derived/traces/\d{4}-\d{2}-\d{2}(\.log|/.*)?")
 
 
+# the owner's recorder sessions, by name: seed refuses to run while one sits under derived/traces/ outside the
+# allow list (private/seed-allow.txt), even though the day-trace rule already keeps it out
+RECORDER_SESSION = re.compile(r"2026\d{4}-(ha-)?(pilot|selftest|speakertest|subtest|coexist|latency)")
+
+
+def listed(name: str) -> list[str]:
+    """Lines of a file under private/ (comments and blanks dropped); a missing file is an empty list."""
+    f = DATA_ROOT / "private" / name
+    return [l.strip() for l in f.read_text().splitlines() if l.strip() and not l.startswith("#")] if f.exists() else []
+
+
 def private_prefixes() -> tuple[str, ...]:
-    listed = DATA_ROOT / "private" / "fleet-exclude.txt"
-    extra = tuple(l.strip().strip("/") + "/" for l in listed.read_text().splitlines()
-                  if l.strip() and not l.startswith("#")) if listed.exists() else ()
+    """PRIVATE_PREFIXES plus the owner's deny list, private/exclude.txt (one data-root prefix per line; read at
+    every upload, so a prefix needs no code change; fleet-exclude.txt is read too)."""
+    extra = tuple(p.strip("/") + "/" for p in listed("exclude.txt") + listed("fleet-exclude.txt"))
     return PRIVATE_PREFIXES + extra
 
 
@@ -716,6 +727,12 @@ def seed_tools(a) -> None:
 def seed(a) -> None:
     """Uploads SEED_DATA and the caches a job can use. Only new or changed files are sent; nothing in the
     bucket is deleted."""
+    sessions = [d.name for d in (DATA_ROOT / "derived" / "traces").glob("*")
+                if RECORDER_SESSION.match(d.name) and d.name not in listed("seed-allow.txt")]
+    if sessions:
+        sys.exit(f"derived/traces/ holds recorder sessions ({', '.join(sorted(sessions))}): they derive from the home "
+                 "point and belong under private/. Move them there, or name each in private/seed-allow.txt to "
+                 "confirm it stays excluded, before seeding")
     bucket = outputs()["Bucket"]
     dry = ["--dryrun"] if a.dry_run else []
     if a.run:        # only these run folders, for jobs that read them (--input runs/<folder>)
@@ -726,6 +743,9 @@ def seed(a) -> None:
                     f"s3://{bucket}/data/runs/{name}")
             print(f"data/runs/{name}", flush=True)
         return
+    print("uploading: " + ", ".join(f"data/{x}/" for x in SEED_DATA) + ", " + ", ".join(f"cache/{k}/" for k in CACHE_KINDS))
+    print("excluded: " + ", ".join(private_prefixes()) + ", any */private/*, derived/traces/ except YYYY-MM-DD day traces",
+          flush=True)
     for sub in SEED_DATA:
         aws_cli("s3", "sync", "--only-show-errors", "--exclude", ".DS_Store", *seed_excludes(sub), *dry, str(DATA_ROOT / sub),
                 f"s3://{bucket}/data/{sub}")

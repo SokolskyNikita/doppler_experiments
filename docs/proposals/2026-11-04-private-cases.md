@@ -53,8 +53,14 @@ coordinate, an audio path or a derived path.
   record is revealed. GeoJSON and KML are not written for an unrevealed record, since they are absolute by nature.
 - **Records and reports of private cases** go to `private/runs/`, not `runs/`, since `runs/` is where the fleet's
   results come back and what a later `--input-run` could send up.
+- **Caches:** a private case runs with `DOPPLERTRACK_CACHE` under `private/cache/`, so its detection and window-fit
+  entries never reach the shared cache that `runs seed` uploads (SDE-E's suggestion).
 
 ## Guards (SDE-E, for the fleet)
+
+Built by SDE-E in 78c4b9a: private paths are private/, incoming/, raw/seattle-home/, any path with a `private`
+folder, the prefixes in `$DOPPLERTRACK_DATA/private/fleet-exclude.txt`, and everything under derived/traces/ but the
+YYYY-MM-DD day traces; `--case` refuses `private: true` or a `site`. What it guards:
 
 - `runs launch --case` refuses a case with `site` outright.
 - `runs seed`, `fetch-sources`, `--input` and `--input-run` refuse or skip `private/`, `incoming/`,

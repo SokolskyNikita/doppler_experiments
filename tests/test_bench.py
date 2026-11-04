@@ -345,7 +345,7 @@ def fake_runs(monkeypatch):
     """run_bench with the case work stubbed: each case writes an entry; a case named in `stop` stops the run once."""
     ran, stop = [], set()
 
-    def fake_case(cid, case_dir, execute, log, code):
+    def fake_case(cid, case_dir, execute, log, code, reveal=False):
         if cid in stop:
             stop.discard(cid)
             raise KeyboardInterrupt
@@ -476,6 +476,8 @@ def test_a_private_case_runs_with_its_caches_under_private(tmp_path, monkeypatch
     monkeypatch.setenv("DOPPLERTRACK_DATA", str(tmp_path / "data"))
     monkeypatch.setenv("DOPPLERTRACK_CACHE", str(tmp_path / "shared"))
     seen = {}
+    (tmp_path / "data" / "private" / "cases").mkdir(parents=True)
+    (tmp_path / "data" / "private" / "cases" / "home.json").write_text("{}")
 
     def execute(case, case_dir, log=print, code=None):
         seen[case["id"]] = cache_root()
@@ -488,3 +490,108 @@ def test_a_private_case_runs_with_its_caches_under_private(tmp_path, monkeypatch
     assert seen["home"] == tmp_path / "data" / "private" / "cache"
     assert cache_root() == tmp_path / "shared"                  # restored afterwards
     assert cases.is_private({"site": "x"}) and not cases.is_private({"id": "y"})
+
+
+SITE = {"lat": 40.8765, "lon": -73.5250, "ground_m": 30.0, "mic_height_m": 2.0}
+
+
+@pytest.fixture
+def private_home(tmp_path, monkeypatch):
+    """A private case `home-1` at a fake site, its private files under a temporary data root."""
+    data = tmp_path / "data"
+    (data / "private" / "sites").mkdir(parents=True)
+    (data / "private" / "cases").mkdir(parents=True)
+    (data / "incoming").mkdir()
+    (data / "incoming" / "site.json").write_text(json.dumps(SITE))
+    (data / "private" / "sites" / "home.json").write_text(json.dumps({"site_json": "incoming/site.json"}))
+    (data / "private" / "cases" / "home-1.json").write_text(json.dumps(
+        {"spectrogram": "private/derived/home-1/rec.npz", "search": {"bbox": [40.4, 41.3, -74.4, -72.6]},
+         "flight_data": {"traces": "private/traces/home-1/area.npz"}}))
+    monkeypatch.setenv("DOPPLERTRACK_DATA", str(data))
+    case = _case()
+    for k in ("audio", "derived", "spectrogram", "reference_clock_utc", "traffic"):
+        case.pop(k, None)
+    case["flight_data"] = {k: v for k, v in case["flight_data"].items() if k not in ("traces", "extraction_box")}
+    case["search"] = {k: v for k, v in case["search"].items() if k != "bbox"}
+    case.update(id="home-1", site="home", private=True)
+    case["labels"] = {"reference": {"site": "home"}, "true_pair": ["a1dfeb", "ace391"], "checked_by": "fixture"}
+    path = tmp_path / "cases.json"
+    path.write_text(json.dumps({"schema": 1, "cases": [case]}))
+    return path
+
+
+def _private_execute(case, case_dir, log=print, code=None):
+    """A record with absolute candidates near the site, and a triples sidecar, as a real run would write."""
+    import numpy as np
+    from dopplertrack.result import sha256_file
+    assert case["search"]["bbox"] == [40.4, 41.3, -74.4, -72.6]          # resolved from the private file
+    rec = example_record()
+    rec["provenance"]["parameters"]["search"]["bbox"] = case["search"]["bbox"]
+    np.savez_compressed(case_dir / "funnel_triples.npz", **{
+        "scored__icao1": np.array(["a1dfeb"]), "scored__icao2": np.array(["ace391"]), "scored__gidx": np.array([0]),
+        "scored__lat": np.array([40.8761]), "scored__lon": np.array([-73.5236]), "scored__score": np.array([27.1])})
+    rec["funnel"]["triples_file"] = {"path": "funnel_triples.npz", "sha256": sha256_file(case_dir / "funnel_triples.npz"),
+                                     "stages": ["scored"], "rows": {"scored": 1}}
+    return rec
+
+
+def test_a_private_record_is_written_in_the_sites_frame_and_scored_from_it(tmp_path, private_home):
+    from dopplertrack.result import validate
+    entry = runner.bench_case("home-1", tmp_path / "out", execute=_private_execute, cases_path=private_home)
+    text = (tmp_path / "out" / "result.json").read_text()
+    rec = json.loads(text)
+    validate(rec)
+    assert rec["frame"] == "site-relative" and rec["site"] == "home"
+    assert '"lat"' not in text and '"lon"' not in text and "40.87" not in text and "-73.5" not in text
+    assert rec["provenance"]["parameters"]["search"]["bbox"]["offset_box_m"][0] < 0       # the box's south edge
+    import numpy as np
+    with np.load(tmp_path / "out" / "funnel_triples.npz") as z:
+        assert "scored__lat" not in z.files and "scored__east" in z.files
+    # the candidate 40.8761, -73.5236 is about 125 m from the site; the comparison measures it from the offsets
+    assert entry["status"] == "scored" and 100 < entry["top_error_m"] < 150 and entry["true_pair_rank"] == 1
+    assert entry["true_pair_near_reference"] is True
+
+
+def test_reveal_keeps_absolute_coordinates_and_says_so(tmp_path, private_home):
+    runner.bench_case("home-1", tmp_path / "out", execute=_private_execute, cases_path=private_home, reveal=True)
+    rec = json.loads((tmp_path / "out" / "result.json").read_text())
+    assert "frame" not in rec and "lat" in rec["candidates"][0]
+    assert "reveal" in rec["provenance"]["parameters"]["revealed"]
+
+
+def test_a_position_near_the_site_under_any_name_is_refused(tmp_path, private_home):
+    from bench import private
+
+    def leaky(case, case_dir, log=print, code=None):
+        rec = _private_execute(case, case_dir)
+        rec["data_limitations"]["flight_data"] = {"centre": {"a": 40.88, "b": -73.52}}       # not a box, not a candidate
+        return rec
+    with pytest.raises(private.PrivateDataError, match="near the site"):
+        runner.bench_case("home-1", tmp_path / "out", execute=leaky, cases_path=private_home)
+    assert not (tmp_path / "out" / "result.json").exists()
+
+
+def test_a_private_case_never_lists_its_inputs_or_shares_a_run(private_home, monkeypatch):
+    from bench import inputs
+    case = json.loads(private_home.read_text())["cases"][0]
+    monkeypatch.setattr(inputs, "latest_case", lambda cid: copy.deepcopy(case))
+    with pytest.raises(ValueError, match="private"):
+        inputs.run_inputs(["home-1"], "locate")
+    public = _case()
+    monkeypatch.setattr(runner, "latest_case", lambda cid: case if cid == "home-1" else public)
+    monkeypatch.setattr(runner, "_executor", lambda *a, **k: (dict(CLEAN), None))
+    with pytest.raises(ValueError, match="share a run folder"):
+        runner.run_bench(["home-1", "oyster-bay"], run_dir=None, profile="locate")
+
+
+def test_a_private_case_entry_carries_nothing_that_places_it(private_home):
+    case = json.loads(private_home.read_text())["cases"][0]
+    cases.validate_case(case, cases.manifest_files())
+    bad = copy.deepcopy(case)
+    bad["labels"]["reference"] = {"site": "home", "lat": 40.8765, "lon": -73.525}
+    with pytest.raises(cases.CaseError, match="no coordinate"):
+        cases.validate_case(bad, cases.manifest_files())
+    bad = copy.deepcopy(case)
+    bad["search"]["bbox"] = [40.4, 41.3, -74.4, -72.6]
+    with pytest.raises(cases.CaseError, match="search box"):
+        cases.validate_case(bad, cases.manifest_files())

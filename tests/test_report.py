@@ -110,3 +110,22 @@ def test_the_index_links_each_page(tmp_path):
              {"case": "b", "status": "error", "note": "report failed: X"}]
     text = report.render_index(tmp_path, pages, title="run").read_text()
     assert '<a href="a/report.html">a</a>' in text and "report failed: X" in text
+
+
+def test_a_site_relative_record_renders_with_no_coordinate_and_no_export(tmp_path):
+    rec = json.loads((FIXTURES / "v2-locate-ambiguous" / "result.json").read_text())
+    for c in rec["candidates"]:
+        c["offset_m"] = {"east": round((c.pop("lon") + 73.525) * 84000, 1), "north": round((c.pop("lat") - 40.8765) * 111000, 1)}
+    rec["refined"]["offset_m"] = {"east": 30.0, "north": -40.0}
+    del rec["refined"]["lat"], rec["refined"]["lon"]
+    rec["provenance"]["parameters"]["search"]["bbox"] = {"offset_box_m": [-50000.0, 48000.0, -76000.0, 75000.0]}
+    rec["frame"], rec["site"] = "site-relative", "home"
+    rec["funnel"]["triples_file"] = report.unavailable("not in this fixture") if hasattr(report, "unavailable") else \
+        {"unavailable": "not in this fixture"}
+    (tmp_path / "rec").mkdir()
+    (tmp_path / "rec" / "result.json").write_text(json.dumps(rec))
+    page = report.render_report(tmp_path / "rec" / "result.json")
+    text = page.read_text()
+    assert "could not be drawn" not in text and "offsets from its site" in text and "km north of the site" in text
+    assert not (page.parent / "candidates.geojson").exists() and "absolute by nature" in text
+    assert "40.87" not in text and "-73.5" not in text

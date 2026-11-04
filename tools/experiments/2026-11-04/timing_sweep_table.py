@@ -11,7 +11,8 @@ pair survives within 250 m and its count reaching scoring is at most that case's
 (raw-defaults / saved-defaults). Of the passing cells, the one with the smallest total count over the three is
 adopted; each case's count is shown too.
 
-usage: timing_sweep_table.py RUN_FOLDER   (writes sweep_table.json and prints the table)"""
+usage: timing_sweep_table.py RUN_FOLDER   (writes sweep_table.json and prints the table)
+timing_sweep.py calls main() with its finished cells' folders instead of sweep.log's."""
 import json
 import re
 import sys
@@ -49,8 +50,8 @@ def case_rows(run_dir: Path) -> dict:
     return rows
 
 
-def main(folder: Path):
-    rr = runs(folder)
+def main(folder: Path, rr: dict | None = None):
+    rr = runs(folder) if rr is None else rr
     table = {label: {"exit": ex, "run_dir": str(d), "cases": case_rows(d)} for label, (ex, d) in rr.items() if ex == 0}
     base = {"raw": table["raw-defaults"]["cases"], "saved": table["saved-defaults"]["cases"]}
     cells = {}

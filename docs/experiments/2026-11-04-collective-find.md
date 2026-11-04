@@ -159,3 +159,17 @@ Twelve units on 12 spot 8xlarge boxes, the unit shards relaunched after spot int
 - **Its z values drop.** Widening the sweep from ±5 % to ±10 % took a2baea from z 6.59 to 4.95, and a336e4 from 2.44 to 1.80, about × 0.75 each. Going to ±25 % should cost a similar factor again: about 3.5 and 1.3.
 - **Both should stay matched.** The margin rule can only add cells, so it can't drop the eagle cam's winning cell. Its second mode (9.37 against 16.27) leaves room.
 - **I expect the eagle cam's location and matched set unchanged,** with lower z, and ace391 reachable at Oyster Bay. Whether Oyster Bay's true cell then wins is what the coarse map's rank says first.
+
+**The log-frequency gather, measured before any run** (03c6a39). On the unit test's synthetic pass (8192-point STFT at 0.5 s; 33 shifts, 160 times), 50 calls each, on the Mac:
+
+| Scorer | f0 points | Per call |
+|---|---|---|
+| `EventWindow.sweep_scores` (bilinear), ±10 % | 41 | 5.52 ms |
+| `LogView.sweep_scores` (gather), ±10 % | 43 | 1.47 ms |
+| `LogView.sweep_scores`, ±25 % | 104 | 3.59 ms |
+
+- **Accuracy.** On the true curve the gather scores 12.58 against the bilinear sampler's 12.96; the log grid's second interpolation costs 3 %. Its maximum lands at f0 scale 0.9705, against the truth's 0.9709.
+- **Cost.** Building each window's matrix takes 4.4 ms. The ±25 % sweep costs 0.65× today's ±10 % per evaluation, so the per-cell estimate falls from 21 min to about 0.65 × 510 s ≈ 5.5 min on an 8xlarge.
+- **The unit test** passes on the new code: 1.0 s as committed, 4.8 s at ±25 % with 200 null draws. Both flights are matched at the observer.
+- **The real per-cell time** is the coarse stage's top-cell fine stage; it's reported before the fine stage launches.
+- **The look-elsewhere cost.** ±25 % of f0 freedom per candidate flight lets wrong flights fit as easily as true ones. Each window's null and the other-day null are drawn under the same ±25 % rule, so the cost is priced in both before any margin is read.

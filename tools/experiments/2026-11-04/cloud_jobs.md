@@ -4,7 +4,9 @@ The heavy drivers here, as SDE-E's `tools/aws/runs launch` will run them. Use th
 
 ## What every driver does
 
-The shared part is [`tools/data/shards.py`](../../data/shards.py), tested in `tests/test_shards.py`.
+The shared part is [`tools/data/shards.py`](../../data/shards.py), tested in `tests/test_shards.py`. It is the repo's
+one shard, resume and merge mechanism. SDE-C's `units.py`, built for its jobs at the same time, gives way to it once
+both sets of jobs have run once.
 - **One command.** It runs from the commit `runs` bundles. The run folder is the positional `RUN`, else `$RUN`
   (the box sets it), else a new one from `new_run.py`. run.json keeps new_run.py's fields, or the box's, and
   adds `driver` (script, parameters) and `invocations` (argv, shard, resume, merge).
@@ -21,17 +23,15 @@ The shared part is [`tools/data/shards.py`](../../data/shards.py), tested in `te
 
 ## The jobs
 
-Times are from the Mac runs named below. That Mac has 10 performance cores and its load average was 30–90
-throughout, so the core-hours are upper bounds. Box-hours assume one .16xlarge (64 vCPU). Splitting a job across
-boxes can't bring it under its longest unit.
+| Job | Command (from the repo root) | Units |
+|---|---|---|
+| Stage B A1/A3 (`hypotheses-pairs`) | `event_pairs_z.py --hypotheses --detected $DOPPLERTRACK_DATA/runs/2026-11-04-bench-5314396-raw-audio-t2 --case eagle-cam-clip-18000s oyster-bay oyster-bay-moved-wsw150` | 30 searches |
+| Stage A comparable score (`comparable-score`) | the same without `--hypotheses` | 30 searches |
+| Event pairs by raw score (SDE-B's `event_pairs.py`) | the same with `--score raw` | 30 searches |
+| B1/B2 (`hypotheses-b1b2`) | `hypotheses_b1b2.py` | 3 cases |
+| Item 1's timing sweep (`timing-sweep`) | `timing_sweep.py` | 45 `bench run` cells |
 
-| Job | Command (from the repo root) | Units | Measured on the Mac | Box-hours |
-|---|---|---|---|---|
-| Stage B A1/A3 (`hypotheses-pairs`) | `event_pairs_z.py --hypotheses --detected $DOPPLERTRACK_DATA/runs/2026-11-04-bench-5314396-raw-audio-t2 --case eagle-cam-clip-18000s oyster-bay oyster-bay-moved-wsw150` | 30 searches | 26 of 30 took 14,913 s at 4 workers each (16.6 core-h). The longest, eagle cam d1+d5, took 6,217 s | about 2, set by the longest search; one box, one shard |
-| Stage A comparable score (`comparable-score`) | the same without `--hypotheses` | 30 searches | 3,469 s at 4 workers each (3.9 core-h); the longest took 268 s | under 0.2; one box |
-| Event pairs by raw score (SDE-B's `event_pairs.py`) | the same with `--score raw` | 30 searches | below stage A (no nulls) | under 0.2 |
-| B1/B2 (`hypotheses-b1b2`) | `hypotheses_b1b2.py` | 3 cases | 398 s at 4 workers (retune run) | under 0.1; not worth sharding |
-| Item 1's timing sweep (`timing-sweep`) | `timing_sweep.py` | 45 `bench run` cells | 8,542 s at the default 10 workers (at most 23.7 core-h) | about 0.5 per box over 3 shards |
+Splitting a job across boxes can't bring it under its longest unit.
 
 **Inputs** (from each driver's `--inputs`):
 - **Pairs jobs.** The three cases, plus each case's `detected.json` in

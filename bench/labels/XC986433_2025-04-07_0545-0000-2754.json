@@ -1,0 +1,30 @@
+{
+ "format": 1,
+ "recording": {
+  "id": "XC986433_2025-04-07_0545",
+  "source": "raw/audio/xenocanto/XC986433_2025-04-07_0545.mp3",
+  "sha256": "589f7966944c9baa2731460d016e6ccdf0fde8080d41cad564aadf3c75fcbc25",
+  "t0_utc": null,
+  "case": null
+ },
+ "span": [
+  0.0,
+  2754.515
+ ],
+ "sheets": null,
+ "windows": [
+  {
+   "id": "xc986433-a01",
+   "class": "absent",
+   "start": 0.0,
+   "end": 2754.515,
+   "lines": [],
+   "harmonics": 0,
+   "labeller": "by construction: a jet-only recording, no propeller pass (data root MANIFEST.md, xeno-canto section)",
+   "blind": true,
+   "date": "2026-11-04",
+   "notes": "no propeller pass within 12 km; 9-14 jet passes, whose detections are false alarms (E5)"
+  }
+ ],
+ "associations": []
+}

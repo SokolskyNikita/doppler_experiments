@@ -1,5 +1,10 @@
 # Parallel CPA build and scoring
 
+<!-- index
+question: Does the parallel CPA build give the serial table byte for byte, and does any output depend on `--jobs`?
+outcome: Yes and no: every table, search CSV and detection is identical; Oyster Bay's cold CPA build takes 26 s at 10 jobs (405 s before), once the cache is saved uncompressed
+-->
+
 ## Question
 
 PLAN Phase 1, item 1. Does building the CPA table in a process pool, with track samples pruned by tile,

@@ -1,5 +1,10 @@
 # adsbfetch as a flight-data source (2026-11-04)
 
+<!-- index
+question: Is the user's adsbfetch CLI (free tar1090 mirrors) a better flight-data source than our adsb.lol tars?
+outcome: Not as a replacement: denser tracks at CPA (gap ~10 s against ~20 s, 2–3× points), Oyster Bay unchanged, but the eagle cam flips to a wrong pair 14 km off on the mirrors' trajectories. 13 bugs found, 11 fixed
+-->
+
 **Question.** The user's `adsbfetch` CLI (/Users/nsokolsky/projects2/adsb_data_fetcher) reads tar1090 globe history from four networks: adsbx, which needs a session cookie the user supplies by hand, and three free mirrors, adsbfi, airplanes.live and adsb.lol. Three questions:
 1. Does it work?
 2. Is its data better than our adsb.lol day-tar cuts where we need it?

@@ -44,3 +44,29 @@ def test_fit_cli_defaults_to_brightness(tmp_path, monkeypatch):
     cli.main(["fit", str(spec), "--window", "100", "140", "--band", "100", "150"])
     cli.main(["fit", str(spec), "--window", "100", "140", "--band", "100", "150", "--objective", "contrast"])
     assert seen == ["brightness", "contrast"]
+
+
+def test_a_band_with_nothing_to_search_gives_a_weak_fit():
+    """A band too narrow for its fundamental range (f_lo*1.15 >= f_hi*0.85) returns a weak fit, not an error."""
+    sp = _uniform()
+    for f_lo, f_hi in ((140, 150), (414, 450)):
+        ev = fit_event(sp, 100, 140, f_lo, f_hi, c=340.0)
+        assert ev.weak and ev.weak.startswith("band narrower than the f0 search margins") and np.isnan(ev.f0)
+    assert fit_event(sp, 140, 100, 100, 150, c=340.0).weak            # an empty window
+    ok = fit_event(sp, 100, 140, 100, 150, c=340.0)
+    assert ok.weak is None and "weak" not in ok.to_dict()             # a fit's JSON is unchanged
+    assert EventFit(**ok.to_dict()) == ok and EventFit(**ev.to_dict()).weak == ev.weak
+
+
+def test_a_band_narrower_than_the_f0_margins_around_a_real_tone_gives_a_weak_fit():
+    """grid_search searches f0 from 1.15 f_lo to 0.85 f_hi, empty whenever f_hi/f_lo < 1.15/0.85 = 1.353, whatever
+    the curve: SDE-D's Livermore R35, R08, R51 and 654 Alaska crossings. A band of ratio 1.3 around a real tone."""
+    from dopplertrack.doppler import ideal_curve
+    t, f = np.arange(0, 400, 0.5), np.arange(40, 300, 0.5)
+    S = np.zeros((len(f), len(t)), np.float32)
+    curve = ideal_curve(t, 120.0, 60.0, 1500.0, 200.0, c=340.0)
+    on = np.isfinite(curve)
+    S[np.rint((curve[on] - f[0]) / 0.5).astype(int), np.flatnonzero(on)] = 10.0
+    ev = fit_event(Spectrogram(t, f, S), 120, 280, 105.0, 136.5, c=340.0)
+    assert ev.weak and ev.weak.startswith("band narrower than the f0 search margins") and "1.300" in ev.weak
+    assert np.isnan(ev.v) and not np.isfinite(ev.score)

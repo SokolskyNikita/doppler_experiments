@@ -25,9 +25,20 @@ class EventFit:
     score: float        # mean whitened dB along the fitted curve
     f_pre: float
     f_post: float
+    weak: str | None = None  # why the fit couldn't be made (the other fields are then NaN); None for a fit
 
     def to_dict(self):
-        return asdict(self)
+        """The fields as a dict; `weak` only when set, so existing JSON is unchanged."""
+        d = asdict(self)
+        if d["weak"] is None:
+            del d["weak"]
+        return d
+
+    @classmethod
+    def unfit(cls, t_start: float, t_end: float, reason: str) -> "EventFit":
+        nan = float("nan")
+        return cls(t_cpa=nan, t_cpa_emit=nan, f0=nan, v=nan, d=nan, t_start=t_start, t_end=t_end, score=nan,
+                   f_pre=nan, f_post=nan, weak=reason)
 
 
 def local_whiten(sp: Spectrogram, floor: float = 0.0) -> Spectrogram:
@@ -166,6 +177,15 @@ def fit_event(sp: Spectrogram, t_start: float, t_end: float, f_lo: float, f_hi: 
     c = speed_of_sound() if c is None else c
     pad = 0.3 * (f_hi - f_lo)
     win = sp.crop(t_start - 30, t_end + 30, max(f_lo - pad, sp.f[0]), min(f_hi * harmonics + pad, sp.f[-1]))
+    # a search with nothing to search returns a weak fit with its reason, not an error
+    f0_lo, f0_hi = (f_lo * 1.15, f_hi * 0.85) if init is None else (max(init[0] - 12, 1), init[0] + 12)
+    if not f0_lo < f0_hi:   # grid_search takes f0 from 1.15 f_lo to 0.85 f_hi: empty when f_hi/f_lo < 1.15/0.85
+        return EventFit.unfit(t_start, t_end, f"band narrower than the f0 search margins: f_hi/f_lo = "
+                                              f"{f_hi / f_lo:.3f} < {1.15 / 0.85:.3f} for {f_lo:g}-{f_hi:g} Hz, "
+                                              f"so the f0 range {f0_lo:g}-{f0_hi:g} Hz is empty")
+    if not t_start < t_end or len(win.t) < 2 or len(win.f) < 2:
+        return EventFit.unfit(t_start, t_end, f"the window {t_start:g}-{t_end:g} s and band {f_lo:g}-{f_hi:g} Hz "
+                                              "hold no spectrogram to fit")
     if whiten:
         win = local_whiten(win)
     if init is None:

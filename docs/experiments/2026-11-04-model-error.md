@@ -1,5 +1,10 @@
 # Model error of the straight-pass fit on Livermore, stage 1 (2026-11-04)
 
+<!-- index
+question: How much of the straight-pass fit's error on Livermore is model error, noise or the optimiser, and what is the information limit?
+outcome: Model error: a median 15.6 % in slant range from the trajectory curve alone, about 3× the Cramér–Rao bound (3.4–4.0 %, 63–74 m, provisional covariance); noise sits at the bound and the optimiser is exact. f0 drift of 0.5 % enters; temperature, interpolation and datum don't
+-->
+
 **Question** (PLAN Phase 2 item 2). How much of the fit error on real passes is model error, meaning a turning, climbing or accelerating aircraft fitted as a straight constant-speed pass? How much is measurement noise, and how much is the optimiser? Before that: how much does one pass's curve tell us at all?
 
 ## The information limit (read the rest against this)

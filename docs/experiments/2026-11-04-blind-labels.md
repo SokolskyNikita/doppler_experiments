@@ -1,5 +1,10 @@
 # Blind layer-1 labels and their flight association (2026-11-04)
 
+<!-- index
+question: In three blind-labelled 20 min clips, how many tonal events does an ADS-B pass explain?
+outcome: A lead, from first-pass labels: few. 1 of 11 at Oyster Bay, 0 of 6 at ESID 740, 1–3 of 6 at the eagle cam; most passes within 12 km aren't visible
+-->
+
 **Question.** PLAN 5.3 asks for whole clips labelled blind (layer 1: is a tone or flyover there?) before any ADS-B is shown, then associated with the passes (layer 2). In a few short clips, how many tonal events are there, and how many of them does an ADS-B pass explain?
 
 **Setup.** No change to the package. New tool `tools/data/label_sheet.py`, with three steps:

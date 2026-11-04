@@ -1,5 +1,10 @@
 # Joining flight data across UTC midnight (2026-11-04)
 
+<!-- index
+question: Can flight data be joined across UTC midnight without changing one-day cases?
+outcome: Yes: ESID 375 joins 5 of its 7 midnight seams and 937 its one; one-day cases are unchanged
+-->
+
 ## Question
 
 ESID 375 and 937 record for about 25 h from 2024-04-07 into 2024-04-08, and ESID 740 and 710 cross midnight by

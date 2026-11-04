@@ -9,8 +9,9 @@ start=$SECONDS
 echo "== ruff (pyflakes rules)"
 uv run --frozen ruff check --select F src tests
 
-echo "== mypy (tracks.py)"
-uv run --frozen mypy --follow-imports=silent --ignore-missing-imports src/dopplertrack/tracks.py
+echo "== mypy (tracks.py, search.py, parallel.py)"
+uv run --frozen mypy --follow-imports=silent --ignore-missing-imports src/dopplertrack/tracks.py \
+    src/dopplertrack/search.py src/dopplertrack/parallel.py
 
 echo "== pytest (offline; the opt-in recording is excluded)"
 pytest_start=$SECONDS

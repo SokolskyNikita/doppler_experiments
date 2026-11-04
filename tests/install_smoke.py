@@ -1,5 +1,6 @@
 """Run against an installed wheel, outside the checkout, without pytest or network data."""
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -25,8 +26,9 @@ def main():
         subprocess.run([str(cli), "spectrogram", str(wav), str(spec)], check=True)
         sp = Spectrogram.load(spec)
         assert sp.S.shape[1] > 1 and np.isfinite(sp.S).all()
+        env = {**os.environ, "DOPPLERTRACK_CACHE": str(root / "cache")}     # detect caches its result
         result = subprocess.run([str(cli), "detect", str(spec), "--band", "100", "130",
-                                 "--top", "1", "--out", str(events)], check=True, capture_output=True, text=True)
+                                 "--top", "1", "--out", str(events)], check=True, capture_output=True, text=True, env=env)
         assert json.loads(events.read_text()) == []
         assert "no flyovers found" in result.stdout
     print("installed-wheel smoke test passed")

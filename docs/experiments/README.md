@@ -13,6 +13,7 @@ Oyster Bay and the eagle cam shaped the method, so every result on them is devel
 
 | Record | Question | Outcome |
 |---|---|---|
+| [2026-11-04-parallel-cpa](2026-11-04-parallel-cpa.md) | Does the parallel CPA build give the serial table byte for byte, and does any output depend on `--jobs`? | Yes and no: every table, search CSV and detection is identical; Oyster Bay's cold CPA build takes 26 s at 10 jobs (405 s before), once the cache is saved uncompressed |
 | [2026-11-04-bench-seed-cases](2026-11-04-bench-seed-cases.md) | Does the benchmark runner reproduce the saved-fit results, and what do the seed cases give? | Yes: Oyster Bay 1st of 328, 123 m / 43 m, 4.9 %, locations bit-identical; the eagle-cam clip matches the full recording; both moved-box negatives return wrong answers (north 148 km off by 3.2 %, WSW 182 km off by 10.7 %) with margins above the true positives' |
 | [2026-11-04-site-traffic](2026-11-04-site-traffic.md) | Which Eclipse and A2O recordings have prop passes within 6 and 12 km during their actual hours? | ESID 375, 740 and 710 have 3–10 within 6 km and 937 none in 25 h; A2O Townsville 10–12, Aroona 1, Duval 0. Townsville's published point is 1.77 km from its file-name GPS fix, beyond MANIFEST's obfuscation bound |
 | [2026-11-04-blind-labels](2026-11-04-blind-labels.md) | In three blind-labelled 20 min clips, how many tonal events does an ADS-B pass explain? | A lead, from first-pass labels: few. 1 of 11 at Oyster Bay, 0 of 6 at ESID 740, 1–3 of 6 at the eagle cam; most passes within 12 km aren't visible |

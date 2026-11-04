@@ -12,7 +12,11 @@ def _synth_trace(icao, t, enu, lat0, lon0, gs):
     return Trace(icao, None, "C172", "synthetic", t, lat, lon, alt, np.full_like(t, gs), np.zeros(len(t), bool))
 
 
-def test_true_observer_ranks_first():
+def test_true_observer_ranks_first(monkeypatch):
+    """To fit the Tier 0 budget, detect runs on a 7x7 speed and distance grid and each fit starts from its
+    detection with init=, so this test doesn't exercise fit_event's grid search over a whole window and
+    band without a starting point. The opt-in Oyster Bay test covers that on real data, and
+    test_fit_objective on a uniform spectrogram."""
     c = 340.0
     lat0, lon0 = 40.8765, -73.525
     sr = 4000
@@ -40,14 +44,18 @@ def test_true_observer_ranks_first():
         x[m] += 0.05 * np.sin(ph[m])
     sp = audio.compute_spectrogram(x, sr, nperseg=8192, hop_s=0.5, fmin=60, fmax=300, whiten_window_s=None)
 
-    found = tracks.detect_events(sp, 90, 180, c=c, top=4, refine=False, workers=1)
+    found = tracks.detect_events(sp, 90, 180, c=c, top=4, refine=False, workers=1,
+                                 v_grid=np.arange(40, 170, 19.0), d_grid=np.geomspace(400, 9000, 7))
     cpas = sorted(e.t_cpa for e in found[:2])
     assert abs(cpas[0] - (300 + 2500 / c)) < 15 and abs(cpas[1] - (1220 + 3000 / c)) < 15, [e.t_cpa for e in found]
 
-    ev1 = tracks.fit_event(sp, 230, 400, 90, 170, c=c)
-    ev2 = tracks.fit_event(sp, 1150, 1310, 100, 180, c=c)
+    # each fit starts from its detection, as detect's refinement does, so the grid search spans
+    # ±30 s and ±12 Hz around it instead of the whole window and band
+    first, second = [(e.f0, e.v, e.d, e.t_cpa_emit) for e in sorted(found[:2], key=lambda e: e.t_cpa)]
+    ev1 = tracks.fit_event(sp, 230, 400, 90, 170, c=c, init=first)
+    ev2 = tracks.fit_event(sp, 1150, 1310, 100, 180, c=c, init=second)
     assert abs(ev1.v - 110) < 25 and abs(ev2.v - 95) < 25
-    evb = tracks.fit_event(sp, 1150, 1310, 100, 180, c=c, objective="brightness")    # what `fit` uses
+    evb = tracks.fit_event(sp, 1150, 1310, 100, 180, c=c, init=second, objective="brightness")    # what `fit` uses
     assert abs(evb.v - 95) < 25 and abs(evb.t_cpa - ev2.t_cpa) < 6
     dt_meas = ev2.t_cpa - ev1.t_cpa
     assert abs(dt_meas - (1220 - 300 + 3000 / c - 2500 / c)) < 6   # heard-CPA offset
@@ -79,7 +87,10 @@ def test_true_observer_ranks_first():
     segs2 = pipeline.segments_for_search(traces, (lat0 - 0.05, lat0 + 0.05, lon0 - 0.06, lon0 + 0.06), lat0, lon0)
     row = pipeline.relocate_row(row, segs2, ev2.t_cpa - ev1.t_cpa)
     assert segs2[int(row.seg1)].icao == "aaa001" and segs2[int(row.seg2)].icao == "aaa002"
-    fine = pipeline.refine(sp, ev1, ev2, segs2, row, spacing_m=250.0, half_m=500.0, extra=[ev2], c=c)
+    fine = pipeline.refine(sp, ev1, ev2, segs2, row, spacing_m=250.0, half_m=500.0, extra=[ev2], c=c, workers=1)
+    monkeypatch.setattr(pipeline, "SCORE_CHUNK", 5)            # several chunks, so two workers both get some
+    pooled = pipeline.refine(sp, ev1, ev2, segs2, row, spacing_m=250.0, half_m=500.0, extra=[ev2], c=c, workers=2)
+    pd.testing.assert_frame_equal(pooled, fine, check_exact=True)
     assert fine.attrs["extra_icao"] == ["aaa002"]
     assert np.allclose(fine.s3, fine.s2) and np.allclose(fine.score, fine.s1 + fine.s2 + fine.s3)
     assert np.hypot(*(np.array([(fine.lat[0] - lat0) * 111320, (fine.lon[0] - lon0) * 111320 * np.cos(np.radians(lat0))]))) < 600.0

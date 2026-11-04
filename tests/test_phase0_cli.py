@@ -73,7 +73,8 @@ def test_event_selection_rejects_invalid_ranks_and_formats(tmp_path, files, pick
         cli.load_events([tmp_path / f for f in files], picks)
 
 
-def test_silent_audio_has_no_detections(tmp_path, capsys):
+def test_silent_audio_has_no_detections(tmp_path, capsys, monkeypatch):
+    monkeypatch.setenv("DOPPLERTRACK_CACHE", str(tmp_path / "cache"))
     sp = audio.compute_spectrogram(np.zeros(4000 * 8, np.float32), 4000)
     assert tracks.detect_events(sp, 100, 130, workers=1) == []
     spec, out = tmp_path / "silence.npz", tmp_path / "events.json"
@@ -81,6 +82,25 @@ def test_silent_audio_has_no_detections(tmp_path, capsys):
     cli.main(["detect", str(spec), "--band", "100", "130", "--out", str(out)])
     assert json.loads(out.read_text()) == []
     assert "no flyovers found" in capsys.readouterr().out
+
+
+def test_cli_detect_reuses_cached_detections(tmp_path, monkeypatch):
+    monkeypatch.setenv("DOPPLERTRACK_CACHE", str(tmp_path / "cache"))
+    calls = []
+
+    def fake_detect(sp, f_lo, f_hi, **kwargs):
+        calls.append(kwargs["workers"])
+        return [_event(100, 7)]
+
+    monkeypatch.setattr(tracks, "detect_events", fake_detect)
+    spec, outs = tmp_path / "spec.npz", [tmp_path / "a.json", tmp_path / "b.json", tmp_path / "c.json"]
+    _spec().save(spec)
+    args = ["detect", str(spec), "--band", "100", "130", "--top", "3"]
+    cli.main(args + ["--jobs", "1", "--out", str(outs[0])])
+    cli.main(args + ["--jobs", "4", "--out", str(outs[1])])     # workers don't change what is detected
+    assert calls == [1] and outs[0].read_text() == outs[1].read_text()
+    cli.main(args + ["--top", "2", "--out", str(outs[2])])       # another parameter is another entry
+    assert len(calls) == 2
 
 
 def test_min_score_is_applied_to_refined_scores(monkeypatch):

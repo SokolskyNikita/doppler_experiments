@@ -15,7 +15,10 @@ A fuller day-box count alone doesn't decide.
 - The fetcher's checkout was read and run, never edited.
 - `.env` and the captured curl files were never opened.
 - No adsbx data was fetched, with one exception: the fixed smoke script used the `.env` session for one request (part 1).
-- Every request went at the CLI's own pace: serial, 2 s apart.
+- Requests were serial, but **not all 2 s apart** (corrected later the same day). The CLI's throttle holds within one process only, and the scripts started one `trace` process per aircraft and source, so consecutive traces went out as fast as a process starts. Replays were one process each and kept the 2 s pace.
+  - This morning's runs have no request log. The windowed traces in `wtraces2/` (914 files, 03:53–04:04) imply about 0.7 s per request.
+  - In the afternoon's adsbx refetch, which has per-call manifests, 562 of 651 network requests came under 2 s apart (median 0.61 s).
+  - The free-mirror refetch was stopped at 14:19Z, after 206 of its first 409 network requests came under 2 s, and resumed with 2 s after every call.
 - Outputs went to run folders. While bug 13 was open, every source got its own `--cache-dir`; with 0.3.0 that's no longer needed.
 
 ## 1. Does it work

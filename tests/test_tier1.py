@@ -22,7 +22,7 @@ def det(t, f0, score=5.0):
 
 def test_matched_missed_and_extra_with_the_uncertain_window_counted_nowhere():
     m = tier1.match([det(150, 95), det(250, 120), det(350, 180)], WINDOWS)
-    assert m["clear"] == {"windows": 2, "matched": 1, "missed": 1}
+    assert m["clear"] == {"windows": 2, "matched": 1, "missed": 1, "outside_model": 0}
     assert m["extra"] == {"total": 1, "by_window_class": {"absent": 1}}
     assert m["excluded_detections"] == 1
 
@@ -107,3 +107,22 @@ def test_the_trajectory_reference_of_a_straight_pass():
     assert ref["ground_speed_m_s"] == pytest.approx(v, rel=0.01)
     # the heard curve falls fastest at the emission CPA, R/c before the heard CPA (PLAN 6.1)
     assert ref["t_steepest_fall_s"] == pytest.approx(1000.0, abs=1.0)
+
+
+def test_a_window_with_only_rising_lines_is_outside_the_model_not_a_miss():
+    windows = WINDOWS + [{"index": 4, "class": "clear", "start": 600.0, "end": 700.0, "lines": [[150, 205]]}]
+    m = tier1.match([det(650, 180)], windows)          # on the rising line, inside the window
+    assert m["clear"] == {"windows": 2, "matched": 0, "missed": 2, "outside_model": 1}
+    assert m["extra"]["total"] == 0 and m["excluded_detections"] == 1
+    assert tier1.rising([150, 205]) and not tier1.rising([235, 165])
+
+
+@pytest.mark.parametrize("span", tier1.load_tier1()["spans"], ids=lambda s: s["id"])
+def test_the_committed_labels_fit_what_tier1_reads(span):
+    labels = json.loads((tier1.REPO / span["labels"]).read_text())
+    (a, b), windows = tier1.span_inputs(labels)
+    assert a < b and windows and all(set(w) == {"window", "start", "end", "lines"} for w in windows)
+    ids = {w["id"]: w for w in labels["windows"]}
+    for assoc in labels["associations"]:
+        if isinstance(assoc["flight"], dict):
+            assert 0 <= assoc["line"] < len(ids[assoc["window"]]["lines"])

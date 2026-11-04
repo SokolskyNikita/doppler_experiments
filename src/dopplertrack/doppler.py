@@ -15,6 +15,16 @@ def speed_of_sound(temp_c: float = 15.0) -> float:
     return 331.3 * np.sqrt(1.0 + temp_c / 273.15)
 
 
+LAPSE_C_PER_KM = 6.5       # the standard atmosphere's lapse rate
+
+
+def mid_height_temperature(ground_c: float, aircraft_height_m: float) -> float:
+    """The air temperature halfway up a slant path to an aircraft at this height above the ground, which the
+    path's harmonic-mean sound speed follows to about 0.2 % (PLAN Phase 2 item 2): ground - 3.25 C per km.
+    Winter inversions, which a station can't see, are the exception."""
+    return ground_c - LAPSE_C_PER_KM / 2 * aircraft_height_m / 1000.0
+
+
 def observed_frequency(f0, range_rate, c):
     """Frequency heard for a source of rest frequency f0 with range rate dr/dt
     (positive = receding)."""

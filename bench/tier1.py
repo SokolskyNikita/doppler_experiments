@@ -449,7 +449,7 @@ def case_events(case: dict, profile: str, out_dir: Path, code: dict, workers: in
     from dopplertrack.result import file_entry
     from dopplertrack.tracks import detect_events
 
-    from .runner import PROFILES, pick_detected, saved_fit_dicts, search_harmonics
+    from .runner import PROFILES, pick_detected, saved_fit_dicts, search_harmonics, sound_speed
     assert "labels" not in case, "the known point's events must be chosen blind"
     if profile not in KP_PROFILES:
         raise ValueError(f"known-point profile must be one of {KP_PROFILES}")
@@ -469,7 +469,8 @@ def case_events(case: dict, profile: str, out_dir: Path, code: dict, workers: in
             crop = sp.crop(fit["t_start"] - margin, fit["t_end"] + margin)
             params = dict(f_lo=d["band_hz"][0], f_hi=d["band_hz"][1], harmonics=d["harmonics"], top=DETECT_TOP,
                           window_s=d["window_s"], min_score=0.0)
-            found = [e.to_dict() for e in cached_detections(crop, detect_events, workers=workers, **params)
+            found = [e.to_dict() for e in cached_detections(crop, detect_events, workers=workers, **params,
+                                                            **sound_speed(case)[0])
                      if fit["t_start"] <= e.t_cpa <= fit["t_end"]]
             out["detection_key"].append(detection_key(crop, detect_events, **params))
             if not found:
@@ -481,7 +482,7 @@ def case_events(case: dict, profile: str, out_dir: Path, code: dict, workers: in
         params = dict(f_lo=d["band_hz"][0], f_hi=d["band_hz"][1], harmonics=d["harmonics"], top=d["top"],
                       window_s=d["window_s"])
         out["events"] = pick_detected([e.to_dict() for e in cached_detections(sp, detect_events, workers=workers,
-                                                                                **params)])
+                                                                                **params, **sound_speed(case)[0])])
         out["detection_key"] = detection_key(sp, detect_events, **params)
     out_dir.mkdir(parents=True, exist_ok=True)
     _write_hashed(out_dir / EVENTS_FILE, out)
@@ -498,7 +499,7 @@ def known_point(case: dict, out_dir: Path, reference: dict, true_pair, log=print
     from dopplertrack.terrain import Terrain
     from dopplertrack.tracks import EventFit
 
-    from .runner import trace_paths
+    from .runner import sound_speed, trace_paths
     try:
         ev = _read_hashed(out_dir / EVENTS_FILE)
     except (OSError, IndexError, RecordError, ValueError) as exc:
@@ -513,7 +514,7 @@ def known_point(case: dict, out_dir: Path, reference: dict, true_pair, log=print
     res, _ = pipeline.run_search(sp, ev1, ev2, traces, grid, harmonics=tuple(ev["harmonics"][:2]), tol_s=s["tol_s"],
                                  v_tol=s["v_tol"], d_tol=tuple(s["d_tol"]), silence_d_m=s["silence_d_m"],
                                  max_range_m=s["max_range_m"], progress=False, trace_metadata=meta,
-                                 search_bbox=(lat, lat, lon, lon), workers=1)
+                                 search_bbox=(lat, lat, lon, lon), workers=1, **sound_speed(case)[0])
     best = res.sort_values("score", ascending=False, kind="stable").drop_duplicates(["icao1", "icao2"])
     pairs = [{"flights": [str(r.icao1), str(r.icao2)], "score": float(r.score), "event_scores": [float(r.s1), float(r.s2)],
               "shift_s": float(r.shift)} for r in best.itertuples()]
@@ -537,18 +538,17 @@ def reference_context(span: dict, labels: dict):
     """For the comparison step only: the span's flight data, observer and clock, from its reference case's
     labels and the label file's own clock (both truth)."""
     from dopplertrack.adsb import join_days
-    from dopplertrack.doppler import speed_of_sound
     from dopplertrack.terrain import Terrain
 
     from .cases import case_labels, latest_case
-    from .runner import trace_paths
+    from .runner import sound_speed, trace_paths
     case = latest_case(span["reference_case"])
     ref = case_labels(case["id"], case["version"])["reference"]
     lat, lon = float(ref["lat"]), float(ref["lon"])
     elev = float(Terrain().elevation(np.array([lat]), np.array([lon]))[0]) if case["search"]["dem"] else 0.0
     traces, _ = join_days(trace_paths(case))
     t0 = datetime.datetime.fromisoformat(labels["recording"]["t0_utc"].replace("Z", "+00:00")).timestamp()
-    return traces, np.array([0.0, 0.0, elev]), lat, lon, t0, speed_of_sound()
+    return traces, np.array([0.0, 0.0, elev]), lat, lon, t0, sound_speed(case)[1]["c_m_s"]
 
 
 BACKGROUND_FAMILIES = ("essex", "aerosonicdb")      # recordings with nothing to find (PLAN 5.1 negatives)

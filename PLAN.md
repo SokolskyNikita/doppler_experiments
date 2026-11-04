@@ -91,10 +91,14 @@ Execution errors (unreadable audio, a missing ffmpeg, a network failure) are rep
 - the two development recordings, Oyster Bay (1 h) and the eagle cam (12 h);
 - four Eclipse Soundscapes sites recorded on 2024-04-07, CC BY 4.0;
 - seven xeno-canto recordings: one usable single-flyover case, and three Essex recordings that contain only jets;
+- the Livermore corpus (Pathak 2026, CC BY 4.0): 40 phone recordings of one light-aircraft pass each, with the published frequency track, the ADS-B track and a results table. Real passes with trajectory truth, for Phase 2 (5.6);
+- aircraft and environmental audio for detection work only: AeroSonicDB v1.1.2, DataSED, DataSEC and three A2O soundscapes. None has precise microphone positions, and none but Livermore has flight data on disk. All but A2O are non-commercial licences;
 - flight data for each recording's day: 2024-04-07 for the Eclipse sites, but not yet 04-08, which two of them run into. The development cases also have the day before, plus METAR reports and upper-air soundings;
 - 16 papers and books.
 
 None of the non-development audio has been searched yet. A recording session in Seattle is being planned.
+
+Three open-source projects attack the same problem, all started in November 2026. What they report and what we take from them is in [docs/reference/related-projects.md](docs/reference/related-projects.md); their numbers are hypotheses to reproduce, not results.
 
 **Costs on this Mac** (M4 Pro, 48 GB RAM, 183 GB free disk at the time of writing):
 
@@ -141,6 +145,7 @@ Open problems, grouped by theme. The IDs are used throughout.
 | D1 | The download keeps flights that enter the box, but the search uses flights up to 12 km outside it | `adsb.py:152` vs `pipeline.py:132` |
 | D2 | Malformed traces are skipped silently, with no report of coverage or missing data | `fetch.py:88`, `adsb.py:129` |
 | D3 | The elevation tiles' no-data value (−32768 m) isn't masked: `Grid.make` clamps it to 0 m, and `refine` uses it raw. One such pixel is in the ESID 937 box | `terrain.py:61`, `search.py:37`, `pipeline.py:200` |
+| D4 | The loader takes geometric altitude when present and otherwise barometric, without recording which, and ignores the trace flags that mark a stale point or a geometric value in slot 3. Geometric ADS-B altitude is WGS-84 ellipsoidal, the terrain tiles are orthometric and pressure altitude is neither, so three datums meet in the ENU conversion. At 1–9 km that is a few percent of slant range and a few tenths of a second of heard-CPA time | `adsb.py:108`, `terrain.py:13`, `geo.py:33` |
 
 **Workflow and output**
 
@@ -199,6 +204,7 @@ Each phase below gives its goal, the approach we expect to take given what we kn
 - **An empty result** (E4). `detect` can return "no flyovers found" instead of a padded top-N list. That is plumbing; choosing the threshold needs positive and negative recordings, so it happens in Phase 2.
 - **Data report** (D2). `fetch-day` and `search` report traces kept, traces skipped as malformed, and gaps near the candidates. The report also says what it can't know: a complete download doesn't mean every aircraft overhead broadcast ADS-B (L2).
 - **Elevation no-data** (D3). Mask −32768 in `Terrain`, with a test on the ESID 937 pixel.
+- **Altitude source** (D4). Keep each point's altitude source (geometric, barometric, none) and honour the trace flags. The data report (D2) gives the share of barometric-only points, and the result record names the height datum (5.5). A geoid correction waits for Phase 2's altitude perturbation to show it matters.
 - **Platform** (W4). A macOS CI job, a fresh-install smoke test, and a clear error when ffmpeg is missing. If `dev` is ever pushed, CI has to run on it too.
 
 **Done when** each fix has its test and is in `dev`.
@@ -241,16 +247,18 @@ The experiments run in this order. Each is judged in Tiers 1–2 against labelle
    - **Scoring.** Compare like with like: the steepest-fall time of the fitted curve against that of the curve modelled from the actual trajectory.
    - **Measurement.** On every confirmed pass, measure how far the modelled curve's steepest fall is from the geometric CPA. That shows how often a flight isn't straight enough for `t_emit` to stand in.
 2. **Model error** (S; E1, E6). Fit the straight-pass model to three kinds of curve: noiseless curves made from the real trajectories of confirmed passes, the same curves with noise, and ideal straight passes. That separates model bias, measurement noise and optimiser failure before any fit changes.
-   - **Perturbations**, one at a time: f0 drifting through a pass, sound speed (METAR temperature), wind (soundings), trajectory sampling, altitude and terrain.
+   - **Perturbations**, one at a time: f0 drifting through a pass, sound speed (METAR temperature), wind (soundings), trajectory sampling, altitude datum and terrain, and the whitening floor and window. `local_whiten` subtracts each bin's median over the window, so a tone that sits in one bin for more than half the window is removed, flat asymptotes included, and those carry f0 and speed. That one runs on today's brightness fit, before any track exists.
+   - **Livermore first.** The 40 Livermore passes have trajectories and published frequency tracks, in constant and varying speed and height, so they are this experiment's main real data (5.6). dopplerprint reports that a straight-pass fit to the noise-free ADS-B curve misses slant range there by a median 14 %, and by 40–90 % on some passes ([related projects](docs/reference/related-projects.md)). That is a hypothesis to reproduce, not a result.
    - **A check on real fits.** Fit each pass's approach and recede halves separately. A straight, constant-speed pass gives the same f0 and speed from both, so a difference measures model error (a two-estimator comparison of the kind White 1982 recommends).
    - **Heavier models** (turns, acceleration, weather) come only after a measured bias they would remove.
 3. **Frequency track** (M; E3). One track per event:
-   - times, and frequencies refined below the bin width (quadratic interpolation, or Quinn's estimators);
+   - times, and frequencies refined below the bin width (quadratic interpolation, Quinn's estimators, or Candan's three-sample estimator), measured on the original STFT, not the whitened image;
    - an amplitude or quality per point, and valid and missing samples;
    - explicit start, end and gaps;
    - links between the harmonics of one pass.
 
-   Start from `tracks.ridge()`, restricted to spectral peaks. Ridge extraction joins unrelated components when tones come and go, and the literature offers no stopping rule (6.3). So starts, stops and crossings get their own rules and tests, and false continuations and false bridges are measured alongside frequency error. An adaptive tracker is tried only if track errors turn out to limit the fits.
+   Start from `tracks.ridge()`, restricted to spectral peaks, and make it local: clamp the accumulated score at zero and subtract a per-frame bias, so a path starts and ends where the tone does (the Smith–Waterman form dopplerprint uses). Ridge extraction joins unrelated components when tones come and go, and the literature offers no stopping rule (6.3); the clamp is one. It needs an unclipped, zero-mean image, and `local_whiten` clips at zero, so on today's image the restart would never fire. Segment cuts (a weak run, a rise, a hop) are untested heuristics and get their own rules and tests, as do crossings. Frequency error, false bridges, fragmentation and missed tails are measured on labelled events. An adaptive tracker is tried only if track errors turn out to limit the fits.
+   - **Whitened for finding, original for measuring.** Whitening shifts a peak that sits near a floor it has partly subtracted; dopplerprint measured 0.4–0.9 bin on slow passes. Tracks are found on the whitened image and each frame's frequency is then measured on the original STFT.
 4. **Least-squares fit** (M; E1, E3). Fit the track with f(t) = α + β·z(t; τ_c, s) (6.1). At each (τ_c, s), α and β are solved in closed form, so the search is over those two parameters only (variable projection).
    - **Losses.** Start with ordinary least squares, then weight points by amplitude, then try a robust loss if outliers call for one.
    - **Safeguards:**
@@ -268,7 +276,7 @@ The experiments run in this order. Each is judged in Tiers 1–2 against labelle
 6. **Harmonics and extent** (S–M).
    - Compare harmonic assignments, allow for a missing fundamental, and merge the harmonics of one pass into one event. Their evidence is correlated, so they aren't separate votes.
    - Mask the unreliable stretches of a track instead of cropping to a fixed width ([rewindow](docs/experiments/2026-11-03-rewindow.md)).
-   - Set `detect`'s threshold here, as a curve of detections against false alarms per audio hour on the development background recordings, the Essex ones (E4, E5).
+   - Set `detect`'s threshold here, as a curve of detections against false alarms per audio hour on the development background recordings, the Essex ones (E4, E5). One input to that curve: the ideal-curve score against the best linear chirp on the same support, since smooth clutter beats a stationary-tone null (echolocate). Short genuine passes look linear too, so it is a feature, never a gate.
 7. **Joint hypotheses instead of gates** (M; E1). Replace the independent speed, distance, time and f0 gates with each event's own hypotheses: its best few local optima, each with the joint region its data supports.
    - **Why joint.** Time and f0 trade off along the curve's slope, and distance follows speed (6.1). Marginal ranges combined freely admit combinations the event never supported.
    - **Profiles.** Derive the regions from profiles, re-optimising the other parameters, and call them sensitivity ranges until the objective is a calibrated likelihood.
@@ -311,7 +319,7 @@ Each failure is an outcome with a stated reason:
   - the harmonics of one pass are one event;
   - a detection can stay unmatched at a fixed cost: a jet, a bird, or an aircraft without ADS-B.
 
-  Every candidate is scored on the same detections with the same normalisation. The record shows how much support comes from the proposing pair and how much from the other flyovers.
+  Every candidate is scored on the same detections with the same normalisation: each event's score in units of the spread of its own wrong guesses, the median and MAD of the (shift, f0) sweep `search` already runs for every candidate (unheard's form; S2). Noise alone then scores a few units, because the best of many guesses wins, which is one more reason confidence is computed after selection. The record shows how much support comes from the proposing pair and how much from the other flyovers.
 - **One clock, fitted to every event** (S3). The audio-to-UTC offset is optimised over all assigned events jointly.
   - **Drift.** On long recordings, test a bounded clock drift and add it only if it improves consistency. Sample clocks drift by tens of ppm, about 1 s in 12 h at 20 ppm.
   - **Edits.** A flyover that fits only with a different clock suggests an edit, as a diagnostic.
@@ -326,7 +334,8 @@ Each failure is an outcome with a stated reason:
 - no usable flyovers;
 - incomplete flight data;
 - a recording crossing UTC midnight;
-- the moved box.
+- the moved box;
+- a source aircraft removed from the flight data, with the traffic around it kept.
 
 Motion and edit checks are diagnostics and not part of this.
 
@@ -431,6 +440,7 @@ The measuring stick has to be trustworthy before it gets big: caches that can't 
 3. **Negative controls**, expected not to be located:
    - the right audio with another day's flight data;
    - the right day with the box moved 150 km;
+   - the right day and box with one confirmed source aircraft removed and the surrounding traffic kept, for each confirmed flyover in turn, and once with both search events' flights removed. This is the substitution L2 makes likely: a wrong flight standing in for an audible one that has no ADS-B. Expected: abstain, or locate from the remaining flyovers; a confident answer from a substituted flight fails. Mask the flight's column in the CPA table rather than rebuilding it per variant;
    - stretches with no flyovers, confirmed in the spectrogram;
    - real background recordings with other tonal sources and no prop passes: the three Essex recordings (jets) and ESID 937 (no prop within 20 km all day). These also give `detect`'s false alarms per audio hour.
 4. **Stress tests**, inspected rather than scored as plain negatives:
@@ -566,6 +576,8 @@ The evaluation set is what limits M3, and collecting it takes calendar time rath
 | xeno-canto XC979185 | one prop pass, start time known to the minute | a single-flyover case |
 | xeno-canto XC990819, XC990820, XC986433 | Essex, jets only | development: background negatives for `detect`'s threshold; the first two are one group |
 | Seattle (planned) | your recordings, several devices at one spot | one group per session: it tests devices, not new sites |
+| Livermore (Pathak 2026) | 40 phone recordings of one light-aircraft pass each, May 2026, one site: WAV, the published frequency track, the ADS-B track as KML, and a results table. The microphone position is not published; it can be reconstructed from the published offsets | development for Phase 2's fits and tracks, as one group. Single passes, so not a `locate` case, and three other projects have tuned on it ([related projects](docs/reference/related-projects.md)), so never evaluation. Its provenance audit (microphone position, WAV start times against the CSV's UTC stamps) comes first |
+| AeroSonicDB, DataSED, DataSEC, A2O | labelled aircraft and environmental clips, and some continuous hours, with approximate or no positions | detection only (E4, E5): background rates and confusers such as jets, helicopters and machinery. Not location truth |
 
 ESID 375 and 937 both run past UTC midnight into 2024-04-08, so they also test the midnight case, and they need that day's flight data.
 
@@ -626,6 +638,10 @@ Equations cited here were checked against the PDFs.
 | Cawley & Talbot 2010 | Tuning and reporting on the same cases biases results by as much as the differences between methods | Their smallest data set has 64 points; with two recordings the risk is larger |
 | Lo & Ferguson 2003 | Ground-reflection delay as a constraint on elevation and range | Written for broadband jets over hard ground. Its interference fringes are one plausible source of `detect`'s jet false positives (E5) |
 
+### 6.4 What related projects report
+
+Three open-source projects (dopplerprint, echolocate, unheard) started in November 2026 on the same problem. [docs/reference/related-projects.md](docs/reference/related-projects.md) records the commits inspected, what each reports, and what we take. In short: whitening biases frequency measurements, so find tracks whitened and measure them on the original STFT; a local Viterbi gives the tracker a stopping rule; scores in units of each event's own wrong guesses put pairs on one scale; and removing the source aircraft while keeping the traffic is the negative that catches confident substitutions. Their numbers are self-reported, unreviewed, and tuned on the shared Livermore corpus, so each is an experiment to run here, not a result.
+
 ## 7. Risks and open questions
 
 - **Event fits may stay too weak on real passes.** If Phase 2's model-error experiment shows that most passes aren't straight enough, the route shifts toward scoring on actual trajectories and wider joint hypotheses, at the cost of more candidates and more abstentions.
@@ -643,6 +659,6 @@ Equations cited here were checked against the PDFs.
 2. **Which clean recordings go to calibration and which to evaluation.** This has to be decided before any of them is searched. Proposed:
    - evaluation: ESID 375 (quiet, continuous) and ESID 710 (moderate traffic);
    - calibration: ESID 740, ESID 937 (the must-abstain negative) and XC979185;
-   - development: the three Essex recordings, since Phase 2 tunes `detect`'s threshold on them;
+   - development: the three Essex recordings, since Phase 2 tunes `detect`'s threshold on them, and the Livermore corpus, which Phase 2 fits on;
    - Seattle sessions go to evaluation by default.
 3. **Recording ground truth yourself.** The checklist in 5.6 applies. Several devices at one session form one group, so a second site is worth more than a fourth device. Deliberately moved, edited and phone-processed clips are worth a session of their own.

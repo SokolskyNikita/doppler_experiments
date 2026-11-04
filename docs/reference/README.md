@@ -9,6 +9,8 @@ The files themselves live outside the repo, in `$DOPPLERTRACK_DATA/reference/` (
 
 The material is copyrighted and the upstream repo is public, so it stays on this machine and never goes into git.
 
+Open-source projects on the same problem, the commits inspected and what PLAN.md takes from them: [related-projects.md](related-projects.md).
+
 ## How to use this folder
 
 1. Search the Markdown first: `rg -n "Cramer-Rao|CRLB" "$DOPPLERTRACK_DATA/reference/md/"`.
@@ -80,7 +82,7 @@ Not fetched yet. Pull them when the phase they serve starts.
 | Reid & Zoubir 1997, "Aircraft flight parameter estimation based on passive acoustic techniques using the polynomial Wigner–Ville distribution", *JASA* 102:207 | If ridge extraction proves to be the bottleneck. |
 | Ostashev & Wilson, *Acoustics in Moving Inhomogeneous Media*, 2nd ed. (CRC, 2016) | If residual errors point to wind or propagation (gap E6). Only the propagation chapters. |
 | Quinn & Hannan, *The Estimation and Tracking of Frequency* (Cambridge, 2001) | If frequency tracking becomes the bottleneck. Mostly covered by Kay I and Iatsenko. |
-| Labelled aircraft-audio datasets (e.g. AeroSonicDB) | Detection only (gaps E4–E5): without location, timing and matching trajectories they can't validate a location. Needs a web search; not on hand. |
+| Labelled aircraft-audio datasets | Detection only (gaps E4–E5): without location, timing and matching trajectories they can't validate a location. AeroSonicDB, DataSED, DataSEC and an A2O sample are on disk since 2026-11-03 (data root `MANIFEST.md`). |
 | Martín, Genescà, Romeu et al. 2014, "Passive acoustic method for aircraft states estimation based on the Doppler effect", *IEEE TAES* 50:1330 | Phase 2's model-error experiment: aircraft states, manoeuvres included, from Doppler. Cited by Ferguson 2016 §6. |
 | Nielsen 2009, "Acoustic detection of low flying aircraft", Proc. IEEE Conf. Tech. Homeland Security, pp. 101–106 | The same: effects of acceleration and manoeuvre on narrowband signals, checked on real data. Cited by Ferguson 2016 §6. |
 | NASA RP-1258, Hubbard (ed.), *Aeroacoustics of Flight Vehicles* (free on NASA NTRS) | Background on propeller tone generation and harmonics. |

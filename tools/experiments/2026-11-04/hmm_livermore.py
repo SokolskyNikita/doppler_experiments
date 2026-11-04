@@ -119,7 +119,7 @@ def references(run):
                         judged=agree is not False, at_scale_edge=j in (0, len(scales) - 1),
                         at_shift_edge=i in (0, len(shifts) - 1)))
         print(out[-1], flush=True)
-    (run / "dev_references.json").write_text(json.dumps(out, indent=1))
+    U.write(run / "dev_references.json", out)
     return out
 
 

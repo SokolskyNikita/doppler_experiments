@@ -145,11 +145,21 @@ def fit(t, f, c=C15):
     return ls.fit(t[ok], f[ok], c=c)
 
 
-def halves(t, f, tau, c=C15):
-    a, b = t < tau, t > tau
+def halves(t, f, full, c=C15):
+    """Approach and recede halves, split at the full fit's tau. "fixed": tau and s held at the full fit, so
+    each half gives its own alpha and beta, hence f0 and v (a straight pass gives the same from both);
+    "free": all four parameters fitted per half."""
+    ok = np.isfinite(f)
+    t, f = t[ok], f[ok]
     out = {}
-    for name, m in (("approach", a), ("recede", b)):
-        out[name] = ls.fit(t[m], f[m], c=c) if m.sum() >= 12 else None
+    for name, m in (("approach", t < full["tau"]), ("recede", t > full["tau"])):
+        if m.sum() < 12:
+            out[name] = out[f"{name}_free"] = None
+            continue
+        al, be, _ = ls._ab(t[m], f[m], np.ones(m.sum()), full["tau"], full["s"])
+        f0, v, R = ls.physical(al, be, full["s"], full["tau"], c)
+        out[name] = dict(f0=float(f0), v=float(v), R=float(R), tau=full["tau"])
+        out[f"{name}_free"] = ls.fit(t[m], f[m], c=c)
     return out
 
 
@@ -198,9 +208,10 @@ def main(run: Path):
             e = block_noise(fast, len(t), dt, rng)
             fb = fit(t, fA + e); B.append(pick(fb))
             Cn.append(pick(fit(t, fC + e)))
-            h = halves(t, fA + e, fb["tau"])
+            h = halves(t, fA + e, fb)
             Bh.append({s: pick(h[s]) for s in h})
-        sd = {q: float(np.std([b[q] for b in B], ddof=1)) for q in PARAMS}
+        sd = {q: float(np.nanstd([b[q] for b in B], ddof=1)) for q in PARAMS}
+        n_failed = int(sum(not np.isfinite(b["R"]) for b in B))
         e0 = block_noise(fast, len(t), dt, np.random.default_rng(1))
         covs = {}
         for name, ff, fd in (("A+noise", fA + e0, None), ("D", fD, fits["D"])):
@@ -213,16 +224,19 @@ def main(run: Path):
                                  rms=fits[kind]["rms"], cond=fits[kind]["cond"], at_bound=fits[kind]["at_bound"]))
         for kind, reps in (("B", B), ("C+noise", Cn)):
             out_fits.append(dict(**base, kind=kind, **{f"ref_{q}": ref[q] for q in PARAMS},
-                                 **{q: float(np.mean([r[q] for r in reps])) for q in PARAMS},
-                                 **{f"sd_{q}": float(np.std([r[q] for r in reps], ddof=1)) for q in PARAMS}))
+                                 **{q: float(np.nanmean([r[q] for r in reps])) for q in PARAMS},
+                                 **{f"sd_{q}": float(np.nanstd([r[q] for r in reps], ddof=1)) for q in PARAMS},
+                                 n_failed=int(sum(not np.isfinite(r["R"]) for r in reps))))
         out_fits[-2].update({f"cov_{n}_{w}_{q}": covs[n][w][i] for n in covs for w in covs[n] for i, q in enumerate(PARAMS)})
         # halves
         for kind, ff in (("A", fA), ("D", fD)):
-            h = halves(t, ff, fits[kind]["tau"])
+            h = halves(t, ff, fits[kind])
             row = dict(**base, kind=kind)
             for s in h:
                 row.update({f"{s}_{q}": pick(h[s])[q] for q in PARAMS})
-            row.update({f"sd_diff_{q}": float(np.nanstd([b["recede"][q] - b["approach"][q] for b in Bh], ddof=1)) for q in ("f0", "v")})
+            for sfx in ("", "_free"):
+                row.update({f"sd_diff{sfx}_{q}": float(np.nanstd([b[f"recede{sfx}"][q] - b[f"approach{sfx}"][q] for b in Bh], ddof=1))
+                            for q in ("f0", "v")})
             out_half.append(row)
         # perturbations of A
         tmid = 0.5 * (t[0] + t[-1]); span = t[-1] - t[0]
@@ -257,7 +271,7 @@ def main(run: Path):
                 row[f"ratio_{q}"] = abs(r2[q] - fA_fit[q]) / sd[q] if sd[q] > 0 else np.nan
                 row[f"err_{q}"] = r2[q] - ref2[q]
             out_pert.append(row)
-        print(f"{p['id']:12s} {grp:8s} A: R {100 * (fA_fit['R'] / ref['R'] - 1):+6.1f} %  v {100 * (fA_fit['v'] / ref['v'] - 1):+6.1f} %  "
+        print(f"{p['id']:12s} {grp:8s} failed {n_failed:3d} A: R {100 * (fA_fit['R'] / ref['R'] - 1):+6.1f} %  v {100 * (fA_fit['v'] / ref['v'] - 1):+6.1f} %  "
               f"f0 {100 * (fA_fit['f0'] / f0s - 1):+5.2f} %  | D: R {100 * (fits['D']['R'] / ref['R'] - 1):+6.1f} %  | sd R {sd['R']:.0f} m", flush=True)
     for name, data in (("fits", out_fits), ("perturbations", out_pert), ("halves", out_half), ("noise", out_noise)):
         keys = sorted({k for r in data for k in r}, key=lambda k: (k not in ("id", "group", "category", "kind", "variant"), k))

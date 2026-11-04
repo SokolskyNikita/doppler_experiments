@@ -7,7 +7,9 @@ Phase 2 item 4's fit in tracks.py.
 t is the time the sound is heard and tau the emission-time CPA. At each (tau, s), alpha and beta are the
 weighted linear least-squares solution (variable projection), so the search is over (tau, log s) only.
 Starts: Ferguson & Lo's eqs. 10-14 from the track itself, plus a 7 x 7 grid around them (tau +-15 s,
-s x 0.3 to x 3); the best three are refined with scipy.optimize.least_squares within the bounds that
+s x 0.3 to x 3); starts_mode="wide" (the default) adds tau across the whole track and 30 s beyond, every
+2 s, against 25 values of s over its bounds, because on short or one-sided tracks the narrow starts end
+in local minima. The best starts are refined with scipy.optimize.least_squares within the bounds that
 v in [10, 300] m/s and R in [100, 30000] m imply for s.
 
 Usage, from the repo root:
@@ -46,6 +48,18 @@ def _ab(t, f, w, tau, s):
     return coef[0], coef[1], sw * f - A @ coef
 
 
+def _grid_cost(t, f, w, cands):
+    """Weighted residual sum of squares after the closed-form alpha, beta, for every (tau, s) row at once."""
+    u = t[None, :] - cands[:, :1]
+    x = u / np.sqrt(cands[:, 1:2] ** 2 + u * u)
+    W = w.sum()
+    mx, mf = (x * w).sum(1) / W, (w * f).sum() / W
+    sxx = (w * (x - mx[:, None]) ** 2).sum(1)
+    sxf = (w * (x - mx[:, None]) * (f - mf)).sum(1)
+    sff = (w * (f - mf) ** 2).sum()
+    return sff - sxf ** 2 / np.maximum(sxx, 1e-300)
+
+
 def physical(alpha, beta, s, tau, c):
     v = -beta / alpha * c                      # eq. 7
     f0 = alpha * (1 - v * v / (c * c))         # eq. 8
@@ -72,7 +86,7 @@ def starts(t, f, c):
     return t[k0], s
 
 
-def fit(times, freqs, weights=None, c=340.3, tau_span=15.0, n_grid=7):
+def fit(times, freqs, weights=None, c=340.3, starts_mode="wide", tau_span=15.0, n_grid=7):
     """Fit the straight pass. Returns f0, v, R, tau (emission CPA), t_heard (= tau + R/c), alpha, beta, s,
     rms (unweighted residual RMS, Hz), cond (condition number of the 2-parameter Jacobian at the optimum),
     at_bound (the optimum lies on an s bound) and in_bounds (v and R inside V_BOUNDS and R_BOUNDS)."""
@@ -80,18 +94,23 @@ def fit(times, freqs, weights=None, c=340.3, tau_span=15.0, n_grid=7):
     w = np.ones_like(t) if weights is None else np.asarray(weights, float)
     ok = np.isfinite(t) & np.isfinite(f) & (w > 0)
     t, f, w = t[ok], f[ok], w[ok]
+    t_ref = float(t[0])     # optimise in time relative to the track: absolute (unix) times wreck the
+    t = t - t_ref           # finite-difference steps and step tolerance, which scale with |x|
     s_lo = R_BOUNDS[0] * np.sqrt(c * c - V_BOUNDS[1] ** 2) / (V_BOUNDS[1] * c)
     s_hi = R_BOUNDS[1] * np.sqrt(c * c - V_BOUNDS[0] ** 2) / (V_BOUNDS[0] * c)
     tau0, s0 = starts(t, f, c)
     cands = [(tau0, s0)] + [(tau0 + dt, s0 * m) for dt in np.linspace(-tau_span, tau_span, n_grid)
                             for m in np.geomspace(0.3, 3.0, n_grid)]
+    if starts_mode == "wide":   # tau across the whole track and 30 s beyond, every 2 s; s over its bounds
+        cands += [(a, b) for a in np.arange(t[0] - 30.0, t[-1] + 30.0, 2.0) for b in np.geomspace(s_lo, s_hi, 25)]
     cands = [(a, min(max(b, s_lo * 1.0001), s_hi * 0.9999)) for a, b in cands]
-    cost = [np.sum(_ab(t, f, w, a, b)[2] ** 2) for a, b in cands]
+    cost = _grid_cost(t, f, w, np.array(cands))
     best = None
-    for i in np.argsort(cost)[:3]:
+    for i in np.argsort(cost)[:10 if starts_mode == "wide" else 3]:
         a, b = cands[i]
         r = so.least_squares(lambda x: _ab(t, f, w, x[0], np.exp(x[1]))[2], [a, np.log(b)],
-                             bounds=([t[0] - 300, np.log(s_lo)], [t[-1] + 300, np.log(s_hi)]), x_scale=[1.0, 0.1])
+                             bounds=([t[0] - 300, np.log(s_lo)], [t[-1] + 300, np.log(s_hi)]), x_scale=[1.0, 0.1],
+                             xtol=1e-12, ftol=1e-12, gtol=1e-12)
         if best is None or r.cost < best.cost:
             best = r
     tau, s = best.x[0], float(np.exp(best.x[1]))
@@ -99,6 +118,7 @@ def fit(times, freqs, weights=None, c=340.3, tau_span=15.0, n_grid=7):
     f0, v, R = physical(alpha, beta, s, tau, c)
     res = f - (alpha + beta * z(t, tau, s))
     sv = np.linalg.svd(best.jac, compute_uv=False)
+    tau += t_ref
     return dict(f0=float(f0), v=float(v), R=float(R), tau=float(tau), t_heard=float(tau + R / c),
                 alpha=float(alpha), beta=float(beta), s=s, rms=float(np.sqrt(np.mean(res ** 2))),
                 cond=float(sv[0] / max(sv[-1], 1e-300)),

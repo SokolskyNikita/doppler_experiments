@@ -2,7 +2,7 @@
 
 <!-- index
 question: Which station temperature belongs in each bench case's `weather` block?
-outcome: The nearest ASOS within 1 h of the recording's midpoint, 4.9–24.3 km away, as each case's next version; but applied as one c per case, as the runner does today, it costs both positive seed cases their true pair (Oyster Bay rank 1 to 3, the eagle cam 1 to 6), because the aircraft fly 1–6 km up; it needs the runner to pass the temperature to A's per-flight path
+outcome: The nearest ASOS within 1 h of the recording's midpoint, 4.9–24.3 km away; as one c per case it costs both positive seed cases their true pair (Oyster Bay rank 1 to 3, the eagle cam 1 to 6), because the aircraft fly 1–6 km up, and even through the per-flight path, which keeps Oyster Bay at rank 1, the eagle cam's true pair ranks 2nd, so the temperature stays off by default until the 15 °C saved fits are ruled out as the mismatch
 -->
 
 **Question.** Which air temperature belongs in each bench case's `weather` block ([sound-speed](2026-11-04-sound-speed.md)), and how well does one reading stand for its recording?
@@ -70,6 +70,23 @@ Scored triples change by under 0.1 %: Oyster Bay 40,889 to 40,861, the eagle cam
 - **The runner never uses it.** `bench.runner.sound_speed` still turns the case's temperature into one `c=speed_of_sound(T)` and passes that to search and refine. With saved fits made at 15 °C it also changes c on only one side of the comparison.
 - **So the case temperatures can't land as the runner's default until the runner passes `temperature_c` instead of `c`.** Until then, every positive seed case loses its true pair.
 - **A direct check of the per-flight path was stopped before it scored.** It used `--search-param temperature_c=T` on the no-weather versions, but those share their CPA cache files with everyone's default runs, and `temperature_c` changes the table's fingerprint (`runs/2026-11-04-bench-1166c88-saved-fit-t2-perflight-*`, marked STOPPED). It needs its own cache names, which the versions here already carry, once the runner passes `temperature_c`.
+
+*Third pass, at the per-flight runner* (dev df0e202, B's 60bf173: the fits keep their 15 °C c and each flight propagates at its own mid-height temperature).
+- **Runs.** runs/2026-11-04-bench-df0e202-saved-fit-t2-noweather (each case's latest version with its weather nulled and its CPA cache renamed without the temperature, so that run is marked dirty) against runs/2026-11-04-bench-df0e202-saved-fit-t2-weather (the case as on dev).
+- **Stopped part way.** Both runs were stopped under the user's rule that no compute runs on the Mac, after four of the five cases. hp150 and north150 are missing, and neither can change the outcome below.
+- **The criterion,** fixed by the PM before the run: the weather versions keep both positives at rank 1 with the true pair, and the negatives stay negative.
+
+| Case | Without weather | With weather, per flight |
+|---|---|---|
+| oyster-bay | rank 1, 43.3 m, margin 4.9 % (true pair 27.10) | rank 1, 146 m, margin 2.0 % (26.03 against 25.53) |
+| eagle-cam-clip-18000s | rank 1, 876 m, margin 2.5 % (10.30) | **rank 2**, top pair a0e90b+a25807 14.1 km off, margin 0.6 % (true pair 10.15 against 10.21) |
+| oyster-bay-moved-wsw150 | negative, margin 10.7 % | negative, margin 9.8 % |
+
+**Outcome: the criterion fails, so the station temperature doesn't become the runner's default.**
+- **What the per-flight path did.** It recovers most of what one ground-temperature c lost: Oyster Bay goes back to rank 1, and the eagle cam's true pair from rank 6 to rank 2. It doesn't recover the seeds.
+- **The 15 °C default still gives the better seed results.** That isn't evidence the default is right. The committed saved fits were made at 15 °C, so the fits and the search share that c only in the default run.
+- **The next question,** fixed by the PM: are the 15 °C saved fits the mismatch? Refit one case's events at the station temperature, then search them at the per-flight speed.
+- **Until that is answered,** the cases' latest versions should carry no temperature. On dev today they do, so every runner run uses it.
 
 
 **Script:** `tools/experiments/2026-11-04/case_weather.py` (`--apply` writes the version 2 cases). **Run:** `runs/2026-11-04-case-weather/`, with the station lists, `weather.json` (every case's numbers and the fetch URLs) and the logs. **Fetched:** `raw/aux/metar/KAOH_2024-04-06.csv`, `KPIA_2024-04-06.csv`, `KMWA_2024-04-06.csv`, `KPOF_2024-04-06.csv`, `EGMC_2025-03-09.csv`, `EGMC_2025-04-06.csv` and `EGMC_2025-04-19.csv`, in the data root's MANIFEST.md. KFRG and KFMY were already there.

@@ -1,0 +1,505 @@
+"""Tier 1 (PLAN 5.4): detection and fits against the blind labels on development spans, and the known point.
+
+A span is a labelled stretch of a recording's timeline (bench/labels/), not a case. `execute_span` sees only a
+label file's inputs: each window's start, end and labelled lines, by position. From them it writes
+span_result.json: every detection detect makes on the span and a fit of every labelled line, per objective.
+That record and its hash are written before anything reads a window's class, an association or a trajectory
+reference; `compare_span` reads those only after the hash check, as compare_case does for cases.
+
+The knobs below were set before any detection was matched against a label."""
+from __future__ import annotations
+
+import datetime
+import json
+import os
+from pathlib import Path
+
+import numpy as np
+
+from dopplertrack.result import (CONVENTIONS_V1, ListOf, Maybe, OneOf, RecordError, _check, dumps, sha256_bytes,
+                                 unavailable)
+
+from .cases import REPO, resolve
+
+TIER1 = REPO / "bench" / "tier1.json"
+SPAN_KIND = "dopplertrack.span_result"
+SPAN_SCHEMA_VERSION = 1
+SPAN_FILE, SPAN_HASH = "span_result.json", "span_result.json.sha256"
+DETECT_TOP = 200                 # more than detect can propose on a crop, so none is dropped before matching
+
+KNOBS = {
+    "crop_margin_s": 240.0,      # detect sees the span plus this either side; a detection belongs to the span by its
+                                 # heard CPA, so one whose window straddles an edge is judged on partial evidence
+    "cpa_slack_s": 5.0,          # a detection's heard CPA may lie this far outside a window: labels are read to seconds
+    "line_tolerance": 0.10,      # f0 * k within this fraction of a labelled line's entry-exit band
+    "harmonic_ratios": [0.5, 1.0, 2.0],
+    "fit_band_margin": 0.10,     # a labelled line is fitted in its band widened by this fraction
+    "association_dt_s": 10.0,    # a detection agrees with its associated flight within this heard-CPA difference
+    "association_df": 0.10,      # and this fraction of f0
+}
+COUNTED = ("clear", "overlapping")           # matched or missed
+EXCLUDED = ("uncertain", "masked")           # in neither count, nor are detections inside them
+
+NUMBER = (int, float)
+FIT = {"t_cpa": NUMBER, "t_cpa_emit": NUMBER, "f0": NUMBER, "v": NUMBER, "d": NUMBER, "t_start": NUMBER,
+       "t_end": NUMBER, "score": NUMBER, "f_pre": NUMBER, "f_post": NUMBER}
+SPAN_SCHEMA_V1 = {
+    "schema_version": int,
+    "kind": OneOf(SPAN_KIND),
+    "span": {"id": str, "labels": str, "start": NUMBER, "end": NUMBER},
+    "conventions": dict,
+    "provenance": {"created": str, "code": dict, "parameters": dict,
+                   "inputs": ListOf({"role": str, "path": str, "bytes": int, "sha256": str})},
+    "detections": Maybe(ListOf(FIT)),
+    "window_fits": Maybe(ListOf({"window": int, "line": int, "band_hz": ListOf(NUMBER), "objective": str,
+                                 "fit": Maybe(FIT)})),
+    "execution": {"errors": ListOf(str), "warnings": ListOf(str),
+                  "stages": ListOf({"name": str, "wall_s": NUMBER, "cpu_s": NUMBER})},
+}
+
+
+def validate_span(record) -> None:
+    if not isinstance(record, dict) or record.get("schema_version") != SPAN_SCHEMA_VERSION:
+        raise RecordError([f"span record: schema_version must be {SPAN_SCHEMA_VERSION}"])
+    problems: list[str] = []
+    _check(record, SPAN_SCHEMA_V1, "span_record", problems)
+    if problems:
+        raise RecordError(problems)
+
+
+def load_tier1(path=TIER1) -> dict:
+    doc = json.loads(Path(path).read_text())
+    problems = []
+    for s in doc.get("spans", []):
+        for k in ("id", "labels", "set", "group", "spectrogram", "reference_case"):
+            if k not in s:
+                problems.append(f"span {s.get('id', '?')}: {k} is missing")
+        if s.get("set") not in ("development", "calibration", "evaluation"):
+            problems.append(f"span {s.get('id', '?')}: set must be development, calibration or evaluation")
+    if problems:
+        raise RecordError(problems)
+    return doc
+
+
+def span_inputs(labels: dict) -> tuple[list[float], list[dict]]:
+    """What the run may see of a label file: the span and, by position, each window's extent and lines.
+    Window ids, classes, notes and associations stay out: they are the truth the comparison uses."""
+    windows = [{"window": i, "start": float(w["start"]), "end": float(w["end"]),
+                "lines": [[float(a), float(b)] for a, b in w["lines"]]} for i, w in enumerate(labels["windows"])]
+    return [float(x) for x in labels["span"]], windows
+
+
+def execute_span(span: dict, out_dir: Path, code: dict, log=print, workers: int | None = None) -> dict:
+    """detect and window fits on one span, as a span record. Reads no class, association or reference."""
+    from dopplertrack.audio import Spectrogram
+    from dopplertrack.cache import cached_detections
+    from dopplertrack.result import file_entry
+    from dopplertrack.tracks import detect_events
+
+    from .runner import PROFILES, Stages
+    stage, errors = Stages(log), []
+    labels_path = resolve(span["labels"])
+    (a, b), windows = span_inputs(json.loads(labels_path.read_text()))
+    d = PROFILES["raw-audio"]["detect"]
+    params = {"knobs": KNOBS, "detect": {**d, "top": DETECT_TOP, "min_score": 0.0}, "objectives": ["brightness", "contrast"]}
+    spec = resolve(span["spectrogram"]["path"])
+    detections, fits = unavailable("the span did not run"), unavailable("the span did not run")
+    inputs = []
+    try:
+        with stage("spectrogram"):
+            sp = Spectrogram.load(spec)
+            crop = sp.crop(a - KNOBS["crop_margin_s"], b + KNOBS["crop_margin_s"])
+        inputs.append(file_entry("spectrogram", spec))
+        with stage("detect"):
+            found = cached_detections(crop, detect_events, f_lo=d["band_hz"][0], f_hi=d["band_hz"][1],
+                                      harmonics=d["harmonics"], top=DETECT_TOP, window_s=d["window_s"], min_score=0.0,
+                                      workers=workers)
+            detections = [e.to_dict() for e in found if a <= e.t_cpa <= b]
+        tasks = []
+        m = KNOBS["fit_band_margin"]
+        for w in windows:
+            for j, (f_in, f_out) in enumerate(w["lines"]):
+                lo, hi = min(f_in, f_out) * (1 - m), max(f_in, f_out) * (1 + m)
+                tasks += [(w["window"], j, w["start"], w["end"], lo, hi, objective) for objective in params["objectives"]]
+        with stage("window_fits"):
+            from dopplertrack.parallel import ordered_map, resolve_jobs
+            jobs = min(resolve_jobs(workers), max(len(tasks), 1))
+            fits = list(ordered_map(_fit_window, tasks, jobs, _set_fit_crop, (crop,)))
+    except Exception as exc:
+        errors.append(f"{type(exc).__name__}: {exc}")
+        log(f"ERROR: {type(exc).__name__}: {exc}")
+    return {"schema_version": SPAN_SCHEMA_VERSION, "kind": SPAN_KIND,
+            "span": {"id": span["id"], "labels": span["labels"], "start": a, "end": b},
+            "conventions": CONVENTIONS_V1,
+            "provenance": {"created": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
+                           "code": code, "parameters": params, "inputs": inputs},
+            "detections": detections, "window_fits": fits,
+            "execution": {"errors": errors, "warnings": stage.warnings, "stages": stage.stages}}
+
+
+_FIT_CROP = {}
+
+
+def _set_fit_crop(crop):
+    _FIT_CROP["sp"] = crop
+
+
+def _fit_window(task) -> dict:
+    """One labelled line fitted in its window and band; a line the fitter can't follow is a missing fit."""
+    from dopplertrack.tracks import fit_event
+    window, line, t0, t1, lo, hi, objective = task
+    try:
+        fit = fit_event(_FIT_CROP["sp"], t0, t1, lo, hi, objective=objective).to_dict()
+    except Exception as exc:
+        fit = unavailable(f"{type(exc).__name__}: {exc}")
+    return {"window": window, "line": line, "band_hz": [lo, hi], "objective": objective, "fit": fit}
+
+
+def write_span(out_dir: Path, record: dict) -> str:
+    validate_span(record)
+    data = dumps(record)
+    tmp = out_dir / f".{SPAN_FILE}.{os.getpid()}.tmp"
+    tmp.write_bytes(data)
+    os.replace(tmp, out_dir / SPAN_FILE)
+    sha = sha256_bytes(data)
+    (out_dir / SPAN_HASH).write_text(f"{sha}  {SPAN_FILE}\n")
+    return sha
+
+
+def _line_match(f0: float, lines: list[list[float]]) -> bool:
+    tol = KNOBS["line_tolerance"]
+    return any(min(line) * (1 - tol) <= f0 * k <= max(line) * (1 + tol)
+               for line in lines for k in KNOBS["harmonic_ratios"])
+
+
+def match(detections: list[dict], windows: list[dict], min_score: float = 0.0) -> dict:
+    """Matched, missed and extra per window class for the detections scoring at least min_score.
+    A detection matches a counted window when its heard CPA lies in the window (with slack) and its f0, or a
+    harmonic ratio of it, lies on one of the window's lines. One that matches none is excluded if its heard
+    CPA lies in an uncertain or masked window, and extra otherwise."""
+    slack = KNOBS["cpa_slack_s"]
+    dets = [d for d in detections if d["score"] >= min_score]
+    hit, extra_by = set(), {}
+    excluded = 0
+    for d in dets:
+        inside = [w for w in windows if w["start"] - slack <= d["t_cpa"] <= w["end"] + slack]
+        matches = [w for w in inside if w["class"] in COUNTED and _line_match(d["f0"], w["lines"])]
+        if matches:
+            hit.update(w["index"] for w in matches)
+        elif any(w["class"] in EXCLUDED for w in inside):
+            excluded += 1
+        else:
+            home = min(inside, key=lambda w: abs((w["start"] + w["end"]) / 2 - d["t_cpa"]))["class"] if inside else "outside"
+            extra_by[home] = extra_by.get(home, 0) + 1
+    out = {}
+    for cls in COUNTED:
+        ws = [w for w in windows if w["class"] == cls]
+        out[cls] = {"windows": len(ws), "matched": sum(w["index"] in hit for w in ws),
+                    "missed": sum(w["index"] not in hit for w in ws)}
+    out["extra"] = {"total": sum(extra_by.values()), "by_window_class": extra_by}
+    out["excluded_detections"] = excluded
+    out["detections"] = len(dets)
+    return out
+
+
+def threshold_curve(detections: list[dict], windows: list[dict], hours: float) -> list[dict]:
+    """The match counts at each detection score taken as the threshold: the false-alarm curve, as a table."""
+    rows = []
+    for s in sorted({0.0, *(d["score"] for d in detections)}):
+        m = match(detections, windows, s)
+        rows.append({"min_score": s, "matched": sum(m[c]["matched"] for c in COUNTED),
+                     "missed": sum(m[c]["missed"] for c in COUNTED), "extra": m["extra"]["total"],
+                     "extra_per_hour": m["extra"]["total"] / hours})
+    return rows
+
+
+def line_f0(line) -> float:
+    """A straight pass's rest frequency from its entry and exit frequencies: f_in = f0 c/(c - v) and
+    f_out = f0 c/(c + v) give f0 = 2 f_in f_out / (f_in + f_out). Read from a picture, so good to about 5 %."""
+    a, b = float(line[0]), float(line[1])
+    return 2 * a * b / (a + b)
+
+
+def trajectory_reference(traces, icao: str, observer_enu, lat0, lon0, t0_unix: float, near_audio_s: float, c: float):
+    """Layer 3 for one flight (PLAN 5.3): what the observer should hear from its trace, in audio seconds.
+    The heard CPA, the steepest fall of the modelled curve, and the slant range and ground speed at CPA, from
+    the segment whose heard CPA lies nearest near_audio_s. None if the flight has no segment in range."""
+    from dopplertrack.score import modelled_curve, steepest_fall
+    from dopplertrack.search import build_segments
+    best = None
+    for seg in build_segments([t for t in traces if t.icao == icao], lat0, lon0):
+        r = np.linalg.norm(seg.enu - observer_enu, axis=1)
+        j = int(np.argmin(r))
+        if j == 0 or j == len(r) - 1:
+            continue
+        heard = seg.t[j] + r[j] / c - t0_unix
+        if best is None or abs(heard - near_audio_s) < abs(best["t_heard_cpa_s"] - near_audio_s):
+            # placed like the search's own steepest-fall check: within ±60 s of the emission CPA, smoothed
+            t_obs, ratio = modelled_curve(seg, observer_enu, c)
+            sf = steepest_fall(t_obs, ratio, float(seg.t[j]))
+            steep = None if sf is None else float(sf - t0_unix)
+            best = {"t_heard_cpa_s": float(heard), "t_steepest_fall_s": steep, "slant_range_m": float(r[j]),
+                    "ground_speed_m_s": float(seg.speed[j])}
+    return best
+
+
+def fit_errors(fit: dict, ref: dict, c: float) -> dict:
+    """A fit against layer 3; steepest falls are placed by the same function on both sides."""
+    from dopplertrack.pipeline import fitted_steepest_fall
+    from dopplertrack.tracks import EventFit
+    sf = fitted_steepest_fall(EventFit(**fit), c)
+    return {"dt_heard_s": fit["t_cpa"] - ref["t_heard_cpa_s"],
+            "dt_steepest_s": None if ref["t_steepest_fall_s"] is None or sf is None else sf - ref["t_steepest_fall_s"],
+            "df0_pct": 100 * (fit["f0"] - ref["f0_hz"]) / ref["f0_hz"],
+            "dv_m_s": fit["v"] - ref["ground_speed_m_s"], "dd_m": fit["d"] - ref["slant_range_m"]}
+
+
+def score_fits(record: dict, windows: list[dict], associations: list[dict], reference_context) -> tuple:
+    """Fit errors against layer 3 for every probable association, per objective and for its window's matching
+    detection, and the association share. reference_context() gives (traces, observer_enu, lat0, lon0, t0_unix, c)."""
+    probable = [a for a in associations if a.get("confidence") == "probable" and isinstance(a.get("flight"), dict)]
+    if not probable:
+        return [], unavailable("no probable association in this span")
+    if any(a.get("line") is None for a in probable):
+        return unavailable("an association has no line index"), unavailable("an association has no line index")
+    traces, obs, lat0, lon0, t0_unix, c = reference_context()
+    by_id = {w["id"]: w for w in windows}
+    fits = record["window_fits"] if isinstance(record["window_fits"], list) else []
+    dets = record["detections"] if isinstance(record["detections"], list) else []
+    rows, consistent = [], 0
+    slack = KNOBS["cpa_slack_s"]
+    for a in probable:
+        w = by_id[a["window"]]
+        line = w["lines"][a["line"]]
+        ref = trajectory_reference(traces, a["flight"]["icao"], obs, lat0, lon0, t0_unix,
+                                   float(a["flight"].get("heard_cpa_s", (w["start"] + w["end"]) / 2)), c)
+        row = {"window": a["window"], "line": a["line"], "flight": a["flight"]["icao"], "reference": ref}
+        if ref is None:
+            rows.append({**row, "errors": unavailable("the flight has no segment with a CPA in range")})
+            continue
+        ref["f0_hz"] = line_f0(line)
+        row["objectives"] = {f["objective"]: (fit_errors(f["fit"], ref, c) if "unavailable" not in f["fit"] else f["fit"])
+                             for f in fits if f["window"] == w["index"] and f["line"] == a["line"]}
+        on_line = [d for d in dets if w["start"] - slack <= d["t_cpa"] <= w["end"] + slack
+                   and _line_match(d["f0"], [line])]
+        if on_line:
+            d = max(on_line, key=lambda d: d["score"])
+            e = fit_errors(d, ref, c)
+            row["detection"] = e
+            # agreement with the flight: f0 checked against the line at any harmonic ratio, like matching
+            ratio_ok = any(abs(d["f0"] * k - ref["f0_hz"]) <= KNOBS["association_df"] * ref["f0_hz"]
+                           for k in KNOBS["harmonic_ratios"])
+            consistent += abs(e["dt_heard_s"]) <= KNOBS["association_dt_s"] and ratio_ok
+        else:
+            row["detection"] = unavailable("no detection on this line")
+        rows.append(row)
+    return rows, {"probable": len(probable), "consistent": consistent, "share": consistent / len(probable)}
+
+
+def compare_span(out_dir: Path, read_labels, reference_context=None) -> dict:
+    """Score a span record against its labels, only once its bytes still match the hash written beside it."""
+    from dopplertrack.result import sha256_bytes as _sha
+    try:
+        expected = (out_dir / SPAN_HASH).read_text().split()[0]
+        data = (out_dir / SPAN_FILE).read_bytes()
+        if _sha(data) != expected:
+            raise RecordError([f"{SPAN_FILE} does not match its hash"])
+        record = json.loads(data)
+        validate_span(record)
+    except (OSError, IndexError, RecordError, ValueError) as exc:
+        return {"span": out_dir.name, "status": "discarded", "reason": f"record does not match the hash written "
+                f"before the labels were read: {exc}"}
+    entry = {"span": record["span"]["id"], "record_sha256": expected, "stages": record["execution"]["stages"],
+             "errors": record["execution"]["errors"], "status": "error" if record["execution"]["errors"] else "scored"}
+    labels = read_labels()
+    windows = [{"index": i, "class": w["class"], "start": float(w["start"]), "end": float(w["end"]),
+                "lines": w["lines"]} for i, w in enumerate(labels["windows"])]
+    dets = record["detections"] if isinstance(record["detections"], list) else []
+    hours = (record["span"]["end"] - record["span"]["start"]) / 3600.0
+    entry["detection"] = match(dets, windows)
+    entry["detection"]["extra_per_hour"] = entry["detection"]["extra"]["total"] / hours
+    entry["detection_curve"] = threshold_curve(dets, windows, hours)
+    if reference_context is None:
+        entry["fits"] = entry["association"] = unavailable("no trajectory reference was given for this span")
+    else:
+        idw = [{"id": w["id"], "index": i, "start": float(w["start"]), "end": float(w["end"]), "lines": w["lines"]}
+               for i, w in enumerate(labels["windows"])]
+        entry["fits"], entry["association"] = score_fits(record, idw, labels.get("associations", []), reference_context)
+    return entry
+
+
+# The known point (PLAN 5.4's known-point check): a case's two events scored at the reference coordinate only.
+# The events are chosen blind and written with their hash first; the search at the reference runs in the
+# comparison step, because the reference is truth, and its table is truth-conditioned, never a blind result.
+EVENTS_FILE, EVENTS_HASH = "events.json", "events.json.sha256"
+KP_FILE, KP_HASH = "known_point.json", "known_point.json.sha256"
+
+
+def _write_hashed(path: Path, obj: dict) -> str:
+    data = (json.dumps(obj, indent=1, sort_keys=True, allow_nan=False) + "\n").encode()
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    tmp.write_bytes(data)
+    os.replace(tmp, path)
+    sha = sha256_bytes(data)
+    path.with_name(path.name + ".sha256").write_text(f"{sha}  {path.name}\n")
+    return sha
+
+
+def _read_hashed(path: Path) -> dict:
+    data = path.read_bytes()
+    if sha256_bytes(data) != path.with_name(path.name + ".sha256").read_text().split()[0]:
+        raise RecordError([f"{path.name} does not match its hash"])
+    return json.loads(data)
+
+
+def case_events(case: dict, profile: str, out_dir: Path, code: dict, workers: int | None = None) -> dict:
+    """The case's two search events under a profile, chosen without the labels, written with their hash."""
+    from dopplertrack.audio import Spectrogram
+    from dopplertrack.cache import cached_detections, detection_key
+    from dopplertrack.result import file_entry
+    from dopplertrack.tracks import detect_events
+
+    from .runner import PROFILES, pick_detected, saved_fit_dicts, search_harmonics
+    assert "labels" not in case, "the known point's events must be chosen blind"
+    spec = resolve(case["spectrogram"])
+    out = {"case": {"id": case["id"], "version": case["version"]}, "profile": profile, "code": code,
+           "harmonics": search_harmonics(case, profile), "inputs": [file_entry("spectrogram", spec)],
+           "detection_key": None}
+    if profile == "saved-fit":
+        out["events"] = saved_fit_dicts(case)[:2]
+        out["inputs"] += [file_entry("saved_fits", resolve(p)) for p in case["events"]["files"]]
+    else:
+        d = PROFILES[profile]["detect"]
+        sp = Spectrogram.load(spec)
+        params = dict(f_lo=d["band_hz"][0], f_hi=d["band_hz"][1], harmonics=d["harmonics"], top=d["top"],
+                      window_s=d["window_s"])
+        out["events"] = pick_detected([e.to_dict() for e in cached_detections(sp, detect_events, workers=workers,
+                                                                                **params)])
+        out["detection_key"] = detection_key(sp, detect_events, **params)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    _write_hashed(out_dir / EVENTS_FILE, out)
+    return out
+
+
+def known_point(case: dict, out_dir: Path, reference: dict, true_pair, log=print) -> dict:
+    """After the events' hash check: every flight pair scored at the reference, written as a truth-conditioned
+    table with its own hash, and the scoreboard's summary of it."""
+    from dopplertrack import pipeline
+    from dopplertrack.adsb import join_days
+    from dopplertrack.audio import Spectrogram
+    from dopplertrack.search import Grid
+    from dopplertrack.terrain import Terrain
+    from dopplertrack.tracks import EventFit
+
+    from .runner import trace_paths
+    try:
+        ev = _read_hashed(out_dir / EVENTS_FILE)
+    except (OSError, IndexError, RecordError, ValueError) as exc:
+        return {"status": "discarded", "reason": f"events do not match the hash written before the truth: {exc}"}
+    s = case["search"]
+    lat, lon = float(reference["lat"]), float(reference["lon"])
+    el = Terrain().elevation(np.array([lat]), np.array([lon])) if s["dem"] else np.zeros(1)
+    grid = Grid.points([lat], [lon], el)
+    traces, meta = join_days(trace_paths(case))
+    ev1, ev2 = (EventFit(**e) for e in ev["events"])
+    sp = Spectrogram.load(resolve(case["spectrogram"]))
+    res, _ = pipeline.run_search(sp, ev1, ev2, traces, grid, harmonics=tuple(ev["harmonics"][:2]), tol_s=s["tol_s"],
+                                 v_tol=s["v_tol"], d_tol=tuple(s["d_tol"]), silence_d_m=s["silence_d_m"],
+                                 max_range_m=s["max_range_m"], progress=False, trace_metadata=meta,
+                                 search_bbox=(lat, lat, lon, lon), workers=1)
+    best = res.sort_values("score", ascending=False, kind="stable").drop_duplicates(["icao1", "icao2"])
+    pairs = [{"flights": [str(r.icao1), str(r.icao2)], "score": float(r.score), "event_scores": [float(r.s1), float(r.s2)],
+              "shift_s": float(r.shift)} for r in best.itertuples()]
+    _write_hashed(out_dir / KP_FILE, {
+        "truth_conditioned": True,
+        "note": "scored at the reference coordinate, which is truth: a diagnostic of the events and the physics, "
+                "never a blind result",
+        "case": ev["case"], "profile": ev["profile"], "events_used": ev["events"], "harmonics": ev["harmonics"],
+        "detection_key": ev["detection_key"], "events_sha256": sha256_bytes((out_dir / EVENTS_FILE).read_bytes()),
+        "reference": {"lat": lat, "lon": lon}, "pairs": pairs, "funnel": res.attrs.get("funnel", {})})
+    rank = next((k for k, p in enumerate(pairs, 1) if true_pair and p["flights"] == list(true_pair)), None)
+    second = pairs[1]["score"] if len(pairs) > 1 else None
+    return {"status": "scored", "profile": ev["profile"], "pairs_at_point": len(pairs),
+            "true_pair_rank_at_point": rank, "true_pair_first": rank == 1,
+            "margin_pct": (100 * (pairs[0]["score"] - second) / second) if rank == 1 and second else None}
+
+
+def reference_context(span: dict, labels: dict):
+    """For the comparison step only: the span's flight data, observer and clock, from its reference case's
+    labels and the label file's own clock (both truth)."""
+    from dopplertrack.adsb import join_days
+    from dopplertrack.doppler import speed_of_sound
+    from dopplertrack.terrain import Terrain
+
+    from .cases import case_labels, latest_case
+    from .runner import trace_paths
+    case = latest_case(span["reference_case"])
+    ref = case_labels(case["id"], case["version"])["reference"]
+    lat, lon = float(ref["lat"]), float(ref["lon"])
+    elev = float(Terrain().elevation(np.array([lat]), np.array([lon]))[0]) if case["search"]["dem"] else 0.0
+    traces, _ = join_days(trace_paths(case))
+    t0 = datetime.datetime.fromisoformat(labels["recording"]["t0_utc"].replace("Z", "+00:00")).timestamp()
+    return traces, np.array([0.0, 0.0, elev]), lat, lon, t0, speed_of_sound()
+
+
+BUDGET_S = 180.0      # PLAN 5.4: Tier 1 under 3 min; a span or case joins only if the whole run stays under it
+
+
+def run_tier1(sets=("development",), run_dir: Path | None = None, log=print, workers: int | None = None) -> Path:
+    """Every span of the given sets and every known-point case, blind first, then compared, into one run folder."""
+    import time
+
+    from .cases import blind_case, case_labels, latest_case
+    from .runner import code_revision, new_run
+    code = code_revision()
+    t0 = time.perf_counter()
+    if run_dir is None:
+        run_dir = new_run(f"bench-{str(code['git_commit'])[:7]}-t1")
+    doc = load_tier1()
+    spans = [s for s in doc["spans"] if s["set"] in sets]
+    skipped = [{"span": s["id"], "set": s["set"], "reason": f"not in the requested sets {list(sets)}"}
+               for s in doc["spans"] if s["set"] not in sets]
+    ready = []
+    for s in spans:
+        if not s["spectrogram"].get("sha256"):
+            skipped.append({"span": s["id"], "set": s["set"], "reason": "its spectrogram is not built yet"})
+        else:
+            ready.append(s)
+    timings = {}
+    # blind: every span record and every case's events are written and hashed before any label is read
+    for s in ready:
+        w = time.perf_counter()
+        out = run_dir / "spans" / s["id"]
+        out.mkdir(parents=True, exist_ok=True)
+        write_span(out, execute_span(s, out, code, log=log, workers=workers))
+        timings[f"span {s['id']}"] = time.perf_counter() - w
+    for cid in doc["known_point"]:
+        for profile in ("saved-fit", "raw-audio"):
+            w = time.perf_counter()
+            case_events(blind_case(cid), profile, run_dir / "known_point" / cid / profile, code, workers=workers)
+            timings[f"events {cid} {profile}"] = time.perf_counter() - w
+    # truth: labels, references and the known-point searches
+    span_entries = []
+    for s in ready:
+        labels = json.loads(resolve(s["labels"]).read_text())
+        span_entries.append({**compare_span(run_dir / "spans" / s["id"], lambda labels=labels: labels,
+                                            lambda s=s, labels=labels: reference_context(s, labels)),
+                             "set": s["set"], "group": s["group"]})
+    kp_entries = []
+    for cid in doc["known_point"]:
+        case = latest_case(cid)
+        lab = case_labels(cid, case["version"])
+        del case["labels"]
+        for profile in ("saved-fit", "raw-audio"):
+            w = time.perf_counter()
+            e = known_point(case, run_dir / "known_point" / cid / profile, lab["reference"], lab.get("true_pair"), log)
+            timings[f"known point {cid} {profile}"] = time.perf_counter() - w
+            kp_entries.append({"case": cid, **e})
+    wall = time.perf_counter() - t0
+    results = {"schema": 1, "tier": "t1", "code": code, "knobs": KNOBS, "sets": list(sets),
+               "created": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
+               "spans": span_entries, "known_point": kp_entries, "skipped": skipped,
+               "timings_s": {k: round(v, 2) for k, v in timings.items()}, "wall_s": round(wall, 2),
+               "within_budget": wall < BUDGET_S, "budget_s": BUDGET_S}
+    (run_dir / "results.json").write_text(json.dumps(results, indent=1, sort_keys=True) + "\n")
+    return run_dir

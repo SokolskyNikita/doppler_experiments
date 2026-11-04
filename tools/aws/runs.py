@@ -325,21 +325,7 @@ def interrupt(a) -> None:
         sys.exit(f"no running box for {a.job}")
     sess = session()
     account = sess.client("sts").get_caller_identity()["Account"]
-    iam = sess.client("iam")
-    role_name = "dopplertrack-fis"
-    try:
-        role_arn = iam.get_role(RoleName=role_name)["Role"]["Arn"]
-    except iam.exceptions.NoSuchEntityException:
-        trust = {"Version": "2012-10-17", "Statement": [{"Effect": "Allow", "Action": "sts:AssumeRole",
-                                                         "Principal": {"Service": "fis.amazonaws.com"}}]}
-        role_arn = iam.create_role(RoleName=role_name, AssumeRolePolicyDocument=json.dumps(trust),
-                                   Tags=[{"Key": "project", "Value": "dopplertrack"}])["Role"]["Arn"]
-        iam.put_role_policy(RoleName=role_name, PolicyName="spot-interrupt", PolicyDocument=json.dumps({
-            "Version": "2012-10-17", "Statement": [{"Effect": "Allow", "Action": "ec2:SendSpotInstanceInterruptions",
-                                                    "Resource": "*", "Condition": {"StringEquals": {
-                                                        "aws:ResourceTag/project": "dopplertrack"}}},
-                                                   {"Effect": "Allow", "Action": "ec2:DescribeInstances", "Resource": "*"}]}))
-        time.sleep(10)    # IAM is eventually consistent
+    role_arn = outputs()["FisRoleArn"]
     fis = sess.client("fis")
     tmpl = fis.create_experiment_template(
         description=f"dopplertrack: interrupt {a.job}", roleArn=role_arn,
@@ -427,21 +413,20 @@ def dev_sync(out: dict) -> str:
     """Puts this branch on the dev box at ~/branch: the same bundle, diff and untracked files as a job."""
     bucket = out["Bucket"]
     s3 = session().client("s3")
-    key = f"jobs/dev-{datetime.datetime.now():%Y%m%d-%H%M%S}"
+    key = f"dev/{datetime.datetime.now():%Y%m%d-%H%M%S}"
     with tempfile.TemporaryDirectory() as tmp:
         code = code_bundle(Path(tmp))
         for f in sorted(Path(tmp).iterdir()):
             s3.upload_file(str(f), bucket, f"{key}/code/{f.name}")
-    script = f"""set -e
-export HOME=/home/ubuntu
-cd /home/ubuntu && rm -rf {DEV_CHECKOUT}.new && mkdir -p /tmp/devsync && rm -rf /tmp/devsync/*
-s5cmd --log error cp 's3://{bucket}/{key}/code/*' /tmp/devsync/
-git clone -q --no-checkout /tmp/devsync/code.bundle {DEV_CHECKOUT}.new
-git -C {DEV_CHECKOUT}.new checkout -q --detach {code['git_commit']}
-[ -s /tmp/devsync/dirty.patch ] && git -C {DEV_CHECKOUT}.new apply --binary /tmp/devsync/dirty.patch
-[ -s /tmp/devsync/untracked.tar ] && tar xf /tmp/devsync/untracked.tar -C {DEV_CHECKOUT}.new
-rm -rf {DEV_CHECKOUT} && mv {DEV_CHECKOUT}.new {DEV_CHECKOUT}
-cd {DEV_CHECKOUT} && uv sync --frozen -q && git log -1 --oneline"""
+    new, sync = f"{DEV_CHECKOUT}.new", "/tmp/devsync"
+    script = "; ".join([      # one line: Run Command doesn't keep a script's newlines through the login shell
+        "set -e", f"rm -rf {new} {sync}", f"mkdir -p {sync}",
+        f"s5cmd --log error cp 's3://{bucket}/{key}/code/*' {sync}/",
+        f"git clone -q --no-checkout {sync}/code.bundle {new}",
+        f"git -C {new} checkout -q --detach {code['git_commit']}",
+        f"if [ -s {sync}/dirty.patch ]; then git -C {new} apply --binary {sync}/dirty.patch; fi",
+        f"if [ -s {sync}/untracked.tar ]; then tar xf {sync}/untracked.tar -C {new}; fi",
+        f"rm -rf {DEV_CHECKOUT}", f"mv {new} {DEV_CHECKOUT}", f"cd {DEV_CHECKOUT}", "uv sync --frozen -q"])
     dev_run(out["DevBoxId"], script, cwd=None, quiet=True)
     print(f"dev box ~/branch at {code['git_commit'][:7]}{' (dirty)' if code['git_dirty'] else ''}")
     return code["git_commit"]

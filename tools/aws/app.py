@@ -50,7 +50,8 @@ class FleetStack(cdk.Stack):
             enforce_ssl=True, object_ownership=s3.ObjectOwnership.BUCKET_OWNER_ENFORCED,
             removal_policy=cdk.RemovalPolicy.RETAIN,
             lifecycle_rules=[s3.LifecycleRule(abort_incomplete_multipart_upload_after=cdk.Duration.days(2)),
-                             s3.LifecycleRule(prefix="jobs/", expiration=cdk.Duration.days(60))])
+                             s3.LifecycleRule(prefix="jobs/", expiration=cdk.Duration.days(60)),
+                             s3.LifecycleRule(prefix="dev/", expiration=cdk.Duration.days(7))])
 
         vpc = ec2.Vpc(
             self, "Vpc", availability_zones=AZS, nat_gateways=0, ip_addresses=ec2.IpAddresses.cidr("10.42.0.0/16"),
@@ -92,7 +93,13 @@ class FleetStack(cdk.Stack):
                              period=cdk.Duration.minutes(5)))
         idle.add_alarm_action(cwa.Ec2Action(cwa.Ec2InstanceAction.STOP))
 
-        out = {"Bucket": bucket.bucket_name, "SecurityGroup": sg.security_group_id,
+        # what `runs interrupt` hands Fault Injection Service: it may interrupt this project's spot boxes only
+        fis = iam.Role(self, "FisRole", assumed_by=iam.ServicePrincipal("fis.amazonaws.com"))
+        fis.add_to_policy(iam.PolicyStatement(actions=["ec2:SendSpotInstanceInterruptions"], resources=["*"],
+                                              conditions={"StringEquals": {"aws:ResourceTag/project": "dopplertrack"}}))
+        fis.add_to_policy(iam.PolicyStatement(actions=["ec2:DescribeInstances"], resources=["*"]))
+
+        out = {"Bucket": bucket.bucket_name, "FisRoleArn": fis.role_arn, "SecurityGroup": sg.security_group_id,
                "Subnets": ",".join(s.subnet_id for s in vpc.public_subnets),
                "TemplateArm64": templates["arm64"].launch_template_id,
                "TemplateAmd64": templates["amd64"].launch_template_id,

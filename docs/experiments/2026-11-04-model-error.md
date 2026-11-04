@@ -7,30 +7,35 @@
 **Setup.**
 - **The bound.** It is the Cramér–Rao bound of the ideal straight-pass curve for (f0, v, R, τ), taken at each pass's own parameters. For Gaussian noise of covariance Σ the information is I = JᵀΣ⁻¹J, with J the numerical Jacobian of the Ferguson & Lo model (Kay I ch. 3; eq. 3.41 is the single-tone case).
 - **Two noise structures:**
-  - **Package.** The package's grid (a 2.048 s Hann window every 0.25 s) over each pass's ridge span. σ is 0.45 % of f0, the measured error of `tracks.ridge`. Frames are correlated 1, 0.91, 0.67, 0.40 and 0.18 at lags 0–4 (Harris 1978 eq. 17), used as a full Toeplitz covariance. The independent form divided by 3.9 gives a bound 1.14× smaller (range 1.07–1.19), so the full form is the one quoted.
+  - **Package, provisional.** The package's grid (a 2.048 s Hann window every 0.25 s) over each pass's ridge span, with σ 0.45 % of f0, the measured error of `tracks.ridge`.
+    - **The frame correlation is modelled, not yet measured.** c(r) is the Hann window's own autocorrelation at multiples of the hop (Harris 1978 eq. 17, every lag): 1, 0.906, 0.672, 0.400, 0.183, 0.058, 0.010, 0.0005, 0. That is the correlation of the complex transform coefficients. A frequency estimate taken from their magnitudes correlates to first order as c(r)².
+    - **Bounds as a range.** Both Toeplitz matrices are positive semi-definite. The bound is given as a range: c² (the model) to c (conservative).
+    - **Check.** The independent form divided by the c² sum, 3.94, agrees with c² to within 2 %.
+    - **Correction.** An earlier version of this record used the lags truncated to 0–4 (1, 0.91, 0.67, 0.40, 0.18, then zeros). That matrix is not positive semi-definite (smallest eigenvalue −0.095), so the bound built on it was not a Fisher information and is withdrawn (`runs/2026-11-04-crb/`).
+    - **Next.** The package column stays provisional until the covariance is measured from synthesised waveforms passed through `tracks.ridge` on the package's grid.
   - **Ridge.** The published ridge's own sample times, every 0.19 s. σ and the autocorrelation (lags to 2 s, Bartlett-tapered) come from that pass's residuals about the trajectory curve, less their 5 s running median. This is the noise the stage-1 bootstrap draws from.
 - **Position.** A single pass fixes only a distance from its track. So the bound is also given in metres:
   - in slant range;
   - in ground range from the track, R/L times the slant-range bound, with L the horizontal distance at CPA;
   - along the track as v times the τ bound, which counts only when the clock is known.
 
-**Numbers**, package noise, median (IQR; largest):
+**Numbers**, package noise (provisional), median over passes, given as c² to c (largest, c² to c):
 
 | Passes | Slant range | f0 | v | τ | Slant range, m | Ground range, m | Along track, m |
 |---|---|---|---|---|---|---|---|
-| Livermore primary (29, 0.3–5.7 km) | 4.0 % (2.8–6.9; 21) | 0.18 % | 1.3 % | 0.27 s | 73 (largest 518) | 156 (98–249; 8,024) | 18 |
-| Livermore flagged (11) | 3.1 % (2.6–7.7; 16) | 0.20 % | 1.0 % | 0.14 s | 55 (largest 154) | 70 | 13 |
-| Development events (4, 2.5–6.1 km) | 1.6 % (0.9–2.3) | 0.10 % | 0.5 % | 0.18 s | 76 (largest 119) | – | 21 |
+| Livermore primary (29, 0.3–5.7 km) | 3.4–4.0 % (18.7–21.5) | 0.15–0.17 % | 1.1–1.3 % | 0.23–0.27 s | 63–74 (464–534) | 135–157 | 16–18 |
+| Livermore flagged (11) | 2.6–3.0 % (14.1–15.8) | 0.17–0.19 % | 0.8–1.0 % | 0.12–0.14 s | 47–55 (133–153) | 61–70 | 11–13 |
+| Development events (4, 2.5–6.1 km) | 1.3–1.6 % (2.0–2.3) | 0.09–0.10 % | 0.4–0.5 % | 0.15–0.18 s | 66–77 (103–120) | – | 18–21 |
 
 - **Ridge noise.** On the Livermore ridges' own noise the slant-range bound is close to the package one: a median 3.9 % on the primary passes and 8.2 % on the flagged ones.
 - **The bootstrap sits at the bound.**
   - On the ideal curve with ridge noise (curve C+noise below), the bootstrap SD over the ridge bound is 1.00 for slant range (IQR 0.95–1.03, largest 1.18), 1.00 for speed and 1.02 for f0 on the primary passes. So on straight passes neither the optimiser nor the noise model adds spread beyond the information in the data.
   - It is wider only on three short, flagged passes: R41 2.3×, R36 2.4× and R44 1.5×.
-- **Large ground-range numbers** (R17 at 8 km, R13 at 2.9 km, R50 at 3.0 km) come from near-overhead passes, where L is small next to R. There, a slant range doesn't fix a ground range.
+- **Large ground-range numbers** (R17 at 7–8 km, R13 at about 2.5–2.9 km, R50 at 2.7–3.1 km) come from near-overhead passes, where L is small next to R. There, a slant range doesn't fix a ground range.
 
 **What it says for PLAN.**
-- **Information is not the limit.** One pass carries enough information for its distance from the track to well under 1 km at 1–6 km: about 50–500 m slant range, and about 100 m on the development events.
-- **Model error is the limit.** The straight-pass fit of the noiseless trajectory curve misses the slant range by a median 229 m on the primary passes, 2.9 times the bound. 5 of 40 passes miss by more than 1 km (below).
+- **Information is not the limit.** One pass carries enough information for its distance from the track to well under 1 km at 1–6 km: about 50–500 m slant range, and about 100 m on the development events (provisional package model; the measured ridge-noise bound agrees).
+- **Model error is the limit.** The straight-pass fit of the noiseless trajectory curve misses the slant range by a median 229 m on the primary passes, 2.8–3.2 times the bound. 5 of 40 passes miss by more than 1 km (below).
 - **One pass can't give a position.** It gives a distance from a track, not a position, and its error is set by model error. A 1 km answer has to come from several events per recording (item 7), and from a model or a weighting that copes with the passes that aren't straight.
 
 ## Model error, noise and the optimiser
@@ -62,12 +67,13 @@
 | Curve | f0 | v | R | τ |
 |---|---|---|---|---|
 | C, ideal | 0 | 0 | 0 | 0 |
-| C+noise | 0.00 %, 0.02 % | +0.02 %, 0.06 % | +0.09 %, 0.17 % | 0.00 s, 0.01 s |
+| C+noise, bias of the mean over 200 replicates | 0.00 %, 0.02 % | +0.02 %, 0.06 % | +0.09 %, 0.17 % | 0.00 s, 0.01 s |
+| C+noise, one fit's spread (bootstrap SD, median) | 0.17 % | 1.1 % | 3.7 % (75 m) | 0.23 s |
 | A, trajectory | −0.20 %, 0.65 % (−0.9 to +0.4) | −2.6 %, 3.0 % (−8.2 to +0.7) | −3.5 %, 15.6 % (−19.3 to +4.0) | +0.45 s, 0.93 s |
 | B, trajectory + noise | −0.27 %, 0.66 % | −2.5 %, 3.0 % | −3.6 %, 15.3 % | +0.44 s, 0.92 s |
 | D, published ridge | −0.29 %, 0.83 % | −0.5 %, 4.8 % | −3.0 %, 15.0 % (−17.7 to +8.8) | +0.30 s, 1.12 s |
 
-The flagged 11, median |·|: A gives f0 1.5 %, v 11.0 %, R 15.3 %, τ 1.3 s. D gives f0 3.2 %, v 19.1 %, R 34.3 %, τ 2.0 s.
+C+noise's per-fit spread on the flagged 11 is 0.41 % in f0, 2.6 % in v, 8.4 % (136 m) in R and 0.40 s in τ. The flagged 11, median |·|: A gives f0 1.5 %, v 11.0 %, R 15.3 %, τ 1.3 s. D gives f0 3.2 %, v 19.1 %, R 34.3 %, τ 2.0 s.
 
 - **Model error by range.** A's |R| error is a median 13.1 % below 2 km (22 passes), 21.8 % at 2–4 km (14) and 2.5 % above 4 km (4). Model error is not a fixed fraction of range.
 - **Does model error plus noise explain the real fit?** No. fit(D) differs from mean(B) by a median |z| of 2.5 in R and 3.0 in v on the primary passes (flagged: 2.5 and 4.4). The real ridges carry slow structure (below 5 s it is in the noise model, above it isn't) or a mismatch with the trajectory that curve A doesn't have.
@@ -107,8 +113,11 @@ On the flagged 11, every |Δ|/SD median is below 1 except drift ±2 % in v (1.8)
 - Fitting more of the trajectory makes the straight-pass fit worse, because the aircraft turn and change height over 5 minutes.
 
 **Outcome.**
-- **The fit's error on real passes is model error.** The optimiser is exact on straight curves, and noise moves slant range by a fraction of a percent, at the Cramér–Rao bound. The trajectory curve alone misses slant range by a median 15.6 % and speed by 3.0 %, as large as the real ridges' 15.0 % and 4.8 %.
-- **Model error is about 3 times the information limit** on the median pass, and over 1 km on 5 of 40.
+- **The fit's error on real passes is model error.**
+  - The optimiser is exact on straight curves.
+  - Noise gives one fit a spread of about 4 % in slant range (3.7 %, 75 m, on the median primary pass), at the Cramér–Rao bound, with a negligible bias of the mean (0.17 %).
+  - The trajectory curve alone misses slant range by a median 15.6 % and speed by 3.0 %, as large as the real ridges' 15.0 % and 4.8 %. That 15.6 % is to be read against the 4 % a single fit's noise allows.
+- **Model error is about 3 times the information limit** (2.8–3.2×) on the median pass, and over 1 km on 5 of 40.
 - **What enters the model:**
   - **f0 drift.** 0.5 % over a pass moves speed by more than the fit's spread on 21 of 29 passes, and the half-fits allow drifts of that size. So a drifting f0 (one more parameter) is the first candidate for a heavier model, measured against the half-fit differences.
   - **Wind.** It crosses the threshold only in f0, by 0.06 %, because f0's spread is tiny. It doesn't move speed or range, so it isn't worth modelling for location.
@@ -121,4 +130,4 @@ On the flagged 11, every |Δ|/SD median is below 1 except drift ±2 % in v (1.8)
 
   The whitening floor and window and synthesised waveforms are left for a later round.
 
-**Scripts:** `tools/experiments/2026-11-04/straight_pass_ls.py`, `model_error.py`, `model_error_summary.py`, `crb.py`. **Outputs:** `runs/2026-11-04-model-error-2/` (`fits.csv`, `perturbations.csv`, `halves.csv`, `noise.csv`, `summary.json`) and `runs/2026-11-04-crb/` (`crb.csv`, `crb_summary.json`). Weather: `raw/aux/metar/KLVK_*`, `RAOB_KOAK_*`.
+**Scripts:** `tools/experiments/2026-11-04/straight_pass_ls.py`, `model_error.py`, `model_error_summary.py`, `crb.py`. **Outputs:** `runs/2026-11-04-model-error-2/` (`fits.csv`, `perturbations.csv`, `halves.csv`, `noise.csv`, `summary.json`) and `runs/2026-11-04-crb-2/` (`crb.csv`, `crb_summary.json`; `runs/2026-11-04-crb/` used the invalid truncated covariance and is superseded). Weather: `raw/aux/metar/KLVK_*`, `RAOB_KOAK_*`.

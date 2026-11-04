@@ -23,6 +23,16 @@ heard gate on Oyster Bay's `detect` events, which fail at the true location.
 
 The saved-fit profile is a regression check only.
 
+**Amendment, 2026-11-04, before any sweep result was read.** On the eagle cam, item 1 is judged with its
+committed fits, `detect`'s ranks 5 and 13, run through the saved-fit profile across the same 20 cells. On
+the eagle-cam clip, the raw-audio profile's top-two rule picks a wrong flyover: full-stream ranks 2 and 5,
+not 5 and 13 ([bench-baselines](2026-11-04-bench-baselines.md)). So the true pair can't reach scoring at any
+gate. That is items 6 and 7's failure (event choice), outside the variable this item tests. The two Oyster
+Bay cases are one recording, so without the eagle cam the decision would rest on one recording. Ranks 5 and
+13 are `detect` output, so with them it rests on two true event pairs, as the development pass did. The
+eagle cam's raw-audio cells are reported beside them, as out of this item's reach, with the wrong pick
+named. The Oyster Bay cases are still judged at raw-audio.
+
 ## Design
 
 All knobs are `run_search` keyword arguments and `search` flags. Their defaults reproduce the previous

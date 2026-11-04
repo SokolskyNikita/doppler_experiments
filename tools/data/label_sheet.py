@@ -29,6 +29,7 @@ Label files live in bench/labels/<recording>-<t0>-<t1>.json:
                 "labeller", "blind", "date", "notes"}],
                optionally "checked": {"by", "date", "verdict"} once a second person has looked at the window],
    "associations": [{"window", "flight": {"icao", "registration", "heard_cpa_s", "slant_m"} or "unmatched",
+                     "line": index into the window's lines of the line the flight follows, or null if unmatched,
                      "confidence": "probable" or "possible", "alternatives": [flights that fit as well],
                      "labeller", "blind", "date", "notes"}]}
 Layer 1 classes: clear, uncertain, overlapping, masked, absent. An overlapping window may have one association
@@ -308,6 +309,11 @@ def check(path: Path) -> list[str]:
             errs.append(f"association to unknown window {a['window']}")
         if a["flight"] != "unmatched" and not a["flight"].get("icao"):
             errs.append(f"association of {a['window']}: flight needs an icao or 'unmatched'")
+        lines = next((len(w.get("lines", [])) for w in ws if w["id"] == a["window"]), 0)
+        if a["flight"] != "unmatched" and not (isinstance(a.get("line"), int) and 0 <= a["line"] < lines):
+            errs.append(f"association of {a['window']}: line must index the window's lines (0-{lines - 1})")
+        if a["flight"] == "unmatched" and a.get("line") is not None:
+            errs.append(f"association of {a['window']}: an unmatched event has line null")
         if a.get("confidence", "probable") not in ("probable", "possible"):
             errs.append(f"association of {a['window']}: confidence {a['confidence']!r}")
     return errs

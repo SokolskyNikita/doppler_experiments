@@ -4,6 +4,9 @@ pass, with both objectives, on three spectrograms over the ridge's span:
             bilinearly between the two nearest bins) on the package's grid (0.488 Hz x 0.25 s)
   A-render  the trajectory curve f0* g(t) drawn the same way
   wav       the pass's own audio.wav through the package's compute_spectrogram (2.048 s Hann, 0.25 s hop)
+  wav-450   the same with the package's shipped 40-450 Hz band, and the fit's band clipped to it
+The rendered and wav inputs reach 1.5 x the ridge's top (at least 450 Hz), so the fit sees the whole curve;
+each row records the fraction of the trajectory curve over the ridge span that lies inside its band.
 The rendered images carry no noise: C-render measures fit_event's own discretisation and objective error,
 A-render adds model error, and wav is the pipeline on the real recording. Times are recording seconds of
 the WAV, whose first sample is on the ADS-B clock at the first ridge stamp less the audit's pad and shift.
@@ -66,14 +69,24 @@ def main(run: Path):
             "C-render": render(lambda t: ls.model(t + T0, f0s, ref["v"], ref["R"], ref["tau"], C), dur, fmax),
             "A-render": render(lambda t: f0s * me.at(t + T0, th, g), dur, fmax),
             "wav": compute_spectrogram(x, SR, fmax=fmax),
+            "wav-450": compute_spectrogram(x, SR),          # the package's shipped 40-450 Hz band
         }
+        tt = np.linspace(t_start, t_end, 400)
+        fa = f0s * me.at(tt + T0, th, g)
+        fa = fa[np.isfinite(fa)]
+        frac = {"wav-450": float(np.mean((fa >= 40) & (fa <= 450)))}
+        frac.update({k: float(np.mean((fa >= 40) & (fa <= fmax))) for k in ("C-render", "A-render", "wav")})
         for src, sp in sources.items():
             for obj in ("contrast", "brightness"):
                 t0 = time.time()
+                lo, hi = (max(40.0, f_lo), min(450.0, f_hi)) if src == "wav-450" else (f_lo, f_hi)
                 row = dict(id=p["id"], group="flagged" if p["id"] in flagged else "primary", source=src, objective=obj,
-                           ref_f0=f0s, ref_v=ref["v"], ref_R=ref["R"], ref_tau=ref["tau"] - T0, fmax=fmax, error="")
+                           ref_f0=f0s, ref_v=ref["v"], ref_R=ref["R"], ref_tau=ref["tau"] - T0,
+                           fmax=450.0 if src == "wav-450" else fmax, f_lo=lo, f_hi=hi, frac_curve_in_band=frac[src], error="")
                 try:
-                    fe = fit_event(sp, t_start, t_end, f_lo, f_hi, c=C, objective=obj)
+                    if hi - lo < 5.0:
+                        raise ValueError("the tone lies outside the band")
+                    fe = fit_event(sp, t_start, t_end, lo, hi, c=C, objective=obj)
                     row.update(f0=fe.f0, v=fe.v, R=fe.d, tau=fe.t_cpa_emit, score=fe.score)
                 except Exception as e:      # a failed fit is a result, recorded
                     row.update(f0=np.nan, v=np.nan, R=np.nan, tau=np.nan, score=np.nan, error=repr(e))
@@ -82,8 +95,8 @@ def main(run: Path):
                     row[f"err_{q}_pct"] = 100 * (row[q] / row[f"ref_{q}"] - 1)
                 row["err_tau"] = row["tau"] - row["ref_tau"]
                 out.append(row)
-        last = out[-6:]
-        print(p["id"], " ".join(f"{r['source']}/{r['objective'][:4]} R {r['err_R_pct']:+6.1f}% v {r['err_v_pct']:+5.1f}%" for r in last),
+        last = out[-8:]
+        print(p["id"], " ".join(f"{r['source']}/{r['objective'][:4]} R {r['err_R_pct']:+6.1f}%" for r in last),
               f"({sum(r['seconds'] for r in last):.0f} s)", flush=True)
     with open(run / "stage2.csv", "w", newline="") as fh:
         w = csv.DictWriter(fh, fieldnames=list(out[0])); w.writeheader(); w.writerows(out)

@@ -11,6 +11,7 @@ from .adsb import join_days
 from .audio import FFmpegNotFoundError, Spectrogram
 from .coverage import DEFAULT_MAX_RANGE_M, report_coverage
 from .parallel import JOBS_ENV
+from .score import SF_FLAT_RATIO
 from .search import Grid
 from .terrain import Terrain
 from .tracks import EventFit, fit_event
@@ -100,7 +101,7 @@ def main(argv=None):
                    help="drop triples whose modelled and fitted steepest-fall gaps differ by more than S seconds (default: off)")
     r.add_argument("--sf-smooth", type=float, default=3.0, metavar="S", help="steepest fall: moving-average half-width, s")
     r.add_argument("--sf-window", type=float, default=60.0, metavar="S", help="steepest fall: search half-window around each CPA, s")
-    r.add_argument("--sf-flat-ratio", type=float, default=1.03, metavar="X",
+    r.add_argument("--sf-flat-ratio", type=float, default=SF_FLAT_RATIO, metavar="X",
                    help="steepest fall: a curve whose peak slope is under X times its median slope can't be placed")
     r.add_argument("--anchor", choices=["heard", "steepest"], default="heard",
                    help="clock anchor for scoring: event 1's heard CPA (default) or its steepest fall")

@@ -74,7 +74,7 @@ def test_local_extraction_records_margin_and_skip_counts(tmp_path, monkeypatch):
             pass
         def map(self, func, jobs, **kwargs):
             return map(func, jobs)
-    monkeypatch.setattr(adsb, "ProcessPoolExecutor", SerialExecutor)
+    monkeypatch.setattr(adsb, "process_pool", SerialExecutor)
     target = tmp_path / "flights.npz"
     kept = pipeline.extract_region(tmp_path, (39.99, 40.01, -74.01, -73.99), target, prop_only=False)
     assert len(kept) == 1

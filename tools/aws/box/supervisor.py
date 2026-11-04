@@ -33,6 +33,8 @@ import urllib.request
 from pathlib import Path
 
 SCRATCH = Path("/scratch")
+# the Mac's interpreter: uv's own CPython build, not Ubuntu's python3, so a box and the Mac run the same Python
+PYTHON_ENV = {"UV_PYTHON": "3.12.15", "UV_PYTHON_PREFERENCE": "only-managed"}
 IMDS = "http://169.254.169.254/latest"
 NOTICE_POLL_S = 5
 HEARTBEAT_S = 60
@@ -135,7 +137,7 @@ def rebuild_tree(work: Path, spec: dict, repo: Path) -> None:
 
 def uv_sync(repo: Path) -> None:
     subprocess.run(["uv", "sync", "--frozen", "-q"], cwd=repo, check=True,
-                   env={**os.environ, "UV_CACHE_DIR": str(SCRATCH / "uv-cache")})
+                   env={**os.environ, **PYTHON_ENV, "UV_CACHE_DIR": str(SCRATCH / "uv-cache")})
 
 
 def pull_inputs(bucket: str, inputs: list[str], data: Path) -> None:
@@ -225,6 +227,16 @@ class Job:
         return out
 
 
+def memory_gb() -> tuple[float, float]:
+    """(total, in use) in GB, from /proc/meminfo: MemTotal less MemAvailable."""
+    kb = {}
+    with open("/proc/meminfo") as f:
+        for line in f:
+            k, v = line.split(":", 1)
+            kb[k] = int(v.split()[0])
+    return kb["MemTotal"] / 1e6, (kb["MemTotal"] - kb["MemAvailable"]) / 1e6
+
+
 def kill_group(proc: subprocess.Popen) -> None:
     """SIGTERM to the command's process group, SIGKILL after TERM_GRACE_S."""
     try:
@@ -276,9 +288,9 @@ def main(argv=None) -> int:
             "jobs": spec.get("jobs"), "inputs": spec.get("inputs", []), "caches": spec.get("caches", []),
             "cache_deltas_applied": deltas, "host": host, "submitted": spec.get("submitted"),
             "submitted_from": spec.get("submitted_from"), "box_prepare_s": job.timings,
-            "shard": spec.get("shard")}
+            "shard": spec.get("shard"), "code_source": spec.get("code_source")}
     if resumed:      # keep the run's own record and add this box to it
-        stint = {k: info[k] for k in ("job", "host", "git_commit", "git_dirty", "created", "box_prepare_s")}
+        stint = {k: info[k] for k in ("job", "host", "git_commit", "git_dirty", "code_source", "created", "box_prepare_s")}
         info = {**resumed, "resumed": resumed.get("resumed", []) + [stint]}
         info.pop("finished", None)
     (run / "run.json").write_text(json.dumps(info, indent=1) + "\n")
@@ -289,7 +301,7 @@ def main(argv=None) -> int:
            **({"DOPPLERTRACK_SHARD": str(spec["shard"][0]), "DOPPLERTRACK_SHARDS": str(spec["shard"][1]),
                "DOPPLERTRACK_SHARD_SPEC": f"{spec['shard'][0]}/{spec['shard'][1]}"}
               if spec.get("shard") else {}),
-           "UV_CACHE_DIR": str(SCRATCH / "uv-cache"), "PYTHONUNBUFFERED": "1"}
+           "UV_CACHE_DIR": str(SCRATCH / "uv-cache"), "PYTHONUNBUFFERED": "1", **PYTHON_ENV}
     env.pop("DOPPLERTRACK_JOBS", None)
     if spec.get("jobs"):
         env["DOPPLERTRACK_JOBS"] = str(spec["jobs"])
@@ -301,8 +313,10 @@ def main(argv=None) -> int:
                                 stderr=subprocess.STDOUT, start_new_session=True)
         job.report(state="running", stage="command", pid=proc.pid)
         state, notice, last_beat, last_ckpt = "done", None, time.time(), time.time()
+        mem_total, mem_peak = memory_gb()
         while proc.poll() is None:
             time.sleep(NOTICE_POLL_S)
+            mem_peak = max(mem_peak, memory_gb()[1])
             notice = interruption(md)
             if notice:
                 state = "interrupted"
@@ -311,7 +325,8 @@ def main(argv=None) -> int:
                 state = "timeout"
                 break
             if time.time() - last_beat > HEARTBEAT_S:
-                job.report(state="running", elapsed_s=round(time.time() - t_start))
+                job.report(state="running", elapsed_s=round(time.time() - t_start), mem_total_gb=round(mem_total, 1),
+                           mem_peak_gb=round(mem_peak, 1))
                 last_beat = time.time()
             if time.time() - last_ckpt > checkpoint_s:
                 upload_runs(args.bucket, data, sorted(run_folders(data) - runs_before))
@@ -327,7 +342,8 @@ def main(argv=None) -> int:
         info = {**info, **json.loads((run / "run.json").read_text())}
     except (OSError, ValueError):
         pass
-    info.update(finished=now(), wall_s=wall, exit_code=code, state=state, notice=notice)
+    info.update(finished=now(), wall_s=wall, exit_code=code, state=state, notice=notice,
+                mem_total_gb=round(mem_total, 1), mem_peak_gb=round(mem_peak, 1))
     (run / "run.json").write_text(json.dumps(info, indent=1) + "\n")
 
     made = sorted(run_folders(data) - runs_before)
@@ -339,6 +355,7 @@ def main(argv=None) -> int:
         delta = f"cache-deltas/{args.job}.tar"
         s5("cp", str(work / "delta.tar"), f"s3://{args.bucket}/{delta}")
     job.report(state=state, exit_code=code, wall_s=wall, run_folders=made, cache_delta=delta,
+               mem_total_gb=round(mem_total, 1), mem_peak_gb=round(mem_peak, 1),
                cache_files_added=len(added), notice=notice, finished=now())
     return 0
 

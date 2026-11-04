@@ -32,6 +32,7 @@ import sys
 import tarfile
 import tempfile
 import time
+import uuid
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -39,7 +40,8 @@ REPO = HERE.parent.parent
 STACK = "DopplertrackFleet"
 REGION = "us-west-2"     # the bucket's and the dev box's
 # where a job box may run, tried in this order (app.py deploys a compute stack in each)
-JOB_REGIONS = ("us-west-2", "us-west-1", "us-east-2")
+JOB_REGIONS = ("us-west-2", "us-west-1", "us-east-2", "us-east-1", "eu-central-1")
+NOT_OFFERED = {"us-west-1": {"c8gd"}}     # families a region lacks, so the fleet doesn't ask for them
 FAMILIES = {"arm64": ("c8g", "c8gd", "c7g"), "amd64": ("c7a",)}
 TERMINAL = ("done", "failed", "interrupted", "timeout", "cancelled")
 # the caches a job box can use; cpa/ rebuilds on the box in under a minute and revisions/ is per machine
@@ -65,10 +67,23 @@ def session(region: str = REGION):
     return boto3.Session(profile_name=profile(), region_name=region)
 
 
+_OUTPUTS: dict[str, dict | None] = {}
+
+
 def outputs(region: str = REGION) -> dict:
-    cf = session(region).client("cloudformation")
-    stack = cf.describe_stacks(StackName=STACK)["Stacks"][0]
-    return {o["OutputKey"]: o["OutputValue"] for o in stack.get("Outputs", [])}
+    if _OUTPUTS.get(region) is None:
+        cf = session(region).client("cloudformation")
+        stack = cf.describe_stacks(StackName=STACK)["Stacks"][0]
+        _OUTPUTS[region] = {o["OutputKey"]: o["OutputValue"] for o in stack.get("Outputs", [])}
+    return _OUTPUTS[region]
+
+
+def deployed(region: str) -> bool:
+    """Whether the region has its compute stack (a region listed here may not be deployed yet)."""
+    try:
+        return bool(outputs(region).get("TemplateArm64"))
+    except Exception:       # noqa: BLE001 - no stack, or the region not reachable: skip it
+        return False
 
 
 def aws_cli(*args: str) -> None:
@@ -138,11 +153,12 @@ def listed_inputs(doc: dict) -> tuple[list[str], list[str], list[str]]:
     return cases, list(dict.fromkeys(paths)), [k for k in dict.fromkeys(kinds) if k in CACHE_KINDS]
 
 
-def fleet_request(out: dict, job: str, size: str, on_demand: bool, families=FAMILIES) -> dict:
+def fleet_request(out: dict, job: str, size: str, on_demand: bool, families=FAMILIES, region: str = REGION) -> dict:
     """The create_fleet arguments: one instance, any listed family of `size` in any of the subnets."""
     subnets = out["Subnets"].split(",")
     configs = []
     for arch, fams in families.items():
+        fams = [f for f in fams if f not in NOT_OFFERED.get(region, ())]
         overrides = [{"InstanceType": f"{fam}.{size}", "SubnetId": s} for fam in fams for s in subnets]
         if overrides:
             configs.append({"LaunchTemplateSpecification": {"LaunchTemplateId": out[f"Template{arch.capitalize()}"],
@@ -163,19 +179,46 @@ def launch_all(a) -> list[str]:
     if a.shards <= 1:
         return [launch(a)]
     a.only_shard = getattr(a, "only_shard", None)
-    jobs, failed = [], []
+    pending = []        # every shard claimed and shipped first, then placed together
     for k in (a.only_shard or range(1, a.shards + 1)):
         b = argparse.Namespace(**vars(a))
-        b.topic, b.shard = f"{a.topic}-s{k}of{a.shards}", [k, a.shards]
-        try:
-            jobs.append(launch(b))
-        except SystemExit as e:      # one shard without capacity doesn't stop the others
-            print(f"shard {k}/{a.shards} not launched: {e}", file=sys.stderr)
-            failed.append(k)
-    if failed:
+        b.topic, b.shard, b.defer = f"{a.topic}-s{k}of{a.shards}", [k, a.shards], True
+        pending.append((k, launch(b), b))
+    s3, bucket = session().client("s3"), outputs()["Bucket"]
+    deadline = time.time() + 60 * (getattr(a, "wait_for_capacity", 0) or 0)
+    jobs = []
+    while True:         # one round: each waiting shard tries every region once; no shard holds back another
+        still = []
+        for k, job, b in pending:
+            if place(b, job, s3, bucket, 0, final=False):
+                jobs.append(job)
+            else:
+                still.append((k, job, b))
+        pending = still
+        if not pending or time.time() >= deadline:
+            break
+        print(f"{len(pending)} of {a.shards} shards waiting for capacity: {[k for k, _, _ in pending]}; "
+              "next round in 60 s", flush=True)
+        time.sleep(60)
+    for k, job, b in pending:
+        place(b, job, s3, bucket, 0, final=True)
+    if pending:
+        failed = [k for k, _, _ in pending]
         sys.exit(f"{len(failed)} of {a.shards} shards not launched: {failed}; relaunch them with "
                  f"`--shards {a.shards} --only-shard K` once capacity frees")
     return jobs
+
+
+def is_run_path(p: str) -> bool:
+    return p.strip("/") == "runs" or p.strip("/").startswith("runs/")
+
+
+def check_run_input(p: str) -> str:
+    """A run-folder input names one folder (or a file in one), never runs/ itself."""
+    parts = p.strip("/").split("/")
+    if parts[0] != "runs" or len(parts) < 2 or not parts[1]:
+        sys.exit(f"--input-run {p}: give one run folder, runs/<yyyy-mm-dd>-<topic>[/...], not the whole of runs/")
+    return "/".join(parts)
 
 
 def seed_run_inputs(s3, bucket: str, inputs: list[str]) -> None:
@@ -192,6 +235,17 @@ def seed_run_inputs(s3, bucket: str, inputs: list[str]) -> None:
                 aws_cli("s3", "cp", "--only-show-errors", str(src), f"s3://{bucket}/data/{rel}")
 
 
+def code_for(a, prior: dict | None, dest: Path) -> tuple[dict, str | None]:
+    """The code a job runs, and where in the bucket it already is (None: bundled into dest, to upload). A resume
+    runs the resumed job's own bundle, so a pinned job never picks up this checkout; --repo overrides that."""
+    if prior and not getattr(a, "repo", None):
+        code = {k: prior.get(k) for k in ("git_commit", "git_dirty", "untracked")}
+        code["code_source"] = f"jobs/{a.resume}/code/ (the resumed job's own bundle)"
+        return code, prior.get("code_from") or f"jobs/{a.resume}/code"
+    repo = Path(a.repo).resolve() if getattr(a, "repo", None) else REPO
+    return {**code_bundle(dest, repo=repo), "code_source": f"bundled from {repo}"}, None
+
+
 def launch(a) -> str:
     out = outputs()
     s3 = session().client("s3")
@@ -202,6 +256,8 @@ def launch(a) -> str:
         a.topic = a.topic or prior["topic"]
         a.command = a.command or [prior["command"]]
         a.input, a.case = a.input or prior["inputs"], []
+        a.input_run = (getattr(a, "input_run", None) or []) + [i for i in a.input if is_run_path(i)]
+        a.input = [i for i in a.input if not is_run_path(i)]
         a.cache = a.cache or prior["caches"]
         a.jobs = a.jobs or prior.get("jobs")
         a.shard = prior.get("shard")
@@ -219,12 +275,19 @@ def launch(a) -> str:
         cases, paths, kinds = listed_inputs(json.loads(listing.stdout))
         a.case, a.input, a.cache = a.case + cases, a.input + paths, a.cache + kinds
         print(f"inputs from the job: {len(cases)} cases, {len(paths)} paths, caches {kinds}")
+    explicit_runs = [p for p in a.input if is_run_path(p)]
+    if explicit_runs:     # run folders are outputs: one goes up only when named with --input-run
+        sys.exit(f"--input {explicit_runs[0]}: run folders are outputs; name the one a job reads with --input-run")
+    a.input = a.input + [check_run_input(p) for p in getattr(a, "input_run", None) or []]
     inputs = case_inputs(a.case) + [p for p in a.input if p not in case_inputs(a.case)]
     inputs = list(dict.fromkeys(inputs))
+    for p in inputs:
+        if is_run_path(p):
+            check_run_input(p)
     seed_run_inputs(s3, bucket, inputs)
     caches = list(dict.fromkeys(a.cache or (["terrarium"] if a.case else [])))
     with tempfile.TemporaryDirectory() as tmp:
-        code = code_bundle(Path(tmp) / "code", repo=Path(a.repo).resolve() if getattr(a, "repo", None) else REPO)
+        code, code_from = code_for(a, prior, Path(tmp) / "code")
         ids = candidate_ids(f"{prior['run']}-resume", datetime.date.min) if prior else \
             candidate_ids(a.topic, datetime.date.today())
         for job in ids:
@@ -237,7 +300,7 @@ def launch(a) -> str:
                     "caches": caches, "jobs": a.jobs, "max_hours": a.max_hours,
                     "checkpoint_minutes": a.checkpoint_minutes, "size": a.size,
                     "market": "on-demand" if a.on_demand else "spot", "submitted": now(),
-                    "submitted_from": platform.node(), **code}
+                    "submitted_from": platform.node(), **code, "code_from": code_from}
             try:     # the claim: a conditional put fails if another launch took this id first
                 s3.put_object(Bucket=bucket, Key=f"jobs/{job}/spec.json", IfNoneMatch="*",
                               Body=json.dumps(spec, indent=1).encode())
@@ -246,38 +309,61 @@ def launch(a) -> str:
                 if e.response["Error"]["Code"] in ("PreconditionFailed", "ConditionalRequestConflict"):
                     continue
                 raise
-        for f in sorted((Path(tmp) / "code").iterdir()):
-            s3.upload_file(str(f), bucket, f"jobs/{job}/code/{f.name}")
+        if code_from:     # copied inside S3 from the resumed job, so a resume of a resume keeps the original code
+            for o in s3.list_objects_v2(Bucket=bucket, Prefix=f"{code_from}/")["Contents"]:
+                s3.copy_object(Bucket=bucket, Key=f"jobs/{job}/code/{o['Key'].rsplit('/', 1)[-1]}",
+                               CopySource={"Bucket": bucket, "Key": o["Key"]})
+        else:
+            for f in sorted((Path(tmp) / "code").iterdir()):
+                s3.upload_file(str(f), bucket, f"jobs/{job}/code/{f.name}")
     s3.upload_file(str(HERE / "box" / "supervisor.py"), bucket, f"jobs/{job}/supervisor.py")
     put_status(s3, bucket, job, {"job": job, "state": "submitted", "updated": now()})
+    a._code = code
+    if getattr(a, "defer", False):       # launch_all places shards together
+        return job
+    if not place(a, job, s3, bucket, 60 * (getattr(a, "wait_for_capacity", 0) or 0), final=True):
+        sys.exit(f"no capacity for {job}")
+    return job
+
+
+def try_regions(a, job: str) -> tuple[list[str], str | None, list[str]]:
+    """One fleet request per allowed region and market, nearest first: (instance ids, region, errors)."""
     # spot in each region in turn; then on demand in each only with --fallback-on-demand, so a job never eats
     # the on-demand quota that deciding runs (--on-demand) count on
     markets = [True] if a.on_demand else [False, True] if a.fallback_on_demand else [False]
-    deadline = time.time() + 60 * (getattr(a, "wait_for_capacity", 0) or 0)
-    while True:      # every region and market in turn; while all are full, wait for capacity rather than fail
-        ids, errs, region = [], [], None
-        for od in markets:
-            for region in (a.region or JOB_REGIONS):
-                ec2 = session(region).client("ec2")
-                ids, err = start_box(ec2, outputs(region), job, a.size, od)
-                if ids:
-                    break
-                errs.append(f"{region} {'on-demand' if od else 'spot'}: {err}")
+    errs = []
+    for od in markets:
+        for region in (r for r in (a.region or JOB_REGIONS) if deployed(r)):
+            ids, err = start_box(session(region).client("ec2"), outputs(region), job, a.size, od)
             if ids:
-                break
-        if ids or time.time() > deadline:
+                return ids, region, errs
+            errs.append(f"{region} {'on-demand' if od else 'spot'}: {err}")
+    return [], None, errs
+
+
+def place(a, job: str, s3, bucket: str, wait_s: float, final: bool) -> bool:
+    """Starts the job's box, retrying every 60 s while every region is full, for up to wait_s. With final,
+    a job still without a box is marked failed; else it stays submitted, waiting for capacity."""
+    deadline = time.time() + wait_s
+    while True:
+        ids, region, errs = try_regions(a, job)
+        if ids or time.time() >= deadline:
             break
         put_status(s3, bucket, job, {"job": job, "state": "submitted", "stage": "waiting for capacity",
                                      "error": " | ".join(errs), "updated": now()})
         print(f"{job}: every region full ({' | '.join(errs)}); retrying in 60 s", flush=True)
         time.sleep(60)
-    if errs and ids:
-        print(f"{job}: " + "; ".join(e.split(':')[0] + ' full' for e in errs), flush=True)
-    errs = " | ".join(errs)
     if not ids:
-        put_status(s3, bucket, job, {"job": job, "state": "failed", "stage": "launch", "error": errs,
-                                     "updated": now()})
-        sys.exit(f"no capacity for {job}: {errs}")
+        if final:
+            put_status(s3, bucket, job, {"job": job, "state": "failed", "stage": "launch",
+                                         "error": " | ".join(errs), "updated": now()})
+        else:
+            put_status(s3, bucket, job, {"job": job, "state": "submitted", "stage": "waiting for capacity",
+                                         "error": " | ".join(errs), "updated": now()})
+        return False
+    if errs:
+        print(f"{job}: " + "; ".join(e.split(':')[0] + ' full' for e in errs), flush=True)
+    ec2 = session(region).client("ec2")
     ec2.get_waiter("instance_exists").wait(InstanceIds=ids)     # describe lags create_fleet by a moment
     desc = ec2.describe_instances(InstanceIds=ids)["Reservations"][0]["Instances"][0]
     market = desc.get("InstanceLifecycle", "on-demand")
@@ -286,9 +372,10 @@ def launch(a) -> str:
         {"instance_id": ids[0], "instance_type": desc["InstanceType"], "market": market, "region": region,
          "availability_zone": desc["Placement"]["AvailabilityZone"], "usd_per_hour": price,
          "ebs_usd_per_hour": JOB_EBS_USD_PER_HOUR, "launched": now()}, indent=1).encode())
+    code = a._code
     print(f"{job}: {ids[0]} {desc['InstanceType']} {desc['Placement']['AvailabilityZone']} {market} "
-          f"${price:.3f}/h, commit {code['git_commit'][:7]}{' (dirty)' if code['git_dirty'] else ''}")
-    return job
+          f"${price:.3f}/h, commit {code['git_commit'][:7]}{' (dirty)' if code['git_dirty'] else ''}", flush=True)
+    return True
 
 
 # the job box's 200 GB gp3 root with 6,000 IOPS and 500 MB/s, us-west-2: (200 x 0.08 + 3000 x 0.005 + 375 x 0.04) / 730 h
@@ -296,7 +383,7 @@ JOB_EBS_USD_PER_HOUR = 0.063
 
 
 def start_box(ec2, out: dict, job: str, size: str, on_demand: bool) -> tuple[list[str], str]:
-    resp = ec2.create_fleet(**fleet_request(out, job, size, on_demand))
+    resp = ec2.create_fleet(**fleet_request(out, job, size, on_demand, region=ec2.meta.region_name))
     ids = [i for inst in resp.get("Instances", []) for i in inst.get("InstanceIds", [])]
     codes = sorted({e.get("ErrorCode") for e in resp.get("Errors", [])})     # one per code, not per type and AZ
     return ids, ", ".join(c for c in codes if c)
@@ -351,7 +438,7 @@ def get_status(s3, bucket: str, job: str) -> dict:
 def job_instances(job: str, states=("pending", "running", "stopping", "shutting-down")) -> dict[str, list[str]]:
     """The job's boxes by region."""
     out = {}
-    for region in JOB_REGIONS:
+    for region in (r for r in JOB_REGIONS if deployed(r)):
         r = session(region).client("ec2").describe_instances(Filters=[
             {"Name": "tag:dopplertrack-job", "Values": [job]}, {"Name": "instance-state-name", "Values": list(states)}])
         ids = [i["InstanceId"] for res in r["Reservations"] for i in res["Instances"]]
@@ -380,9 +467,13 @@ def status(a) -> None:
 
 def fleet(a) -> None:
     """Every project box running now, by region, with its job and hourly price; the jobs whose launch failed
-    for capacity or quota in the last day; and the hourly total."""
+    for capacity or quota in the last day; and the hourly total. With --util, how much CPU each box uses."""
+    if getattr(a, "util", False):
+        sys.path.insert(0, str(HERE))
+        import fleet_util
+        return fleet_util.main(a)
     total, rows, launches = 0.0, [], {}
-    for region in JOB_REGIONS:
+    for region in (r for r in JOB_REGIONS if deployed(r)):
         ec2 = session(region).client("ec2")
         r = ec2.describe_instances(Filters=[{"Name": "tag:project", "Values": ["dopplertrack"]},
                                             {"Name": "instance-state-name", "Values": ["pending", "running"]}])
@@ -687,11 +778,19 @@ def dev(a) -> None:
     elif a.action == "sync":
         dev_sync(out)
     elif a.action == "run":
-        dev_sync(out)
-        dev_run(iid, " ".join(a.command))
+        # each run gets its own checkout, removed when its command ends: callers never see each other's branch
+        name = f"{datetime.datetime.now():%Y%m%d-%H%M%S}-{uuid.uuid4().hex[:8]}"
+        dest = f"{DEV_RUNS}/{name}"
+        dev_sync(out, dest, name)
+        t0 = time.time()
+        try:
+            dev_run(iid, f"{' '.join(a.command)}; rc=$?; cd / && rm -rf {dest}; exit $rc", cwd=dest)
+        finally:
+            print(f"dev box: {time.time() - t0:.0f} s in {dest}", file=sys.stderr)
 
 
-DEV_CHECKOUT = "/home/ubuntu/branch"
+DEV_CHECKOUT = "/home/ubuntu/branch"     # `runs dev sync`'s, for interactive work
+DEV_RUNS = "/home/ubuntu/runs"           # one checkout per `runs dev run`
 
 
 def dev_ready(ec2, iid: str) -> None:
@@ -712,21 +811,23 @@ def dev_ready(ec2, iid: str) -> None:
     sys.exit("the dev box is running but Systems Manager can't reach it")
 
 
-def dev_sync(out: dict) -> str:
-    """Puts this branch on the dev box at ~/branch: the same bundle, diff and untracked files as a job."""
+def dev_sync(out: dict, dest: str = DEV_CHECKOUT, name: str | None = None) -> str:
+    """Puts this branch on the dev box at dest (~/branch by default): the same bundle, diff and untracked files
+    as a job."""
     bucket = out["Bucket"]
     s3 = session().client("s3")
-    key = f"dev/{datetime.datetime.now():%Y%m%d-%H%M%S}"
+    key = f"dev/{name or datetime.datetime.now().strftime('%Y%m%d-%H%M%S') + '-' + uuid.uuid4().hex[:8]}"
     with tempfile.TemporaryDirectory() as tmp:
         code = code_bundle(Path(tmp))
         for f in sorted(Path(tmp).iterdir()):
             s3.upload_file(str(f), bucket, f"{key}/code/{f.name}")
     s3.upload_file(str(HERE / "box" / "devsync.sh"), bucket, f"{key}/devsync.sh")
     # the script travels as a file: Run Command and the login shell would each re-quote an inline one
-    script = (f"s5cmd --log error cp 's3://{bucket}/{key}/devsync.sh' /tmp/devsync.sh && "
-              f"bash /tmp/devsync.sh s3://{bucket}/{key}/code {code['git_commit']} {DEV_CHECKOUT}")
+    sh = f"/tmp/devsync-{key.split('/')[-1]}.sh"
+    script = (f"s5cmd --log error cp 's3://{bucket}/{key}/devsync.sh' {sh} && "
+              f"bash {sh} s3://{bucket}/{key}/code {code['git_commit']} {dest}")
     dev_run(out["DevBoxId"], script, cwd=None, quiet=True)
-    print(f"dev box ~/branch at {code['git_commit'][:7]}{' (dirty)' if code['git_dirty'] else ''}")
+    print(f"dev box {dest} at {code['git_commit'][:7]}{' (dirty)' if code['git_dirty'] else ''}", file=sys.stderr)
     return code["git_commit"]
 
 
@@ -735,6 +836,7 @@ def dev_run(iid: str, command: str, cwd: str | None = DEV_CHECKOUT, quiet: bool 
     through Systems Manager, and prints its output."""
     ssm = session().client("ssm")
     inner = f"cd {cwd} && {command}" if cwd else command
+    inner = f"export UV_PYTHON=3.12.15 UV_PYTHON_PREFERENCE=only-managed; {inner}"   # as the job boxes do
     wrapped = f"sudo -iu ubuntu bash -lc {shlex_quote(inner)}"
     cmd = ssm.send_command(InstanceIds=[iid], DocumentName="AWS-RunShellScript",
                            Parameters={"commands": [wrapped], "executionTimeout": ["7200"]},
@@ -771,8 +873,9 @@ def main(argv=None) -> None:
     la.add_argument("--shards", type=int, default=1, help="launch n boxes, each with DOPPLERTRACK_SHARD=k "
                     "(1..n) and DOPPLERTRACK_SHARDS=n, as jobs <topic>-s<k>of<n>")
     la.add_argument("--case", action="append", default=[], help="a bench case whose inputs the box needs")
-    la.add_argument("--input", action="append", default=[], help="a file or folder under the data root; "
-                    "runs/<folder> paths are uploaded from here first")
+    la.add_argument("--input", action="append", default=[], help="a file or folder under the data root, not runs/")
+    la.add_argument("--input-run", action="append", default=[], metavar="runs/FOLDER", help="a run folder the job "
+                    "reads (or a file in one), uploaded from here first; never runs/ itself")
     la.add_argument("--cache", action="append", default=[], help=f"a cache kind to bring: {', '.join(CACHE_KINDS)}")
     la.add_argument("--inputs-from", metavar="COMMAND", help="a command (run here, in the checkout) that prints "
                     "the job's inputs as JSON: `tools/data/shards.py`'s --inputs or `bench inputs`")
@@ -798,10 +901,14 @@ def main(argv=None) -> None:
                         ("cancel", "terminate a job's box"), ("interrupt", "send a job's spot box a real interruption")):
         p = sub.add_parser(name, help=help_)
         p.add_argument("job", nargs="?" if name == "status" else None)
-    sub.add_parser("fleet", help="every box running now, by region, with its price, and failed launches")
+    fl = sub.add_parser("fleet", help="every box running now, by region, with its price, and failed launches")
+    fl.add_argument("--util", action="store_true", help="each box's CPU use and idle vCPU-hours (fleet_util.py)")
+    fl.add_argument("--history", action="store_true", help="with --util: every job today, over its whole run")
+    fl.add_argument("--watch", type=float, metavar="MIN", help="with --util: a snapshot every MIN minutes into a run folder")
     sub.add_parser("seed-tools", help="put uv and ffmpeg for each architecture in the bucket")
     fs = sub.add_parser("fetch-sources", help="fetch the public raw files the bucket lacks on a box")
-    fs.add_argument("--size", default="4xlarge", help="instance size (default: 4xlarge; the job is network-bound)")
+    fs.add_argument("--size", default="large", help="instance size (default: large, 2 vCPU: the job only waits on "
+                    "the network, at 0 %% CPU on a 4xlarge)")
     fs.add_argument("--dry-run", action="store_true", help="only print the plan")
     sd = sub.add_parser("seed", help="upload what has no public source, and the caches")
     sd.add_argument("--dry-run", action="store_true")

@@ -196,6 +196,26 @@ The c = 340.3 m/s and authors'-c rows are from the rerun of all three settings (
 - **The fit absorbs none of a c error.** Changing c moves both speed and slant range by exactly the same fraction: d ln v / d ln c and d ln R / d ln c are 1.000 at the median over all 50 crossings (IQR 0.996–1.003 for v and 0.990–1.009 for R, between 340.3 m/s and c_T). The curve fixes v/c, through its asymptotes, and R/v, through how fast it crosses, so a c error of x % passes in full into speed and from there in full into range.
 - **Item 2 outcome: the pipeline should take a measured temperature.** The shipped pipeline has no sound-speed input: `speed_of_sound()` defaults to 15 °C (340.3 m/s), and every caller in `tracks.py`, `search.py`, `score.py`, `pipeline.py`, the CLI and the bench runner uses that default. Where a station temperature exists for the recording's hour, `speed_of_sound(T)` is the input it should take. On these crossings that would have removed a 4 % speed bias, and, since range scales with c, a 4 % range error the fit can't see.
 
+**All 788 crossings** (the fleet rerun: `runs/2026-11-04-merge-alaska/`, merged from `runs/2026-11-04-model-error-alaska-s{1..8}of8`, commit 5df450b).
+- **Setup.** The band is 0.70–1.50 × the authors' best-determined tone, fitted at all three sound speeds. 775 crossings have all three fits.
+- **The 13 others lack a station report within 1 h of the CPA,** so they have no temperature setting. No fit was weak and none raised.
+- **The sample.** Median FR24 slant range 1.46 km and speed 63 m/s; 425 are C185s.
+
+Median against FR24, with 95 % bootstrap intervals over crossings (`intervals.json`):
+
+| Fit | Slant range, median | Slant range, median abs | over 20 % | Speed, median | Speed, median abs |
+|---|---|---|---|---|---|
+| `fit_event`, 340.3 m/s | −1.4 % (−2.3 to +0.2) | 11.9 % (10.5–13.1) | 33 % | +3.4 % (3.0–3.9) | 5.4 % (5.0–5.8) |
+| `fit_event`, authors' c (median 310 m/s) | −10.8 % (−11.9 to −9.0) | 15.3 % (14.1–16.7) | 38 % | −6.3 % | 6.9 % |
+| `fit_event`, station temperature (median 328 m/s) | −5.0 % (−6.3 to −3.9) | 12.1 % (10.9–13.4) | 33 % | −0.4 % (−0.8 to +0.1) | 3.6 % (3.2–4.0) |
+| The authors' own fits | −10.3 % (−11.7 to −9.2) | 14.5 % (13.6–15.5) | 34 % | −6.2 % | 6.7 % |
+
+- **The 50's ordering holds on all 788.** The station temperature takes the speed bias to zero within its interval (−0.4 %), against +3.4 % at 15 °C, as the physics predicts.
+- **But the correct c makes the slant-range bias worse,** from −1.4 % to −5.0 %. That is the same symptom as Oyster Bay's margin under the per-flight path ([case-weather](2026-11-04-case-weather.md)), and it belongs in the same open question. The 15 °C slant range's small bias is again a cancellation of a c too high against a range that comes out short (−5.0 % at the right c). The authors' c is the worst of the three.
+- **The fit still passes a c error through unattenuated.** d ln v / d ln c and d ln R / d ln c are 1.000 at the median.
+- **The spread is wider than on the 50** (12 % against 7 % median abs). This is a narrower band on a larger, more varied sample; the 50 used the full 40–240 Hz. The stage 3 numbers above are the 50 at the wide band, and these are the whole set at the narrow band.
+- **The narrow band no longer costs fits.** 0.70–1.50 × the tone gave no weak fit on any crossing (item 6).
+
 **A failed run, kept and marked: `runs/2026-11-04-model-error-alaska-narrow/`.** It was meant to fit all 789 in a narrow band placed on the authors' best-determined tone (0.85–1.15×; their f0 placed the band and never entered the comparison).
 - **The crash.** 655 crossings raised `ValueError: attempt to get argmax of an empty sequence`. `grid_search` searches f0 over (1.15·f_lo, 0.85·f_hi), which assumes the band holds a whole Doppler span. With f_hi/f_lo = 1.15/0.85 that range collapses to a point: 654 of the failures had no f0 candidate at all. The 134 that "ran" had exactly one, left by floating-point rounding. So `fit_event` needs f_hi/f_lo above about 1.35 or it crashes. This is also the real cause of stage 2's crash on R35, R08 and R51.
 - **The 134 that ran are a biased sample,** fitted with a single f0 candidate. Their c = 340.3 slant-range error is a median 20.3 % over all 134. On the 7 of them that are also in the wide-band 50, it is 45.7 % against the wide band's 18.4 % on the same 7. Read that only as "a single fixed f0 fits badly", not as a band comparison.
@@ -253,5 +273,115 @@ Each model was first checked on its own synthetic curves: f0 180 Hz, 65 m/s, 1.5
 - **The flagged passes are mostly turns** (6 of 11 above 1°/s). That is the case for the three-parameter turn model next round: turn rate, plus the split of R into horizontal offset and height, plus the turn's sign. And for anything heavier, the criterion should be read on R, not on RSS.
 
 **Script:** `tools/experiments/2026-11-04/heavier_model.py`. **Outputs:** `runs/2026-11-04-heavier-model/` (`heavier_fits.csv`, `heavier_profiles.csv` with each profile's Δ values) and `runs/2026-11-04-heavier-model-both/`.
+
+## The turn model: three parameters (design, written before any run)
+
+**Question.** Does a constant-rate level turn cut the straight fit's model error on the passes that turn? Per the heavier-models section above, 16 of the 40 Livermore passes turn faster than 1°/s within ±30 s of CPA.
+
+**Model.** A forward model in emission time u, heard at t = τ + u + r(u)/c, with f = f0 / (1 + ṙ/c).
+- **Path.** At u = 0 the aircraft is at horizontal offset d from the microphone and height h, heading at right angles to the line to the microphone. That point is a horizontal CPA for any turn rate. Its position is x = (v/ω) sin ωu, y = d + s·(v/ω)(1 − cos ωu), z = h.
+- **Parameters.** f0 (closed form), τ, v and R = √(d² + h²), as in the straight fit, plus three new ones:
+  - ω ∈ [0, 6]°/s, the turn rate;
+  - φ = atan(h/d) ∈ [0°, 90°], the split of R into offset and height;
+  - s = ±1, the turn's sign: +1 turns away from the microphone, −1 toward it.
+- **The sign is a discrete selection.** Each pass is fitted on both branches, and the fit is the branch with the lower RSS.
+- **Reduces to the straight pass.** At ω = 0 the model is the straight pass exactly, and φ is unidentified by construction.
+- **The compared R is the fitted path's true minimum distance,** min over u of r(u), the same quantity as the trajectory reference R*.
+- **Starts:** the straight fit × ω ∈ {0.5, 1.5, 3}°/s × φ ∈ {15°, 45°, 75°}, on each branch.
+
+**Checks first.** Synthetic arcs, f0 180 Hz, 65 m/s, 1.5 km, with ω 0, 1 and 3°/s, φ 20° and 60°, and both signs. Each must be recovered exactly. ω = 0 must match `straight_pass_ls`. Each also records what a straight fit misses on it.
+
+**The straight fit's baseline on curve A** (`runs/2026-11-04-heavier-model/heavier_fits.csv`, straight on A), median |R − R*|:
+- the 16 turning passes: 287 m (18.0 %);
+- the 24 non-turning passes: 165 m (12.4 %);
+- the primary 29: 229 m (15.6 %).
+
+**Expectation, written before the criterion.**
+- Real help on the turning passes, but not a cure: Livermore's turns aren't constant-rate, and φ can trade with R the way η traded with v and R. A guess: a third off the turning passes' median.
+- The non-turning passes unchanged, with ω̂ near 0 and φ unidentified.
+- The primary 29 near the 160 m target, probably just above it.
+- ω identified on most turning passes, because a turn makes approach and recede asymmetric, which a straight pass can't produce. φ identified only on the fast turns.
+
+**Criterion, fixed before running.** The model enters if, on curve A, all of these hold:
+1. On the 16 turning passes, median |R − R*| ≤ 201 m (30 % below 287 m).
+2. On the 24 non-turning passes, median |R − R*| ≤ 182 m (no more than 10 % above 165 m).
+3. On the primary 29, median |R − R*| ≤ 160 m.
+4. The signed turn rate s·ω is identified on at least 11 of the 16 turning passes. The rule is the same as for the one-parameter round: on A plus one stage-1 noise replicate, Δ = (RSS − RSS_min)/(σ²κ) ≤ 3.84 only on an interval finite on both sides inside ±6°/s, with σ² and κ as before.
+5. On at least 11 of the 16 turning passes, the chosen s matches the trajectory's turn direction relative to the microphone, and s·ω̂ has the sign of the trajectory's mean turn rate over ±30 s. Across the turning passes, the correlation of s·ω̂ with that rate is at least 0.5.
+
+Never judged on the residual: RSS ratios are reported only. Curve D (the published ridge) is reported beside A and isn't in the criterion.
+
+**The bound beside it.** The Cramér–Rao bound of R under the six-parameter model at the fitted point, with the pass's own ridge noise as in `crb.py`, set beside the straight model's bound. Where s·ω's interval includes 0, φ's Fisher information is singular, so the bound there is taken with φ fixed and says so.
+
+**The trade-off watch.** φ against R, as η was watched: the profile of φ, and over the bootstrap the correlations of φ and s·ω with v and R.
+
+**Compute.** synth, fit and profile run here at two workers. The bootstraps wait for the cloud fleet: 200 moving-block replicates (2 s blocks of the sub-5 s residuals) per pass, refitting both branches. Every unit writes its own jsonl line, every replicate's seed comes from (pass, replicate), and a stopped or split run resumes and merges to the same numbers.
+
+**Before any real curve: the synthetic check finds the design over-parametrized.**
+- **Recovery.** On all 10 synthetic arcs (`runs/2026-11-04-turn-model-synth/`) the turn model recovers slant range exactly. At ω = 0 it matches `straight_pass_ls`.
+- **What a straight fit misses.** On the same arcs it misses slant range by −30 % at 1°/s and −90 to −105 % at 3°/s.
+- **The sign is not recovered.** On 3 of the 8 turning arcs the sign comes back wrong, and both branches fit to RSS ~10⁻²⁵ with different speeds. For example, the toward-turn at φ = 20° fits as an away-turn with v 41.5 m/s instead of 65 m/s.
+- **Why.** For this path the range history is r(u)² = R² + 2K(1 − cos ωu), with K = (v/ω)(v/ω + s·R cos φ). This is exact: verified to 10⁻¹² m. One microphone hears only the range history, so the curve fixes R, ω and K, and nothing else.
+  - Speed, the split φ and the sign trade freely along constant K. Of the three new parameters, only the turn rate is identifiable. K replaces v², which a turning fit no longer measures.
+  - A straight pass is the limit r² = R² + v²u², so the turn model adds one parameter, ω, not three.
+- **Consequences for the approved criterion.** Criteria (1)–(3), on R, stand. (4) is read on |ω|: the sign is not a parameter of the curve. (5) can't be met by construction: the sign and φ are unidentifiable. The φ–R trade becomes a K–R and ω–R trade.
+- **The parametrization to use.** (f0, τ, R, K, ω). Its bound needs ω fixed where ω's interval includes 0, since K and ω merge into Kω² there.
+- **Status.** Nothing has run on Livermore. The amendment waits for the PM.
+
+**Numbers** (`runs/2026-11-04-turn-model-fit/`, the design as approved; `runs/2026-11-04-turn-model-profile/`, the identifiable form). Median |R − R*|:
+
+| Curve, passes | Straight | Turn model |
+|---|---|---|
+| A, turning 16 | 287 m (18.0 %) | 882 m (44.2 %) |
+| A, non-turning 24 | 165 m (12.4 %) | 327 m (15.8 %) |
+| A, primary 29 | 229 m (15.6 %) | 373 m (15.6 %) |
+| A, flagged 11 | 193 m (15.3 %) | 512 m (37.9 %) |
+| D, primary 29 | 230 m (15.0 %) | 538 m (26.3 %) |
+
+- **The residual barely moves:** RSS against the straight fit's is 0.97 on the turning passes and 1.00 on the rest.
+- **Identification:** the turn rate is identified on 3 of the 16 turning passes and 6 of the 24 others. On 9 of the turning passes its interval includes 0.
+- **The bound:** the Cramér–Rao bound of R in the identifiable form is a median 8.6 % on the turning passes, against the straight model's 5.0 %; on the non-turning passes both are 4.1 %.
+- **Sign:** the chosen sign matches the trajectory's on 4 of 16, which is unidentifiable by construction as shown above.
+- **The turn rate is real but not constant.** Its fitted size correlates with the trajectory's mean turn rate over ±30 s at r = 0.72 across the turning passes, and with the largest rate at only 0.32. Those passes' mean rate is a median 0.16°/s, against a largest rate of 2.3°/s: they weave rather than hold a turn.
+
+**Outcome: the turn model doesn't enter.**
+- **Criteria 1–4 fail:** 882 m against 201 m, 327 m against 182 m, 373 m against 160 m, and 3 of 16 identified against 11. Criterion 5 can't be met by construction.
+- **The expectation was wrong.** It predicted a third off the turning passes' miss. Instead the miss triples.
+- **Why.** As with η and the acceleration, the extra freedom lowers the residual a little by trading the turn rate against R. A constant-rate turn can't describe a weave, so the fit spends the rate on curve shape it can't explain physically.
+- **Item 2's conclusion.** Three kinematic additions have now been tried (drift, acceleration, turn), and none cuts the model error. Each makes R worse. The per-pass model error isn't reducible by a heavier single-pass model on this data.
+- **What the turn model does give.** Its fitted rate tracks how much a pass weaves (r = 0.72). That makes it a candidate flag for passes whose R to distrust, rather than a correction.
+
+## The weave flag: a pass-quality gate (criterion written before the run)
+
+**Question.** Can the turn model's fitted rate, which tracks how much a pass weaves, flag the passes whose slant range not to trust? This is a gate on which events to trust, feeding Phase 2 item 7 and Phase 3's choice of events. It isn't an item 2 fix: a heavier pass model still doesn't reduce one pass's model error.
+
+**Setup.** On the published ridge D, the realistic input, fit each of the 40 Livermore passes in the identifiable form, r² = R² + Q·u²·sinc²(ωu/2π). Flag a pass when its fitted ω exceeds 0.5°/s, a threshold fixed now. The slant range judged is the straight fit's on D: the flag chooses passes, and doesn't change their fit.
+
+**Criterion, fixed before running.** The gate enters if, on D:
+- the retained passes' median |R − R*| is at most 161 m (30 % below all 40 passes' 230 m);
+- at least 24 of the 40 passes are retained;
+- the flagged passes' median |R − R*| is above the retained passes'.
+
+One counted retune of the threshold is allowed.
+
+**A correction to the criterion, found when reading the numbers.** The 230 m it quotes as "all 40 passes'" median on D is the primary 29's (heavier-models table). All 40 passes' median on D is 284 m, so the 30 % line is 199 m, not 161 m. The gate fails at either line.
+
+**Numbers** (`runs/2026-11-04-turn-model-flag/`; the straight fit's |R − R*| on D):
+
+| Threshold | Retained | Retained median | Flagged | Flagged median |
+|---|---|---|---|---|
+| 0.5°/s (the criterion's) | 18 | 441 m | 22 | 149 m |
+| 0.1 and 0.25°/s | 16 | 441 m | 24 | 188 m |
+| 1.0°/s | 29 | 393 m | 11 | 193 m |
+| 1.5°/s | 33 | 271 m | 7 | 310 m |
+| 2.0°/s | 34 | 284 m | 6 | 246 m |
+
+Only the 0.5°/s row decides; the other thresholds are description, not the counted retune.
+
+**Outcome: the gate doesn't enter, and points the wrong way.**
+- **At 0.5°/s every criterion fails.** The retained passes' median is 441 m against 161 (or 199) m, only 18 of 40 are retained against 24, and the flagged passes are the better ones: 149 m against 441 m.
+- **The retune isn't spent.** No threshold from 0.1 to 2°/s brings the retained median under 199 m; the best is 271 m at 1.5°/s.
+- **On the real ridge the fitted rate doesn't measure weaving.** The 16 passes the identifiable form fits at ω = 0 on D are the worst, at a median of 441 m. 9 of the 16 turning passes are flagged and 7 aren't. The rank correlation of ω on D with the error is −0.10.
+- **Why.** On the trajectory curve A, the fitted rate tracked the trajectory's mean turn rate (r = 0.72). On D, the ridge's own errors decide where the rate goes, so it is no use as a gate on real events.
 
 **Scripts (stage 1):** `tools/experiments/2026-11-04/straight_pass_ls.py`, `model_error.py`, `model_error_summary.py`, `crb.py`. **Outputs:** `runs/2026-11-04-model-error-2/` (`fits.csv`, `perturbations.csv`, `halves.csv`, `noise.csv`, `summary.json`) and `runs/2026-11-04-crb-2/` (`crb.csv`, `crb_summary.json`; `runs/2026-11-04-crb/` used the invalid truncated covariance and is superseded). Weather: `raw/aux/metar/KLVK_*`, `RAOB_KOAK_*`.

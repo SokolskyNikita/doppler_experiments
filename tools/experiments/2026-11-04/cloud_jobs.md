@@ -34,6 +34,8 @@ folder, runs every merge step and writes `side_by_side.txt`.
 
 ## 1. Whitening across frequency (`whiten_frequency.py`)
 
+decision: whether the across-frequency background (the warp record's lead, PLAN item 8) replaces the per-bin running median as the package's whitening (PLAN 4, step 1 `spectrogram`).
+
 The criterion is in the script's docstring and was fixed before anything ran.
 
 | Step | Units | Command |
@@ -58,6 +60,8 @@ as `<arm>-t1_stopped`.
 
 ## 2. The tracker's noise-image θ (`hmm_knobs.py`)
 
+decision: the `HMMParams` defaults θ_cont and θ_birth for Phase 2 item 3, and whether hysteresis in states gets below the noise floor (about 8 dB) that round 1 hit.
+
 | Step | Units | Command |
 |---|---|---|
 | pairs | one per θ_cont in 3..9 dB (7) | `hmm_knobs.py "$RUN" pairs WHITEN [THETA_CONT ...]` |
@@ -78,6 +82,8 @@ pass.
 
 ## 3. The tracker on Livermore and the development events (`hmm_livermore.py`)
 
+decision: Phase 2 item 3, whether `hmmtrack` replaces `ridge()` as the fitting path's tracker, which unblocks item 4's `fit_track` re-run. If it is not met, item 3's next step is the tracker's objective, not another configuration.
+
 | Step | Units | Command |
 |---|---|---|
 | references | one file | `hmm_livermore.py "$RUN" references` |
@@ -90,14 +96,30 @@ then copy `dev_references.json` to every dev box.
 
 Inputs:
 - `derived/livermore/`, the unpacked corpus.
-- `runs/2026-11-04-livermore-audit/`: its `passes.csv` and `sites.json`. `runs launch` sends a `runs/` input
-  up from this machine.
+- `runs/2026-11-04-livermore-audit/`: its `passes.csv` and `sites.json`. Pass it with `--input-run runs/2026-11-04-livermore-audit`:
+  `runs launch` sends a named run folder up from this machine.
 - `raw/audio/livermore/zenodo-23424278/final_results_40_cases.csv`.
 - Cache: `--cache terrarium`, for the development events' terrain.
 - `raw/audio/youtube/oyster_bay.webm` and `raw/audio/youtube/swfl_2024-12-28.webm`.
 - `derived/oyster_bay/traces_ny.npz` and `derived/swfl/traces_swfl.npz`.
 
 Split: by pass, for example 15 and 14 passes on two boxes, with the dev events on either of them.
+
+## 4. Item 3 round 3, the likelihood tracker (`ll_box.sh`: `ll_roc.py`, then `ll_livermore.py`)
+
+decision: whether item 3's tracker becomes the likelihood tracker (`lltrack`), or stays `ridge()` with `hmmtrack`
+retired.
+
+| Step | Units | Command |
+|---|---|---|
+| constants | one file, from the development events | `ll_roc.py "$RUN" constants` |
+| roc | one per (a, β, noise window or weak-pass case): 4 × 11 × 18 | `ll_roc.py "$RUN" roc [A ...]` |
+| pick | — | `ll_roc.py "$RUN" pick` |
+| livermore, dev | one per pass (40) and per event (6) | `ll_livermore.py "$RUN" livermore\|dev [PASS or EVENT ...]` |
+| merge | — | `ll_livermore.py "$RUN" merge` |
+
+Inputs: the same as job 3. The box runs the steps in order, so the knobs are picked on synthetic data before any
+Livermore pass is read.
 
 ## SDE-B
 
@@ -233,15 +255,43 @@ Every driver runs on `shards.py`:
 
 ### The jobs
 
-| Job | Command (from the repo root) | Units |
-|---|---|---|
-| Stage B A1/A3 (`hypotheses-pairs`) | `event_pairs_z.py --hypotheses --detected $DOPPLERTRACK_DATA/runs/2026-11-04-bench-5314396-raw-audio-t2 --case eagle-cam-clip-18000s oyster-bay oyster-bay-moved-wsw150` | 30 searches |
-| Stage A comparable score (`comparable-score`) | the same without `--hypotheses` | 30 searches |
-| Event pairs by raw score (SDE-B's `event_pairs.py`) | the same with `--score raw` | 30 searches |
-| B1/B2 (`hypotheses-b1b2`) | `hypotheses_b1b2.py` | 3 cases |
-| Item 1's timing sweep (`timing-sweep`) | `timing_sweep.py` | 45 `bench run` cells |
+| Job | Command (from the repo root) | Units | Box from here (first launch, 2026-11-04) |
+|---|---|---|---|
+| Stage B A1/A3 (`hypotheses-pairs`) | `event_pairs_z.py --hypotheses --detected $DOPPLERTRACK_DATA/runs/2026-11-04-bench-5314396-raw-audio-t2 --case eagle-cam-clip-18000s oyster-bay oyster-bay-moved-wsw150` | 30 searches | 8xlarge, 32 workers per search, one at a time: two to a 64 GB box ran out of memory; d4 + d3 needs over 128 GB (8 × 8xlarge, 16 per search: 45–51 % busy) |
+| Stage A comparable score (`comparable-score`) | the same without `--hypotheses` | 30 searches | 8xlarge, 32 workers per search, one at a time (4 × 8xlarge, 16 per search) |
+| Event pairs by raw score (SDE-B's `event_pairs.py`) | the same with `--score raw` | 30 searches | not launched |
+| B1/B2 (`hypotheses-b1b2`) | `hypotheses_b1b2.py` | 3 cases | 4xlarge (3 × 8xlarge) |
+| Item 1's timing sweep (`timing-sweep`) | `timing_sweep.py` | 45 `bench run` cells | 4xlarge (8 × 8xlarge: 22–37 % busy) |
+| N = 250,000 null (`hypotheses-pairs-n250000`) | stage B's command with `--null-n 250000` | 30 searches | cancelled once A1 was decided (10 × 8xlarge, 32 per search: 45–51 % busy) |
 
 Splitting a job across boxes can't bring it under its longest unit.
+
+Each job's `decision:` line names the PLAN decision it informs and what each outcome changes. The jobs are listed
+in the PM's order (2026-11-04); a job whose outcomes change no decision isn't launched.
+- **Stage A comparable score** — decision: whether event choice is the Phase 3 blocker (item 7, stage A).
+  - A1 and A3 met at today's code: ranking a recording's event pairs by Z is the event choice Phase 3 builds on.
+  - Not met: event choice stays the blocker, and the next lever is stage B's joint hypotheses.
+- **B1/B2** — decision: whether the score's input, the fit, is the blocker (item 7, stage B).
+  - B1 still failing at today's code: the fit's bias, not event choice, is what Phase 3 waits on. The levers are
+    item 2's turn model, item 8, or a track that stays on the pass (item 3).
+  - B1 met: hypotheses replace the speed and distance gates.
+- **Stage B A1/A3** — decision: whether stage B's hypotheses ship for event choice.
+  - A1 met: Z with hypotheses picks the eagle cam's true pair, which counts for adopting them, though B1 alone still
+    blocks that.
+  - Not met: they don't ship for event choice.
+  - Inside the null's noise: the N run below decides it.
+- **Item 1's timing sweep** — decision: whether the (16 s, 4 s) emission setting still holds at today's code, after
+  the changes since `51f59ce`.
+  - Holds: it stays the development setting that a default change would cite.
+  - Doesn't hold: item 1's setting reopens.
+- **N = 250,000 null (stage B, `--null-n`)** — decision: whether A1 can be decided at all by the null's size.
+  - It is read only if A1 is inside the null's noise and needs N ≤ 250,000, under the record's rule; otherwise it is
+    a number nobody acts on, and it isn't read.
+  - Decided: that is A1's result.
+  - Still inside the noise: the record says the test can't decide, and a lower-variance scale estimate becomes the
+    later method change.
+- **Event pairs by raw score** — decision: none of its own. Stage A's earlier run already compared Z with the raw
+  score, so it isn't launched.
 
 **Inputs** (from each driver's `--inputs`):
 - **Pairs jobs.** The three cases, plus each case's `detected.json` in
@@ -287,3 +337,10 @@ Stage B's A1/A3 must run the first run's hypotheses (`45d0bd8`), not the retune'
 - B1/B2's `event_hypotheses` call, kept as it was at `45d0bd8`.
 
 The other jobs launch from `dev`.
+
+## SDE-E
+
+- **Box sizing per job, from `runs fleet --util`.** Each job's box is sized from its measured CPU use: a job under
+  60 % over its run (after its first 5 minutes) moves to the next smaller size, or its driver is changed to use the
+  cores (more units at once, or a wider `--shards`). `--history` gives today's jobs over their whole runs; `--watch 10`
+  keeps an hour of snapshots in a run folder, which tells a bursty job from an over-provisioned one.

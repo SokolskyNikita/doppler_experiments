@@ -173,12 +173,27 @@ def test_everything_after_the_double_dash_is_the_command(monkeypatch):
     assert seen["command"] == ["python", "-m", "bench", "run", "--tier", "t2"]
 
 
+def _shard_env(monkeypatch, placeable):
+    """launch_all with AWS stubbed: placeable(job, round) says whether the shard gets a box in that round."""
+    rounds = {"n": 0}
+    monkeypatch.setattr(runs, "launch", lambda a: a.topic)
+    monkeypatch.setattr(runs, "session", lambda region=None: runs.argparse.Namespace(client=lambda name: None))
+    monkeypatch.setattr(runs, "outputs", lambda region=None: {"Bucket": "b"})
+    monkeypatch.setattr(runs.time, "sleep", lambda s: rounds.update(n=rounds["n"] + 1))
+    tried = []
+
+    def place(b, job, s3, bucket, wait_s, final):
+        tried.append((rounds["n"], job, final))
+        return not final and placeable(job, rounds["n"])
+    monkeypatch.setattr(runs, "place", place)
+    return tried
+
+
 def test_shards_launch_one_job_per_box_and_resumed_runs_come_back_home(tmp_path, monkeypatch):
-    seen = []
-    monkeypatch.setattr(runs, "launch", lambda a: seen.append((a.topic, a.shard)) or a.topic)
-    a = runs.argparse.Namespace(topic="whiten", shards=3, shard=None)
+    tried = _shard_env(monkeypatch, lambda job, r: True)
+    a = runs.argparse.Namespace(topic="whiten", shards=3, shard=None, wait_for_capacity=90)
     assert runs.launch_all(a) == ["whiten-s1of3", "whiten-s2of3", "whiten-s3of3"]
-    assert [s for _, s in seen] == [[1, 3], [2, 3], [3, 3]]
+    assert [j for _, j, _ in tried] == ["whiten-s1of3", "whiten-s2of3", "whiten-s3of3"]
     run = tmp_path / "2026-11-04-whiten"
     run.mkdir()
     assert not runs.same_run(run)
@@ -200,14 +215,48 @@ def test_both_input_listings_become_cases_paths_and_cache_kinds():
 
 
 def test_a_shard_without_capacity_doesnt_stop_the_others(monkeypatch):
-    def launch(a):
-        if a.shard[0] == 2:
-            raise SystemExit("no capacity")
-        return a.topic
-    monkeypatch.setattr(runs, "launch", launch)
+    # shard 2 finds room only in the second round; shards 1 and 3 aren't held back by it
+    tried = _shard_env(monkeypatch, lambda job, r: job != "t-s2of3" or r >= 1)
+    a = runs.argparse.Namespace(topic="t", shards=3, shard=None, wait_for_capacity=90)
+    assert sorted(runs.launch_all(a)) == ["t-s1of3", "t-s2of3", "t-s3of3"]
+    assert [(r, j) for r, j, _ in tried] == [(0, "t-s1of3"), (0, "t-s2of3"), (0, "t-s3of3"), (1, "t-s2of3")]
+    # with no wait, a shard still without room is marked failed and named for --only-shard
+    tried = _shard_env(monkeypatch, lambda job, r: job != "t-s2of3")
     with pytest.raises(SystemExit, match=r"1 of 3 shards not launched: \[2\]"):
-        runs.launch_all(runs.argparse.Namespace(topic="t", shards=3, shard=None))
-    got = []
-    monkeypatch.setattr(runs, "launch", lambda a: got.append(a.shard) or a.topic)
-    runs.launch_all(runs.argparse.Namespace(topic="t", shards=3, shard=None, only_shard=[2]))
-    assert got == [[2, 3]]
+        runs.launch_all(runs.argparse.Namespace(topic="t", shards=3, shard=None, wait_for_capacity=0))
+    assert tried[-1] == (0, "t-s2of3", True)
+    tried = _shard_env(monkeypatch, lambda job, r: True)
+    runs.launch_all(runs.argparse.Namespace(topic="t", shards=3, shard=None, only_shard=[2], wait_for_capacity=0))
+    assert [j for _, j, _ in tried] == ["t-s2of3"]
+
+
+def test_run_folders_go_up_only_by_name():
+    assert runs.is_run_path("runs/") and runs.is_run_path("runs/2026-11-04-x/a.json") and not runs.is_run_path("derived/runs")
+    assert runs.check_run_input("runs/2026-11-04-livermore-audit/") == "runs/2026-11-04-livermore-audit"
+    for bad in ("runs", "runs/", "derived/x"):
+        with pytest.raises(SystemExit, match="one run folder"):
+            runs.check_run_input(bad)
+
+
+def test_a_resume_runs_the_resumed_jobs_own_code_unless_given_a_checkout(branch, tmp_path):
+    prior = {"git_commit": "6f0ce38" + "0" * 33, "git_dirty": False, "untracked": 0}
+    a = runs.argparse.Namespace(resume="2026-11-04-pairs-s1of8", repo=None)
+    code, where = runs.code_for(a, prior, tmp_path / "c1")
+    assert code["git_commit"] == prior["git_commit"] and where == "jobs/2026-11-04-pairs-s1of8/code"
+    assert not (tmp_path / "c1").exists()       # nothing bundled from this checkout
+    # a resume of a resume still points at the original bundle
+    code, where = runs.code_for(a, {**prior, "code_from": "jobs/2026-11-04-pairs-s1of8/code"}, tmp_path / "c2")
+    assert where == "jobs/2026-11-04-pairs-s1of8/code"
+    a.repo = str(branch)
+    code, where = runs.code_for(a, prior, tmp_path / "c3")
+    assert where is None and code["git_commit"] == _git(branch, "rev-parse", "HEAD") and (tmp_path / "c3" / "code.bundle").exists()
+
+
+def test_memory_in_use_is_total_less_available(tmp_path, monkeypatch):
+    import builtins
+    real = builtins.open
+    meminfo = tmp_path / "meminfo"
+    meminfo.write_text("MemTotal:       131072000 kB\nMemFree:  1000 kB\nMemAvailable:   31072000 kB\n")
+    monkeypatch.setattr(builtins, "open", lambda f, *x, **k: real(meminfo if f == "/proc/meminfo" else f, *x, **k))
+    total, used = supervisor.memory_gb()
+    assert round(total) == 131 and round(used) == 100

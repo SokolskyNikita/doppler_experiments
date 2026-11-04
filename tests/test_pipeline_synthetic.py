@@ -79,7 +79,9 @@ def test_true_observer_ranks_first():
     segs2 = pipeline.segments_for_search(traces, (lat0 - 0.05, lat0 + 0.05, lon0 - 0.06, lon0 + 0.06), lat0, lon0)
     row = pipeline.relocate_row(row, segs2, ev2.t_cpa - ev1.t_cpa)
     assert segs2[int(row.seg1)].icao == "aaa001" and segs2[int(row.seg2)].icao == "aaa002"
-    fine = pipeline.refine(sp, ev1, ev2, segs2, row, spacing_m=250.0, half_m=500.0, extra=[ev2], c=c)
+    fine = pipeline.refine(sp, ev1, ev2, segs2, row, spacing_m=250.0, half_m=500.0, extra=[ev2], c=c, workers=1)
+    pooled = pipeline.refine(sp, ev1, ev2, segs2, row, spacing_m=250.0, half_m=500.0, extra=[ev2], c=c, workers=2)
+    pd.testing.assert_frame_equal(pooled, fine, check_exact=True)
     assert fine.attrs["extra_icao"] == ["aaa002"]
     assert np.allclose(fine.s3, fine.s2) and np.allclose(fine.score, fine.s1 + fine.s2 + fine.s3)
     assert np.hypot(*(np.array([(fine.lat[0] - lat0) * 111320, (fine.lon[0] - lon0) * 111320 * np.cos(np.radians(lat0))]))) < 600.0

@@ -56,6 +56,18 @@ def _init_worker(initializer, initargs):
         initializer(*initargs)
 
 
+def ordered_map(fn, tasks, jobs: int, initializer=None, initargs=()):
+    """fn over tasks, results in task order: in this process when jobs == 1, else in a process_pool whose
+    workers each run initializer(*initargs) once. Consume the whole iterator so the pool shuts down."""
+    if jobs == 1:
+        if initializer is not None:
+            initializer(*initargs)
+        yield from map(fn, tasks)
+        return
+    with process_pool(jobs, initializer, initargs) as ex:
+        yield from ex.map(fn, tasks)
+
+
 @contextlib.contextmanager
 def process_pool(jobs: int, initializer=None, initargs=()):
     """A spawn-context ProcessPoolExecutor of `jobs` single-threaded workers, shut down on exit.

@@ -115,7 +115,7 @@ def main(argv=None):
     g.add_argument("--spacing", type=float, default=200.0); g.add_argument("--harmonics", type=int, default=1)
     g.add_argument("--no-dem", action="store_true")
 
-    for parser in (d, r, g):
+    for parser in (d, r, rf, g):
         parser.add_argument("--jobs", type=_jobs, metavar="N",
                             help=f"worker processes (default: ${JOBS_ENV}, else the performance-core count); "
                                  "results don't depend on it")
@@ -198,7 +198,8 @@ def main(argv=None):
         row = pipeline.relocate_row(row, segs, ev2.t_cpa - ev1.t_cpa)
         print(f"refining rank {a.rank}: {row.icao1}/{row.icao2} at {row.lat:.5f}, {row.lon:.5f} (score {row.score:.2f})")
         fine = pipeline.refine(sp, ev1, ev2, segs, row, spacing_m=a.spacing, half_m=a.half, harmonics=tuple(a.harmonics),
-                               elevation=elev, extra=extra, extra_harmonics=xh, max_range_m=a.max_range)
+                               elevation=elev, extra=extra, extra_harmonics=xh, max_range_m=a.max_range,
+                               workers=a.jobs)
         fine.to_csv(a.out, index=False)
         b = fine.iloc[0]
         print(f"peak score {b.score:.2f} at {b.lat:.6f}, {b.lon:.6f}" + (f"; extra flights {fine.attrs['extra_icao']}" if extra else ""))

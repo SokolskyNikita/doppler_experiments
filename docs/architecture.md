@@ -87,6 +87,11 @@ differences, `ev2.t_cpa - ev1.t_cpa` against `t_heard2 - t_heard1`, so it needs 
      distance `d` and the ground speed `v`.
 
    Rows come out ordered by segment, then grid index, the same bytes for any `workers`.
+
+After the table, `run_search` scores the surviving triples with `locked_score`, and `refine` scores its fine
+points, both in chunks of `SCORE_CHUNK` through `parallel.ordered_map`. Each pool's workers receive the
+two `EventWindow`s and the segments the chunks refer to once, through `_set_score_state`, and the results
+come back in task order, so the ranking is the same for any `workers`.
 4. **`search.save_cpa_table`** writes the table to a temporary file in the same folder and renames it
    into place, and **`search.load_cpa_table`** treats a mismatched fingerprint or an unreadable file as a
    miss.

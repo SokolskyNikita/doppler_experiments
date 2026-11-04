@@ -69,7 +69,7 @@ def test_run_search_reports_stage_timings_and_funnel(monkeypatch):
     grid = search.Grid.points([40.0, 40.01], [-74.0, -74.0], np.zeros(2))
     ev1 = EventFit(1000.0, 997.0, 120, 100, 3000, 950, 1050, 5, 150, 90)
     ev2 = EventFit(1918.0, 1915.0, 120, 100, 3000, 1870, 1970, 5, 150, 90)
-    res, _ = pipeline.run_search(None, ev1, ev2, [], grid, progress=False)
+    res, _ = pipeline.run_search(None, ev1, ev2, [], grid, progress=False, workers=1)   # patches don't reach workers
     assert res.attrs["funnel"] == dict(cpa_rows=5, event1_gates=4, event2_gates=4, time_join=2, silence=1, scored=1)
     assert list(res.attrs["stages"]) == ["segments", "cpa_table", "pairing", "scoring", "gap_report"]
     assert all(v["wall_s"] >= 0 and v["cpu_s"] >= 0 for v in res.attrs["stages"].values())

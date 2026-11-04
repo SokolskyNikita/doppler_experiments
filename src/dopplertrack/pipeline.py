@@ -13,6 +13,7 @@ from .audio import Spectrogram, compute_spectrogram, load_audio
 from .coverage import (DEFAULT_MAX_RANGE_M, ScanReport, extraction_metadata, padded_bbox,
                        report_altitude_sources, report_candidate_gaps, report_coverage)
 from .doppler import speed_of_sound
+from .parallel import ordered_map, resolve_jobs
 from .score import EventWindow, locked_score
 from .search import Grid, Segment, build_segments, cpa_fingerprint, cpa_table, pair_candidates, save_cpa_table, load_cpa_table
 from .tracks import EventFit
@@ -148,6 +149,23 @@ def relocate_row(row, segs: list[Segment], dt_s: float):
     return row
 
 
+SCORE_CHUNK = 250       # triples (or fine points) per task when scoring across a pool
+_SCORE_STATE: dict = {}
+
+
+def _set_score_state(state: dict):
+    """Pool initializer: what every scoring task shares, sent once per worker instead of with each task."""
+    _SCORE_STATE.clear()
+    _SCORE_STATE.update(state)
+
+
+def _score_triples(task) -> list[tuple[float, float, float, float]]:
+    """locked_score for a chunk of (observer ENU, segment 1, segment 2, heard time of segment 1)."""
+    obs, seg1, seg2, t_heard1 = task
+    w1, w2, segs, c = (_SCORE_STATE[k] for k in ("w1", "w2", "segs", "c"))
+    return [locked_score(w1, w2, segs[int(a)], segs[int(b)], o, float(t), c=c) for o, a, b, t in zip(obs, seg1, seg2, t_heard1)]
+
+
 def run_search(sp: Spectrogram, ev1: EventFit, ev2: EventFit, traces: list[Trace], grid: Grid,
                harmonics=(1, 1), tol_s=6.0, v_tol=0.35, d_tol=(0.4, 2.5), silence_d_m=6000.0,
                max_range_m=DEFAULT_MAX_RANGE_M, c=None, top_pairs=None, progress=True,
@@ -158,9 +176,12 @@ def run_search(sp: Spectrogram, ev1: EventFit, ev2: EventFit, traces: list[Trace
     cpa_cache: optional .npz path. The (grid point, flight) CPA table depends only on the grid
     (with its elevations), the traces, max_range and the speed of sound, not on the events, and is
     the slow part; with a path given it is reused when those inputs are identical, else computed
-    and saved (see cached_cpa_table). workers: processes for building the table (see cpa_table).
+    and saved (see cached_cpa_table). workers: processes for building the table and for scoring the
+    triples (parallel.default_jobs() by default); the result doesn't depend on it.
 
-    Besides the ranked rows, the returned frame carries two dicts in `res.attrs` (not written by to_csv):
+    Besides the ranked rows, the returned frame carries two dicts in `res.attrs`, set after the final sort.
+    to_csv doesn't write them and pandas doesn't reliably carry attrs through operations, so read them from
+    the returned frame itself:
     - "stages": {name: {"wall_s", "cpu_s"}} for "segments", "cpa_table", "pairing", "scoring" and
       "gap_report", in that order. CPU seconds include the process pool's workers.
     - "funnel": hypothesis counts after each filter: "cpa_rows" (the table), "event1_gates" and
@@ -191,13 +212,22 @@ def run_search(sp: Spectrogram, ev1: EventFit, ev2: EventFit, traces: list[Trace
         log(f"{len(pairs)} candidate (point, flight1, flight2) triples after offset + silence filters")
     with _stage(stages, "scoring"):
         w1 = EventWindow.from_fit(sp, ev1, harmonics[0]); w2 = EventWindow.from_fit(sp, ev2, harmonics[1])
-        out = []
+        used = np.union1d(pairs.seg1.to_numpy(), pairs.seg2.to_numpy())
+        state = {"w1": w1, "w2": w2, "segs": {int(k): segs[k] for k in used}, "c": c}
+        tasks = [(grid.enu[pairs.gidx.to_numpy()[a:a + SCORE_CHUNK]], pairs.seg1.to_numpy()[a:a + SCORE_CHUNK],
+                  pairs.seg2.to_numpy()[a:a + SCORE_CHUNK], pairs.t_heard1.to_numpy()[a:a + SCORE_CHUNK])
+                 for a in range(0, len(pairs), SCORE_CHUNK)]
+        scores = []
         t0 = time.time()
-        for k, p in enumerate(pairs.itertuples()):
-            tot, s1, s2, sh = locked_score(w1, w2, segs[p.seg1], segs[p.seg2], grid.enu[p.gidx], float(p.t_heard1), c=c)
-            out.append((p.gidx, grid.lat[p.gidx], grid.lon[p.gidx], p.seg1, p.seg2, segs[p.seg1].icao, segs[p.seg2].icao, p.t_heard1, p.d1, p.v1, p.d2, p.v2, tot, s1, s2, sh))
-            if progress and (k + 1) % 500 == 0:
-                log(f"scored {k + 1}/{len(pairs)} ({(time.time() - t0) / (k + 1) * 1000:.0f} ms each)")
+        try:
+            for part in ordered_map(_score_triples, tasks, resolve_jobs(workers), _set_score_state, (state,)):
+                scores.extend(part)
+                if progress and len(scores) // 500 > (len(scores) - len(part)) // 500:
+                    log(f"scored {len(scores)}/{len(pairs)} ({(time.time() - t0) / len(scores) * 1000:.0f} ms each)")
+        finally:
+            _SCORE_STATE.clear()
+        out = [(p.gidx, grid.lat[p.gidx], grid.lon[p.gidx], p.seg1, p.seg2, segs[p.seg1].icao, segs[p.seg2].icao, p.t_heard1, p.d1, p.v1, p.d2, p.v2, *sc)
+               for p, sc in zip(pairs.itertuples(), scores)]
         cols = ["gidx", "lat", "lon", "seg1", "seg2", "icao1", "icao2", "t_heard1", "d1", "v1", "d2", "v2", "score", "s1", "s2", "shift"]
         res = pd.DataFrame(out, columns=cols).sort_values("score", ascending=False).reset_index(drop=True)
         funnel["scored"] = len(res)
@@ -230,9 +260,29 @@ def pick_flight(sp: Spectrogram, ev: EventFit, segs: list[Segment], obs_enu, t0_
     return best, best_s
 
 
+def _score_fine_points(task) -> list[tuple]:
+    """refine's row for each fine point of a chunk: (lat, lon, score, s1, s2, s3..., shift)."""
+    from .geo import lla_to_enu
+    from .score import modelled_curve
+    st = _SCORE_STATE
+    c, seg1 = st["c"], st["seg1"]
+    rows = []
+    for lat, lon, elev in zip(*task):
+        obs = lla_to_enu(lat, lon, elev, *st["origin"])
+        d = np.linalg.norm(seg1.enu - obs, axis=1); j = int(np.argmin(d)); t_heard1 = seg1.t[j] + d[j] / c
+        tot, s1, s2, sh = locked_score(st["w1"], st["w2"], seg1, st["seg2"], obs, float(t_heard1), c=c)
+        t0_map = st["t_cpa1"] - float(t_heard1)
+        xs = []
+        for seg, w in zip(st["xsegs"], st["xwins"]):
+            to, r = modelled_curve(seg, obs, c)
+            xs.append(float(w.sweep_scores(to + t0_map, r, [sh], np.arange(0.95, 1.0501, 0.005)).max()))
+        rows.append((lat, lon, tot + sum(xs), s1, s2, *xs, sh))
+    return rows
+
+
 def refine(sp, ev1, ev2, segs, res_row, spacing_m=50.0, half_m=400.0, harmonics=(1, 1), elevation=None, c=None,
            extra: list[EventFit] | None = None, extra_harmonics: list[int] | None = None,
-           max_range_m=DEFAULT_MAX_RANGE_M):
+           max_range_m=DEFAULT_MAX_RANGE_M, workers: int | None = None):
     """Fine grid around one result row for one flight pair.
 
     extra: further measured events (beyond the two the search used). For each, the flight is
@@ -240,8 +290,9 @@ def refine(sp, ev1, ev2, segs, res_row, spacing_m=50.0, half_m=400.0, harmonics=
     every fine point with the same time shift as event 1, so every event is locked to the
     same clock. A low, lateral pass pins the location far better than a high overhead one,
     which is what the extra events are for. Columns s3, s4, ... are added and summed into
-    score; the chosen flights are returned in the DataFrame's .attrs["extra_icao"]."""
-    from .score import EventWindow, modelled_curve
+    score; the chosen flights are returned in the DataFrame's .attrs["extra_icao"]. workers: processes
+    for scoring the fine points (parallel.default_jobs() by default); the result doesn't depend on it."""
+    from .score import EventWindow
     from .geo import lla_to_enu
     c = speed_of_sound() if c is None else c
     extra = list(extra or []); extra_harmonics = list(extra_harmonics or [1] * len(extra))
@@ -265,17 +316,15 @@ def refine(sp, ev1, ev2, segs, res_row, spacing_m=50.0, half_m=400.0, harmonics=
             raise ValueError(f"no flight near the candidate at the time of the extra event at {ev.t_cpa:.0f} s")
         log(f"extra event at {ev.t_cpa:.0f} s: {segs[k].icao} (score {sc:.2f} at the candidate)")
         xsegs.append(segs[k]); xwins.append(EventWindow.from_fit(sp, ev, h))
+    state = {"w1": w1, "w2": w2, "seg1": seg1, "seg2": seg2, "xsegs": xsegs, "xwins": xwins, "c": c,
+             "t_cpa1": ev1.t_cpa, "origin": (res_row.lat0, res_row.lon0)}
+    tasks = [(g.lat[a:a + SCORE_CHUNK], g.lon[a:a + SCORE_CHUNK], g.elev[a:a + SCORE_CHUNK]) for a in range(0, len(g), SCORE_CHUNK)]
     rows = []
-    for i in range(len(g)):
-        obs = lla_to_enu(g.lat[i], g.lon[i], g.elev[i], res_row.lat0, res_row.lon0)
-        d = np.linalg.norm(seg1.enu - obs, axis=1); j = int(np.argmin(d)); t_heard1 = seg1.t[j] + d[j] / c
-        tot, s1, s2, sh = locked_score(w1, w2, seg1, seg2, obs, float(t_heard1), c=c)
-        t0_map = ev1.t_cpa - float(t_heard1)
-        xs = []
-        for seg, w in zip(xsegs, xwins):
-            to, r = modelled_curve(seg, obs, c)
-            xs.append(float(w.sweep_scores(to + t0_map, r, [sh], np.arange(0.95, 1.0501, 0.005)).max()))
-        rows.append((g.lat[i], g.lon[i], tot + sum(xs), s1, s2, *xs, sh))
+    try:
+        for part in ordered_map(_score_fine_points, tasks, resolve_jobs(workers), _set_score_state, (state,)):
+            rows.extend(part)
+    finally:
+        _SCORE_STATE.clear()
     cols = ["lat", "lon", "score", "s1", "s2"] + [f"s{k + 3}" for k in range(len(extra))] + ["shift"]
     out = pd.DataFrame(rows, columns=cols).sort_values("score", ascending=False).reset_index(drop=True)
     out.attrs["extra_icao"] = [s.icao for s in xsegs]

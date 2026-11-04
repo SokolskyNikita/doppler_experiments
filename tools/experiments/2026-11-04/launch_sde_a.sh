@@ -15,8 +15,8 @@
 #
 # Per job, from the environment: SHARDS_<J> boxes, SIZE_<J> instance size (8xlarge doubles the boxes a vCPU quota
 # allows), WPS_<J> workers per search for the pairs jobs (half the size's vCPUs or fewer). J is B, N, A, B12 or SWEEP.
-# The pairs jobs are 30 searches, B1/B2 3 cases, the sweep 45 cells. A merge needs the same WPS_<J> its launch had,
-# since workers per search is one of the units' parameters.
+# The pairs jobs are 30 searches, B1/B2 3 cases, the sweep 45 cells. A pairs merge takes the job's settings (workers
+# per search, hypotheses, null size) from its shards' run.json, since they are part of the units' parameters.
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")/../../.." && pwd)
 cd "$HERE"
@@ -30,12 +30,14 @@ BRANCH=claude/sde-stageb-pairs-45d0bd8
 NULL_N_CAP=250000                         # the PM's cap on the follow-up's N
 SHARDS_B=${SHARDS_B:-10} SHARDS_N=${SHARDS_N:-30} SHARDS_A=${SHARDS_A:-5} SHARDS_B12=${SHARDS_B12:-3}
 SHARDS_SWEEP=${SHARDS_SWEEP:-15}
-SIZE_B=${SIZE_B:-16xlarge} SIZE_N=${SIZE_N:-16xlarge} SIZE_A=${SIZE_A:-16xlarge} SIZE_B12=${SIZE_B12:-16xlarge}
-SIZE_SWEEP=${SIZE_SWEEP:-16xlarge}
+# 4xlarge (16 vCPU) with two searches of 8 workers each: on 8xlarge, 16 workers per search left half the cores idle
+# (the fleet's CPU monitor, 2026-11-04: 45-51 % for the pairs jobs, 22-37 % for the sweep's shards)
+SIZE_B=${SIZE_B:-4xlarge} SIZE_N=${SIZE_N:-4xlarge} SIZE_A=${SIZE_A:-4xlarge} SIZE_B12=${SIZE_B12:-4xlarge}
+SIZE_SWEEP=${SIZE_SWEEP:-4xlarge}
 # added to every launch: runs tries spot in us-west-2, us-west-1 and us-east-2 in turn, and on demand only with this;
 # RUNS_FLAGS="--fallback-on-demand --only-shard K" relaunches the shard K a launch reported missing
 RUNS_FLAGS=${RUNS_FLAGS---fallback-on-demand}
-WPS_B=${WPS_B:-16} WPS_N=${WPS_N:-64} WPS_A=${WPS_A:-16}
+WPS_B=${WPS_B:-8} WPS_N=${WPS_N:-8} WPS_A=${WPS_A:-8}
 # each pairs job's own settings; a merge must repeat them exactly (they are part of its units' parameters)
 ARGS_B="--hypotheses --workers-per-search $WPS_B"
 ARGS_N="--hypotheses --workers-per-search $WPS_N --null-n $NULL_N_CAP"
@@ -80,8 +82,13 @@ merge)
     [ $# -ge 1 ] || { echo "give the job's pulled shard folders"; exit 1; }
     SHARDS=(); for s in "$@"; do SHARDS+=("$(cd "$s" && pwd)"); done
     case "$KIND" in
-        pairs-b|pairs-n) cd "$(pinned "${PINNED:-}")"; [ "$KIND" = pairs-b ] && A=$ARGS_B || A=$ARGS_N ;;
-        pairs-a) A=$ARGS_A ;;
+        pairs-b|pairs-n) cd "$(pinned "${PINNED:-}")" ;;
+    esac
+    case "$KIND" in       # the launch's own settings, from the first shard's run.json
+        pairs-*) A=$($PY -c "import json, sys; p = json.load(open(sys.argv[1]))['driver']['params']
+print(' '.join(['--hypotheses'] * p['hypotheses'] + ['--workers-per-search', str(p['workers_per_search'])]
+               + (['--null-n', str(p['null_n'])] if 'null_n' in p else []) + (['--score', p['score']])))" \
+               "${SHARDS[0]}/run.json") ;;
     esac
     RUN=$($PY tools/data/new_run.py "merge-$KIND")
     case "$KIND" in

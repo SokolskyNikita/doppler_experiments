@@ -496,6 +496,19 @@ which the PM approved to run after the collective verdict.
 against the null, write `locate`'s v3 verdict from it (SDE-B owns the schema). If it doesn't, Phase 3's locator has
 no statistic yet that beats other days' traffic, and that is the drawing-board finding to report.
 
+### Stopped (owner's order; the project continues in Codex)
+
+- **Fleet:** nothing of SDE-A's is running. The two stale first-launch day shards, `2026-11-04-verdict-null-days-s6of10`
+  and `-s8of10`, were cancelled; their boxes were already gone ("terminated nothing"). No job of SDE-A's is queued.
+- **Repository:** everything is committed on `claude/sde-code-review-planning-9ef6e2`. Nothing is pushed. The SHAs in
+  today's records and run.json files are from before the 2026-11-05 history rewrite; they are records.
+- **To resume**, in this order:
+  1. Judge SDE-D's collective-null draws with `collective_null.py`, as in the handoff above, once its
+     `2026-11-04-collective-null-s<k>of24` jobs are done and SDE-D's `OWN.json` exists.
+  2. Then the coherent-duration successor: its white-noise Monte Carlo first, then the gates.
+- **Scratch:** the detached scratch worktrees (pinned checkouts at old commits, under the session's scratchpad) hold
+  nothing that isn't committed or in the data root.
+
 ## SDE-E
 
 - **Box sizing per job, from `runs fleet --util`.** Each job's box is sized from its measured CPU use: a job under

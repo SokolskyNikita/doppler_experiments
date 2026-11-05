@@ -2,8 +2,16 @@
 
 <!-- index
 question: Does the collective find (every detected window against every flight's own heard curve, summed non-coherently with a floor) locate the development recordings, and keep the negatives below the verdict null?
-outcome: (pending)
+outcome: Located by the search, not yet by the verdict: the third design (1 km coarse grid, best 120 s stretch, ±25 % tone) ranks Oyster Bay's true cell first of 15,253, winner 0.3 km with both true flights; the other-day null on Z decides
 -->
+
+**Where it stands: located by the search, not yet by the verdict.**
+- **Oyster Bay.** Under the third design step (a 1 km coarse grid, each window scored over its best 120 s stretch, each candidate's tone over ±25 %), Oyster Bay's true cell is the coarse map's maximum, rank 1 of 15,253. The top cell's fine winner is 0.3 km from the truth, with both true flights matched.
+- **The eagle cam** was found at 0.5 km with both flights under the earlier designs.
+- **Not yet a claim.** A's other-day null on the collective Z is what turns these into claims, and it hasn't been drawn for this statistic yet.
+- **Open:** ace391's weak window (z 0.62), now a detector-window question (PLAN item 6).
+
+The sections below follow the work in order: the first design, the second, the diagnostics that split their faults, and the third.
 
 **Question.** The design is [the collective-find proposal](../proposals/2026-11-04-collective-find.md), accepted by the PM.
 

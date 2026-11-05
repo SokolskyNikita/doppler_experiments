@@ -55,7 +55,7 @@ def run_unit(cid, out_dir, day=None, cells=None):
     from dopplertrack.adsb import join_days
     from dopplertrack.audio import Spectrogram
     from dopplertrack.cache import cached_detections
-    from dopplertrack.collective import Window, collective_find
+    from dopplertrack.collective import COARSE_M, Window, collective_find
     from dopplertrack.terrain import Terrain
     from dopplertrack.tracks import detect_events
     case = cases.blind_case(cid)
@@ -65,8 +65,9 @@ def run_unit(cid, out_dir, day=None, cells=None):
     wins = [Window.from_detection(e) for e in usable]
     traces, _ = join_days([runner.resolve(null_traces(cid, day))] if day else runner.trace_paths(case))
     elevation = Terrain().elevation if case["search"]["dem"] else None
-    cache = (f"cpa/collective/null/{day}/{Path(null_traces(cid, day)).stem}_2km.npz" if day else
-             f"cpa/collective/{Path(case['search']['cpa_cache']).stem}_2km.npz")
+    g = f"{int(COARSE_M)}m"
+    cache = (f"cpa/collective/null/{day}/{Path(null_traces(cid, day)).stem}_{g}.npz" if day else
+             f"cpa/collective/{Path(case['search']['cpa_cache']).stem}_{g}.npz")
     path = runner.resolve(cache); path.parent.mkdir(parents=True, exist_ok=True)
     log_lines = []
     out = collective_find(sp, wins, traces, tuple(case["search"]["bbox"]), max_range_m=case["search"]["max_range_m"],
@@ -121,6 +122,7 @@ def judge(cid, r):
 def coarse_rank(cid, r):
     """The true location's coarse cell (the coarse map point nearest the reference, within a cell's half-diagonal) and its
     rank by Z among the cells with Z > 0; None where the truth's cell has no window above its null."""
+    from dopplertrack.collective import COARSE_M
     from dopplertrack.geo import haversine_m
     lab = cases.case_labels(cid, cases.latest_case(cid)["version"])
     ref, m = lab.get("reference"), r.get("coarse_map") or {}
@@ -128,7 +130,7 @@ def coarse_rank(cid, r):
         return None
     d = np.array([haversine_m(la, lo, ref["lat"], ref["lon"]) for la, lo in zip(m["lat"], m["lon"])])
     i = int(np.argmin(d))
-    if d[i] > 1000.0 * np.sqrt(2) + 1.0:
+    if d[i] > COARSE_M / 2 * np.sqrt(2) + 1.0:
         return dict(rank=None, cells=len(m["Z"]), nearest_cell_m=float(d[i]))
     z = np.array(m["Z"])
     return dict(rank=int((z > z[i]).sum()) + 1, Z=float(z[i]), cells=len(z), coarse_max=float(z.max()),
@@ -163,7 +165,7 @@ def main():
     params = dict(units=unit_ids, detect=DETECT, k=10, c="15 C", weather=False, f0_span=col.F0_SPAN,
                   collective=dict(coarse_m=col.COARSE_M, fine_m=col.FINE_M, margin_sigma=col.MARGIN_SIGMA,
                                   max_cells=col.MAX_CELLS, cluster_s=col.CLUSTER_S, agree_s=col.AGREE_S, null_n=col.NULL_N,
-                                  log_du=col.LOG_DU))
+                                  log_du=col.LOG_DU, sub_s=col.SUB_S))
     if a.null:
         params.update(null_days="tools/experiments/2026-11-04/verdict_null_days.json", null_cases=sorted(keep) if keep else None)
     if kept is not None:

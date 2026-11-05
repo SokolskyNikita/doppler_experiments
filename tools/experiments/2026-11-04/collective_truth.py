@@ -162,7 +162,7 @@ def run_unit(cid):
     e0, e1 = coarse.enu[:, 0].min() - rng - col.COARSE_M, coarse.enu[:, 0].max() + rng + col.COARSE_M
     n0, n1 = coarse.enu[:, 1].min() - rng - col.COARSE_M, coarse.enu[:, 1].max() + rng + col.COARSE_M
     segs = build_segments(traces, coarse.lat0, coarse.lon0, clip_enu=(e0, e1, n0, n1))
-    cache = runner.resolve(f"cpa/collective/{Path(case['search']['cpa_cache']).stem}_2km.npz"); cache.parent.mkdir(parents=True, exist_ok=True)
+    cache = runner.resolve(f"cpa/collective/{Path(case['search']['cpa_cache']).stem}_{int(col.COARSE_M)}m.npz"); cache.parent.mkdir(parents=True, exist_ok=True)
     cpa_c = cached_cpa_table(coarse, segs, rng, c, str(cache))
     sw_f = col.fine_sweep()
     views_f = [col.LogView(w, sp, sw_f.n) for w in wins]

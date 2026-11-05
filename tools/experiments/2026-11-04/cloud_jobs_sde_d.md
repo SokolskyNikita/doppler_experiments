@@ -153,3 +153,9 @@ The branch is `claude/sde-c-pm-coordination-cbbe43`. Every change is committed. 
      3. report the ranks, the cost per case and the eagle cam's z to the PM;
      4. commit `KEPT.json` as `tools/experiments/2026-11-04/collective_kept_v3.json` and launch `--fine-from` it. The PM has approved the fine stage.
    - **The v2 fine stage** (2 km, whole-window score) is superseded by v3. Merge it for the record only.
+
+**SWFL and Essex null (first design), status about 00:40Z:** 20 of the 24 shards are done.
+- s4, s19, s20 and s23 were spot-interrupted and relaunched on demand as `…-s{4,19,20,23}of24-2` (a225ac8).
+- 84 of the 95 draws are pulled; the relaunches give the rest.
+- **To judge,** give A's `collective_null.py` the 24 first-run folders plus the four `-2` folders, and `runs/2026-11-04-collective-find-merge/OWN.json`.
+- The draws price the first design's statistic (2 km, top 5 cells, ±10 %), so their γ applies to that design's eagle cam result (Z 16.27), not to the third design's.

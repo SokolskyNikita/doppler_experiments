@@ -293,3 +293,23 @@ Twelve units on 12 spot 8xlarge boxes, the unit shards relaunched after spot int
 - **Cost:** the coarse stage 607 s, 3.6× the 2 km stage, and one 25-point fine cell 143 s.
 - **Against the expectation.** The rank came out as I expected (the true cell inside the margin and near the top). The second half didn't: ace391 stays weak, at z 0.62 against 1.97 before. The best-120 s score lifted a1dfeb (9.67 to 10.43) but not ace391, whose window remains the open question.
 - **Whether the case passes criterion 1** waits for the fine stage over all 20 kept cells.
+
+**The third design's coarse stage on the eight cases** (`runs/2026-11-04-collective-coarse-v3-merge/`, 68a906c). These are cell 0's fine winners; the other kept cells are the fine stage's.
+
+| Case | True cell's rank | Kept | Cell 0's winner from the truth | True flights at the winner | Coarse, one fine cell |
+|---|---|---|---|---|---|
+| oyster-bay | **1** of 15,253 | 20 | **0.3 km** | a1dfeb z 10.43, ace391 z 0.62 | 607 s, 143 s |
+| oyster-bay-hp150-aac32k | **1** of 15,245 | 4 | **0.3 km** | a1dfeb z 9.11, ace391 z 0.53 | 659 s, 134 s |
+| eagle-cam-clip-18000s | 37 of 16,392 (outside the margin) | 9 | 1.9 km | neither | 239 s, 146 s |
+| eagle-cam-midnight | 280 of 16,843 | 20 | 5.8 km | – | 272 s, 172 s |
+| oyster-bay-sources-removed (−) | 5,821 of 15,255 | 20 | 67.4 km, Z 13.36 | – | 898 s, 192 s |
+| xenocanto-xc990819 (−) | 6,241 of 14,673 | 20 | 50.6 km, Z 9.66 | – | 184 s, 116 s |
+| oyster-bay-moved-north150 (−) | the true point is outside the box | 20 | coarse maximum 15.82 | – | 148 s, 134 s |
+| oyster-bay-moved-wsw150 (−) | the true point is outside the box | 20 | coarse maximum 18.22 | – | 518 s, 162 s |
+
+- **Oyster Bay and its hp150 copy are found.** In each the true cell is the coarse maximum, and the winner is 0.3 km off with both true flights matched.
+- **sources-removed behaves as a control should.** With the true flights deleted, the true cell falls to 5,821st.
+- **The eagle cam regressed.** Under the second design its true cell was 2nd and its winner 0.5 km off with both flights. Now it is 37th, outside the margin.
+  - Either the best-120 s stretch or the 1 km cells cost it.
+  - The true-point diagnostic on it (`collective-truth-s2of2`, 337f23f) says which.
+- **wsw150, a negative, reaches a coarse maximum of 18.22,** against Oyster Bay's 18.50. Only the other-day null can separate them.

@@ -261,3 +261,19 @@ Twelve units on 12 spot 8xlarge boxes, the unit shards relaunched after spot int
    - **The dense sweep lifts the cell by 2.7,** still below the margin.
    - **Sampling position lifts it past today's whole-map maximum.** The best 667 m sub-point is 20.76, the best 1 km point 16.61.
    - **Other cells rise too under a new sampler,** so the true cell's rank needs a full map. The 1 km grid is the cheapest sampler that sees the peak.
+
+## The third design step, written before its run: a 1 km coarse grid and the best 120 s stretch
+
+**Fixed now, not tuned** (2170d9c):
+- **The coarse grid at 1 km.** `COARSE_M` 1000, so a fine cell is 25 points at 200 m. The coarse sweep stays as it is (±14 s at 2 s, 2 %, 60), since the true cell's test showed that position, not sweep density, is what the coarse stage missed.
+- **The best 120 s stretch.** Each (flight, window) scores its best stretch of `SUB_S` = 120 s within the window: the best mean over any 120 s run of the n times, uncovered times still zero. The window nulls take the same rule, so the extra maximum over the stretch's position is priced in them.
+  - 120 s is the find test's line extent (about 110 s) rounded up, not a value searched for.
+  - This is the find's workaround for a detector finding (PLAN item 6): `detect`'s windows are twice the lines' length.
+- **The margin rule and the cap of 20 are unchanged,** now counted in 1 km cells.
+
+**Cost expected:** about 4× today's coarse stage, about 11 min for Oyster Bay on an 8xlarge, plus the top cell's 25-point fine stage, about a quarter of the 2 km cell's 284 s.
+
+**Expectation.**
+- At 1 km the true coarse cell scored 16.61 on the old score, so on Oyster Bay I expect the true cell inside the margin and near the top. Other cells rise too, so the rank is the test.
+- The sub-interval score should lift both Oyster Bay true lines to about their 110 s values (z well above today's 9.67 and 1.97), and similarly the eagle cam's.
+- The negatives rise as well, through the extra maximum; the null prices that.

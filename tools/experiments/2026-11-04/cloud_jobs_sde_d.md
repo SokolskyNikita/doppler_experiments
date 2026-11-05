@@ -145,7 +145,11 @@ The branch is `claude/sde-c-pm-coordination-cbbe43`. Every change is committed. 
 4. **The diagnostics are read** (record, "The follow-ups' results").
    - Both true lines lose about half their brightness to the 240 s window's length.
    - The coarse stage misses position: a 1 km grid lifts OB's true cell to 16.61 and a 667 m sub-grid to 20.76, against today's 7.36 and map maximum 14.80.
-5. **Proposed to the PM, not built:**
-   - the coarse grid at 1 km (COARSE_M 1000), 4× today's coarse cost;
-   - a sub-interval score, the best fixed-length (about 110–120 s) stretch of each window, for the windows and their nulls alike;
-   - then the coarse stage rerun on the eight cases.
+5. **The third design step is built and approved** (2170d9c): a 1 km coarse grid with 25-point fine cells, and each (flight, window) scored over its best 120 s stretch, nulls alike. Recorded before its run; check.sh passes.
+   - **The v3 coarse smoke** (`2026-11-04-collective-coarse-v3-s1of8`, oyster-bay, 68a906c) is running.
+   - **After it reads clean:**
+     1. launch shards 2–8 with `--only-shard K` from a checkout at 68a906c;
+     2. merge the eight into a new run (`--merge --resume <8 folders>`), which writes `KEPT.json` and the ranks;
+     3. report the ranks, the cost per case and the eagle cam's z to the PM;
+     4. commit `KEPT.json` as `tools/experiments/2026-11-04/collective_kept_v3.json` and launch `--fine-from` it. The PM has approved the fine stage.
+   - **The v2 fine stage** (2 km, whole-window score) is superseded by v3. Merge it for the record only.

@@ -170,7 +170,7 @@ def main():
         params.update(null_days="tools/experiments/2026-11-04/verdict_null_days.json", null_cases=sorted(keep) if keep else None)
     if kept is not None:
         params.update(fine_from=kept)
-    topic = "collective-null-v3" if a.null else ("collective-fine-v3" if kept is not None else "collective-coarse-v3")
+    topic = "collective-null-v4" if a.null else ("collective-fine-v4" if kept is not None else "collective-coarse-v4")
     run = shards.open_run(a.run, topic, {"script": "tools/experiments/2026-11-04/collective_run.py", "params": params})
     units = shards.Units(run, unit_ids, params, a.shard, a.resume)
     if not a.merge:

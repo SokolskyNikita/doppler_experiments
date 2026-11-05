@@ -8,7 +8,11 @@ outcome: Located by the search, not yet by the verdict: the third design (1 km c
 **Where it stands: located by the search, not yet by the verdict.**
 - **Oyster Bay.** Under the third design step (a 1 km coarse grid, each window scored over its best 120 s stretch, each candidate's tone over ±25 %), Oyster Bay's true cell is the coarse map's maximum, rank 1 of 15,253. The top cell's fine winner is 0.3 km from the truth, with both true flights matched.
 - **The eagle cam** was found at 0.5 km with both flights under the earlier designs.
-- **Not yet a claim.** A's other-day null on the collective Z is what turns these into claims, and it hasn't been drawn for this statistic yet.
+- **A wrong box nearly ties it.** oyster-bay-moved-wsw150, a moved box with no true flight, reaches a coarse maximum of 18.22, against Oyster Bay's 18.50. So the collective Z at this site has a wrong-box ceiling near 18.
+  - "Found at rank 1" is the search's result, not a claim.
+  - oyster-bay-hp150-aac32k is the cleaner positive: rank 1, with only 4 cells inside the margin.
+- **The eagle cam regressed** under the third design, from 2nd to 37th, outside the margin. The true-point diagnostic says whether the fixed 120 s stretch cost it. If it did, the stretch becomes per-window, the line's own extent from the detector (PLAN item 6).
+- **Not yet a claim.** Only A's other-day null on the collective Z can say whether 18.50 clears that ceiling, and it hasn't been drawn for this statistic yet.
 - **Open:** ace391's weak window (z 0.62), now a detector-window question (PLAN item 6).
 
 The sections below follow the work in order: the first design, the second, the diagnostics that split their faults, and the third.

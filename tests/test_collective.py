@@ -47,3 +47,11 @@ def test_collective_find_puts_the_winner_at_the_observer_and_floors_an_empty_win
     assert abs(w["clock_audio_minus_unix"] + T0) < 10.0
     empty = w["windows"][2]
     assert empty is None or empty["z"] <= 0 or w["n_matched"] == 3      # a floor: it adds nothing, never subtracts
+
+
+def test_a_pass_explains_one_window_and_the_other_falls_back():
+    import pandas as pd
+    scored = pd.DataFrame({"gidx": [0, 0, 0], "w": [0, 1, 1], "seg": [0, 0, 1], "t_heard": [100.0, 100.0, 200.0],
+                           "b": [-50.0, -50.0, -50.0], "s": [0.0] * 3, "f0_scale": [1.0] * 3, "z": [5.0, 4.0, 1.0]})
+    assert collective.point_scores(scored, 2).Z.iloc[0] == 6.0                     # window 1 falls back to segment 1
+    assert collective.point_scores(scored, 2, one_pass=False).Z.iloc[0] == 9.0     # the old rule counted segment 0 twice

@@ -43,12 +43,16 @@ CHUNK = 400
 
 @dataclass(frozen=True)
 class Sweep:
-    """The residual shift and the f0 sweep (fractions around the window's coarse tone), and the curve's samples."""
+    """The residual shift and the f0 sweep (fractions around the window's coarse tone), and the curve's samples: n per
+    SUB_S stretch, so a window's own n scales with its length (n_for)."""
     shift_s: float
     shift_step: float
     f0_span: float
     f0_step: float
-    n: int = 160
+    n: int = 80
+
+    def n_for(self, length_s: float) -> int:
+        return max(self.n, int(round(self.n * length_s / SUB_S)))
 
     def shifts(self):
         return np.arange(-self.shift_s, self.shift_s + 1e-9, self.shift_step)
@@ -66,8 +70,9 @@ def fine_sweep(f0_span: float = F0_SPAN) -> Sweep:
 
 def coarse_sweep(f0_span: float = F0_SPAN) -> Sweep:
     """A COARSE_M cell's span: up to COARSE_M / sqrt(2) from its centre, about 4 s of travel, widens the shift, and the
-    curve's shape changes with it, so the f0 sweep widens by 2 points; coarser steps and samples keep it affordable."""
-    return Sweep(14.0, 2.0, f0_span + 0.02, 0.02, 60)
+    curve's shape changes with it, so the f0 sweep widens by 2 points. 60 samples per SUB_S stretch at 1 s and 1 % (the
+    fourth design step: 60 samples over a whole 240 s window left 30 in the stretch and missed the eagle cam's peak)."""
+    return Sweep(14.0, 1.0, f0_span + 0.02, 0.01, 60)
 
 
 @dataclass
@@ -247,17 +252,27 @@ def collective_scores(cand: pd.DataFrame, cpa: pd.DataFrame, views, nulls, segs,
     return out
 
 
-def point_scores(scored: pd.DataFrame, n_windows: int) -> pd.DataFrame:
+PASS_FALLBACK = 3              # a window's best passes per clock bin kept for the one-window-per-pass rule
+
+
+def point_scores(scored: pd.DataFrame, n_windows: int, one_pass: bool = True) -> pd.DataFrame:
     """Z(x) = max over clocks of sum over windows of max(z, 0), the windows' best clocks agreeing within +-AGREE_S:
-    clocks are binned at AGREE_S / 2, and a window's z at a bin is its best within two bins either side."""
+    clocks are binned at AGREE_S / 2, and a window's z at a bin is its best within two bins either side. With one_pass
+    (the design's section 1, enforced from the fourth step), a pass, a segment's CPA at the point, explains only its
+    best window at a point and clock; a window whose best pass is taken falls back to its next (of PASS_FALLBACK)."""
     pos = scored[scored["z"] > 0].copy()
     if not len(pos):
         return pd.DataFrame(columns=["gidx", "Z", "b", "n_matched"])
     step = AGREE_S / 2
     pos["bin"] = np.floor(pos["b"] / step).astype(np.int64)
-    best = pos.sort_values("z", ascending=False).drop_duplicates(["gidx", "w", "bin"])
+    pos["pass"] = np.round(pos["t_heard"].to_numpy(float)).astype(np.int64)
+    pos = pos.sort_values("z", ascending=False)
+    best = pos.groupby(["gidx", "w", "bin"]).head(PASS_FALLBACK if one_pass else 1)
     spread = pd.concat([best.assign(bin=best["bin"] + d) for d in range(-2, 3)], ignore_index=True)
-    per = spread.sort_values("z", ascending=False).drop_duplicates(["gidx", "w", "bin"])
+    spread = spread.sort_values("z", ascending=False)
+    if one_pass:
+        spread = spread.drop_duplicates(["gidx", "bin", "w", "seg", "pass"]).drop_duplicates(["gidx", "bin", "seg", "pass"])
+    per = spread.drop_duplicates(["gidx", "w", "bin"])
     tot = per.groupby(["gidx", "bin"]).agg(Z=("z", "sum"), n_matched=("w", "nunique")).reset_index()
     top = tot.sort_values("Z", ascending=False).drop_duplicates("gidx")
     top["b"] = (top["bin"] + 0.5) * step
@@ -271,7 +286,11 @@ def matched_at(scored: pd.DataFrame, gidx: int, b: float, segs, wins) -> tuple[l
     b0 = int(np.floor(b / step))
     here = scored[(scored["gidx"] == gidx)]
     here = here[np.abs(np.floor(here["b"] / step).astype(np.int64) - b0) <= 2]
-    out, voters = [], sorted({int(w) for w in here["w"]})
+    voters = sorted({int(w) for w in here["w"]})
+    pos = here[here["z"] > 0].sort_values("z", ascending=False)       # point_scores' one-window-per-pass rule
+    taken = pos.drop_duplicates(["seg", "t_heard"]).drop_duplicates("w")
+    here = pd.concat([taken, here[~here["w"].isin(taken["w"]) & (here["z"] <= 0)]])
+    out = []
     for w, win in enumerate(wins):
         m = here[here["w"] == w]
         if not len(m):
@@ -331,7 +350,7 @@ def collective_find(sp: Spectrogram, wins: list[Window], traces, bbox, *, max_ra
     segs = build_segments(traces, coarse.lat0, coarse.lon0, clip_enu=(e0, e1, n0, n1))
     cpa_c = cached_cpa_table(coarse, segs, max_range_m, c, cpa_cache, workers=workers)
     sw_c, sw_f = coarse_sweep(f0_span), fine_sweep(f0_span)
-    views_c = [LogView(w, sp, sw_c.n) for w in wins]
+    views_c = [LogView(w, sp, sw_c.n_for(w.t_end - w.t_start)) for w in wins]
     walls["coarse_cpa"] = time.perf_counter() - t; counts["coarse_points"] = len(coarse); counts["coarse_cpa_rows"] = len(cpa_c)
     t = time.perf_counter()
     nulls_c = window_nulls(views_c, wins, cpa_c, segs, coarse.enu, c, sw_c, workers, null_n)
@@ -339,6 +358,7 @@ def collective_find(sp: Spectrogram, wins: list[Window], traces, bbox, *, max_ra
     counts["coarse_candidates"] = len(cand)
     scored_c = collective_scores(cand, cpa_c, views_c, nulls_c, segs, coarse.enu, c, sw_c, workers)
     pts_c = point_scores(scored_c, len(wins))
+    counts["coarse_max_without_pass_rule"] = float(point_scores(scored_c, len(wins), one_pass=False).Z.max()) if len(scored_c) else 0.0
     walls["coarse"] = time.perf_counter() - t
     log(f"coarse: {len(coarse)} points, {len(cand)} candidates, best Z {pts_c.Z.max() if len(pts_c) else 0:.2f}")
     coarse_map = dict(lat=[float(coarse.lat[g]) for g in pts_c.gidx], lon=[float(coarse.lon[g]) for g in pts_c.gidx],
@@ -359,7 +379,7 @@ def collective_find(sp: Spectrogram, wins: list[Window], traces, bbox, *, max_ra
     if not ranks:
         return dict(base, winner=None, reason="no kept cell in only_cells")
     t = time.perf_counter()
-    views_f = [LogView(w, sp, sw_f.n) for w in wins]
+    views_f = [LogView(w, sp, sw_f.n_for(w.t_end - w.t_start)) for w in wins]
     nulls_f = window_nulls(views_f, wins, cpa_c, segs, coarse.enu, c, sw_f, workers, null_n)     # over the whole box
     fine, cell_of = fine_grid(coarse, keep.gidx.to_numpy()[ranks], elevation, coarse.lat0, coarse.lon0)
     cpa_f = cpa_table(fine, segs, max_range_m=max_range_m, c=c, workers=workers)

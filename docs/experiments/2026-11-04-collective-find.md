@@ -277,3 +277,11 @@ Twelve units on 12 spot 8xlarge boxes, the unit shards relaunched after spot int
 - At 1 km the true coarse cell scored 16.61 on the old score, so on Oyster Bay I expect the true cell inside the margin and near the top. Other cells rise too, so the rank is the test.
 - The sub-interval score should lift both Oyster Bay true lines to about their 110 s values (z well above today's 9.67 and 1.97), and similarly the eagle cam's.
 - The negatives rise as well, through the extra maximum; the null prices that.
+
+**The third design's first read: Oyster Bay** (`runs/2026-11-04-collective-coarse-v3-s1of8`, 68a906c, 8xlarge).
+- **The true cell is the coarse map's maximum:** rank 1 of 15,253 cells with Z > 0, Z 18.50.
+- **The top cell's fine winner** is 0.3 km from the truth, at Z 17.19. Both true flights are in its matched set: a1dfeb at z 10.43, ace391 at z 0.62, with a63e21 and aa61d2.
+- **The margin:** 24 cells lie within 2σ_c (σ_c 1.81). The cap keeps 20, reaching 3.46 below the maximum. A second kept cell is 0.7 km from the truth.
+- **Cost:** the coarse stage 607 s, 3.6× the 2 km stage, and one 25-point fine cell 143 s.
+- **Against the expectation.** The rank came out as I expected (the true cell inside the margin and near the top). The second half didn't: ace391 stays weak, at z 0.62 against 1.97 before. The best-120 s score lifted a1dfeb (9.67 to 10.43) but not ace391, whose window remains the open question.
+- **Whether the case passes criterion 1** waits for the fine stage over all 20 kept cells.

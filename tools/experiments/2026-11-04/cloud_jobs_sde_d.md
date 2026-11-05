@@ -189,3 +189,23 @@ The branch is `claude/sde-c-pm-coordination-cbbe43`. Every change is committed. 
   2. Launch shards 2–8 from a checkout at 347786b.
   3. Merge, report the ranks, then run the fine stage from the merged `KEPT.json` (committed as a file, as for v3).
 - **The v3 fine stage** (`…-fine-v3-*`) is superseded by v4 once v4's coarse ranks are in. Merge it only for the record.
+
+## Stopped by the owner (2026-11-04, about 01:35Z): the work continues in Codex
+
+Every running job of this session was cancelled. The cancelled jobs were:
+- the v4 coarse smoke, `2026-11-04-collective-coarse-v4-s1of8` (OB, about 35 min into roughly 70);
+- the v3 fine stage still running (`…-fine-v3-s*of19`, the `-2` relaunches, `…-s*of20`);
+- the four SWFL+Essex null relaunches (`collective-null-s{4,19,20,23}of24-2`).
+
+Folders already pulled stay in `$DOPPLERTRACK_DATA/runs/`. Nothing is pushed: the branch's commits after 531ac0c are local only.
+
+**Where things stand:**
+- **Design v3** (1 km grid, best 120 s stretch): OB and hp150 rank first, 0.3 km from the truth. The eagle cam is 37th because of the coarse sweep (its true-point diagnostic is in the record). wsw150 reaches 18.22 against OB's 18.50.
+- **Design v4** is built and tested (aeba858, 347786b) but has no results: the dense coarse sweep and one window per pass.
+
+**To resume:**
+1. Relaunch v4's coarse stage on the eight cases, from a checkout at 347786b (`collective_run.py`, 8 shards, 8xlarge, on demand: each case's coarse stage is about 70–100 min).
+2. Merge the eight (`--merge --resume`).
+3. Before the fine stage, change it to one unit per case holding all its kept cells. Today each per-cell unit repeats the 70–100 min coarse stage.
+4. Then the fine stage within the margin, and A's other-day null for the adopted statistic (`--null`, NY first).
+5. **The SWFL+Essex null (first design):** 84 of 95 draws are pulled. The missing 11 are in shards 4, 19, 20 and 23. A's `collective_null.py` can judge the 84 now, or once those shards are rerun.

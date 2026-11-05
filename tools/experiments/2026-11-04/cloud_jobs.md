@@ -334,7 +334,30 @@ and written up in [the pilot record](../../../docs/experiments/2026-11-04-seattl
 - The full-band band test is fully prepared (`session_spectrogram.py --fmax`, both checks' `--fmax/--spectrogram`,
   `tools/data/home_session_case.py`, the `bandtest` mode) and waits for a full-band session and the owner's file list.
 
-**Next step:** the 20 km box at 200 m (and at 50 m if affordable), from the 11-04 archive's wide cut; then build the pair-choice fix (refine each pair's top before choosing) and rerun the series with it.
+**Stopped (2026-11-05 01:40Z, the owner's order).** No SDE-B fleet job is running or preparing: every
+`seattle-home-pilot-*` job is done or failed, and the 20 km fetch was never launched. The background watcher for the
+archive was stopped. Nothing is pushed. To resume:
+
+1. **The 20 km box.** Code is ready (f0f2d68 in the old history, "bench, tools: a traces override ...").
+   - When adsb.lol's `v2026.11.04-planes-readsb-prod-0` release exists, run the public fetch job:
+     `tools/aws/runs launch puget-20261104 -- uv run dopplertrack fetch-day 2026-11-04 "$RUN/puget-keepjets.npz"
+     --bbox 47.20 48.10 -122.95 -121.70 --keep-jets`. That box covers the 20 km search plus the 12 km reach with
+     23.4 km to spare.
+   - Pull it, place it at `derived/traces/2026-11-04/puget-keepjets.npz`, and note it in the data root's MANIFEST.
+   - Launch with `seattle_pilot_launch.sh <allow list> locate --silence off --box 20 --traces
+     derived/traces/2026-11-04/puget-keepjets.npz --envelope 47.20,48.10,-122.95,-121.70`, and the same with `--box 12`.
+     The 12 km box measures the change of flight-data source from the adsbfetch cut.
+   - Write both into the record as reported, not judged.
+2. **The band test.** It waits for the first full-band session and the owner's file list. Then:
+   - `tools/data/home_session_case.py <ID> --traces <cut> [--extraction-box ...] --write`, then `bench validate`, then
+     commit;
+   - `seattle_pilot_launch.sh <allow list> bandtest --session <ID>`;
+   - judge it by the record's pre-registered rule.
+3. **The pilot's open items.**
+   - The owner's re-listen to the band-limited copy.
+   - The pair-choice fix: refine each event pair's top before choosing among pairs, then rerun the 4 km box at 200 m.
+   - The density-conditional silence filter in `locate`.
+   - The verdict waits for Phase 4's null.
 
 ## SDE-A
 

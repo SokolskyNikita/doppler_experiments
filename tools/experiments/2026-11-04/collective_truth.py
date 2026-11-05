@@ -10,6 +10,9 @@ fine stage on the true coarse cell's 100 points plus the reference point itself,
   residual shift +-8 s free), without the vote, so a window's best flight there is whatever its own evidence prefers.
 Per window: the best flight, its f0 and z, and the true pair's own best z.
 
+Unit truth2 adds pair_detail: the true flights' segments, coverage and the find test's brightness per window; truth3 adds
+coarse_variants: the true coarse cell's Z under four coarse samplers (today, dense, a 3x3 sub-grid, a 1 km grid).
+
 usage: uv run python tools/experiments/2026-11-04/collective_truth.py [RUN] [--shard K/N] [--resume DIR ...] [--inputs]
 """
 import argparse
@@ -26,7 +29,7 @@ import shards  # noqa: E402
 from bench import cases, runner  # noqa: E402
 from collective_run import DETECT  # noqa: E402
 
-UNITS = ["oyster-bay--truth"]
+UNITS = ["oyster-bay--truth3"]
 
 
 def per_window(rows, wins, segs, pair):
@@ -42,6 +45,94 @@ def per_window(rows, wins, segs, pair):
                         best=dict(icao=segs[int(r.seg)].icao, f0_hz=float(win.f0 * r.f0_scale), z=float(r.z), score=float(r.s),
                                   clock=float(r.b)),
                         pair_z={p: (float(m["z"][icao == p].max()) if (icao == p).any() else None) for p in pair}))
+    return out
+
+
+def pair_detail(case, sp, wins, views, nulls, segs, obs, c, b_true, sweep, pair):
+    """Why a true flight scores what it does in each window: its segments' coverage of the window's times and their own
+    scores (the collective find scores each segment as its own CPA row), the joined curve's score through the same
+    LogView, and the find test's brightness (objective_fn) on this window and on the saved-fit window, with f0 and the
+    clock free as the find test had them."""
+    import importlib.util
+    from dopplertrack.score import modelled_curve
+    spec = importlib.util.spec_from_file_location("find_test", HERE / "find_test.py")
+    ft = importlib.util.module_from_spec(spec); spec.loader.exec_module(ft)
+    clock0 = -b_true
+    shifts, offsets = sweep.shifts(), sweep.offsets()
+    saved = runner.saved_fit_dicts(cases.blind_case(case["id"]))
+    out = {}
+    for p in pair:
+        parts = [(i, modelled_curve(s, obs, c)) for i, s in enumerate(segs) if s.icao == p]
+        if not parts:
+            out[p] = None; continue
+        t_all = np.concatenate([q[1][0] for q in parts]); r_all = np.concatenate([q[1][1] for q in parts])
+        o = np.argsort(t_all); t_all, r_all = t_all[o], r_all[o]
+        rows = []
+        for w, (win, view, nl) in enumerate(zip(wins, views, nulls)):
+            seg_rows = []
+            for i, (to, r) in parts:
+                cov = float(np.isfinite(np.interp(view.tq - b_true, to, r, left=np.nan, right=np.nan)).mean())
+                if cov == 0:
+                    continue
+                s = float(view.sweep_scores(to + b_true, r, shifts, offsets).max())
+                seg_rows.append(dict(segment=i, coverage=cov, score=s, z=(s - nl["median"]) / nl["sigma"]))
+            if not seg_rows:
+                continue
+            cov_j = float(np.isfinite(np.interp(view.tq - b_true, t_all, r_all, left=np.nan, right=np.nan)).mean())
+            s_j = float(view.sweep_scores(t_all + b_true, r_all, shifts, offsets).max())
+            tt, score = ft.objective_fn(sp, win.t_start, win.t_end, 0.45 * win.f0, 2.0 * win.f0, "brightness")
+            best = -np.inf
+            for dlt in np.arange(-30.0, 30.01, 0.5):
+                rr = np.interp(tt + clock0 + dlt, t_all, r_all, left=np.nan, right=np.nan)
+                if np.all(np.isfinite(rr)):
+                    for f0 in np.arange(0.75 * win.f0, 1.25 * win.f0, 0.25):
+                        best = max(best, score(f0 * rr))
+            rows.append(dict(window=w, t_cpa=win.t_cpa, segments=seg_rows, joined=dict(coverage=cov_j, score=s_j,
+                             z=(s_j - nl["median"]) / nl["sigma"]), find_test_brightness_this_window=float(best)))
+        sv = []
+        for k, ev in enumerate(saved):
+            tt, score = ft.objective_fn(sp, ev["t_start"], ev["t_end"], 95.0, 195.0, "brightness")
+            best = -np.inf
+            for dlt in np.arange(-30.0, 30.01, 0.5):
+                rr = np.interp(tt + clock0 + dlt, t_all, r_all, left=np.nan, right=np.nan)
+                if np.all(np.isfinite(rr)):
+                    for f0 in np.arange(95.0, 195.01, 0.25):
+                        best = max(best, score(f0 * rr))
+            if np.isfinite(best):
+                sv.append(dict(saved_event=k + 1, t_start=ev["t_start"], t_end=ev["t_end"], find_test_brightness=float(best)))
+        out[p] = dict(n_segments=len(parts), windows=rows, saved_fit=sv)
+    return out
+
+
+VARIANTS = {  # coarse samplers to score the true cell with: (sweep, sub-grid points per side)
+    "today": (dict(shift_s=14.0, shift_step=2.0, f0_span=0.27, f0_step=0.02, n=60), 1),
+    "dense": (dict(shift_s=14.0, shift_step=1.0, f0_span=0.27, f0_step=0.01, n=120), 1),
+    "subgrid3": (dict(shift_s=8.0, shift_step=2.0, f0_span=0.27, f0_step=0.02, n=60), 3),
+    "grid1km": (dict(shift_s=14.0, shift_step=2.0, f0_span=0.27, f0_step=0.02, n=60), 2),
+}
+
+
+def coarse_variants(sp, wins, cpa_c, coarse, segs, gi, elevation, c, rng):
+    """The true coarse cell's Z under each coarse sampler: the cell's maximum over its sub-points (1 = the centre, 2 =
+    the four 1 km points, 3 = the nine 667 m points), each variant with its own whole-box window nulls."""
+    from dopplertrack import collective as col
+    from dopplertrack.search import Grid, cpa_table
+    out = {}
+    la0, lo0 = float(coarse.lat[gi]), float(coarse.lon[gi])
+    for name, (sw_kw, k) in VARIANTS.items():
+        sw = col.Sweep(**sw_kw)
+        views = [col.LogView(w, sp, sw.n) for w in wins]
+        nulls = col.window_nulls(views, wins, cpa_c, segs, coarse.enu, c, sw)
+        offs = (np.arange(k) - (k - 1) / 2) * (col.COARSE_M / k)
+        LA, LO = np.meshgrid(la0 + offs / 111320.0, lo0 + offs / (111320.0 * np.cos(np.radians(la0))), indexing="ij")
+        lat, lon = LA.ravel(), LO.ravel()
+        el = elevation(lat, lon) if elevation else np.zeros_like(lat)
+        g = Grid.points(lat, lon, np.where(np.isfinite(el), el, 0.0), lat0=coarse.lat0, lon0=coarse.lon0)
+        cpa = cpa_table(g, segs, max_range_m=rng, c=c)
+        cand = col.candidates(cpa, wins)
+        pts = col.point_scores(col.collective_scores(cand, cpa, views, nulls, segs, g.enu, c, sw), len(wins))
+        out[name] = dict(points=len(g), Z=float(pts.Z.max()) if len(pts) else 0.0,
+                         per_point=[float(pts.Z[pts.gidx == i].max()) if (pts.gidx == i).any() else 0.0 for i in range(len(g))])
     return out
 
 
@@ -104,8 +195,10 @@ def run_unit(cid):
     wt = per_window(scored_t, wins, segs, pair)
     true = dict(b_true=b_true, windows=wt, Z_sum=float(sum(max(w["best"]["z"], 0.0) for w in wt if w["best"])),
                 Z_pair=float(sum(max(v or 0.0, 0.0) for w in wt for v in w["pair_z"].values())))
+    detail = pair_detail(case, sp, wins, views_f, nulls_f, segs, fine.enu[g_ref], c, b_true, sw_f, pair)
+    variants = coarse_variants(sp, wins, cpa_c, coarse, segs, gi, elevation, c, rng)
     return dict(case=cid, reference=ref, true_pair=pair, true_cell=dict(lat=float(coarse.lat[gi]), lon=float(coarse.lon[gi]), d_m=float(d[gi])),
-                windows=[w.__dict__ for w in wins], clock_free=free, true_clock=true,
+                windows=[w.__dict__ for w in wins], clock_free=free, true_clock=true, pair_detail=detail, coarse_variants=variants,
                 nulls=[{k: n[k] for k in ("median", "sigma")} for n in nulls_f])
 
 
@@ -116,7 +209,7 @@ def main():
     if a.inputs:
         from bench import inputs as bench_inputs
         doc = bench_inputs.run_inputs(sorted({u.split("--")[0] for u in UNITS}), "locate")
-        shards.print_inputs(doc["cases"], doc["inputs"], [], tuple(doc["cache_kinds"]))
+        shards.print_inputs(doc["cases"], doc["inputs"], [], tuple(doc["cache_kinds"]))     # the saved fits are repo files
         return
     run = shards.open_run(a.run, "collective-truth", {"script": "tools/experiments/2026-11-04/collective_truth.py",
                                                       "params": dict(units=UNITS, detect=DETECT)})

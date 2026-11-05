@@ -222,3 +222,42 @@ Twelve units on 12 spot 8xlarge boxes, the unit shards relaunched after spot int
 
 - **Against the expectation.** I expected the ±25 % sweep to lower the eagle cam's true z (to about 3.5 and 1.3). It raised them instead, to 6.05 and 2.20, against 4.95 and 1.80 at ±10 %. The eagle cam's true cell ranks second, so the coarse sampler isn't what loses Oyster Bay there.
 - **The fine stage runs on every kept cell.** Oyster Bay's 19 other cells run as `2026-11-04-collective-fine-v2-s*of19` (75a8e02), the other cases' 120 as `…-s*of20` (80599d3). The merge takes each case's best cell over both stages.
+
+**The two follow-ups the split asks for, written before their results.**
+1. **ace391's window.** The find test's 12.93 is a raw brightness (mean whitened dB along the curve, f0 and clock free, on the saved-fit window, 95–195 Hz), not a z. On the same scale the collective find's LogView scores ace391 at about 6.4 in window 3,068: z 1.97 against that window's null, median 4.33 and σ 1.04. So the denominator isn't inflated: σ is ordinary, like the other windows'. The raw score is what halves.
+   - **The suspect is segment coverage.** The find test joined the flight's segments into one curve. The collective find scores each segment as its own CPA row, with uncovered times counting as zero.
+   - **`collective_truth.py`'s `pair_detail`** (unit truth2, fc224b3) reports, per true flight and window: the segments' coverage and scores, the joined curve's score, and the find test's brightness on the same window and on the saved-fit windows.
+2. **The coarse sampler.** Cost per evaluation on the synthetic pass, against today's coarse sweep (±14 s at 2 s, 2 %, 60 samples: 0.21 ms):
+
+| Sampler | Per evaluation | Coarse stage relative to today |
+|---|---|---|
+| Dense: ±14 s at 1 s, 1 %, 120 samples | 1.40 ms | 6.5× |
+| 3×3 sub-grid (667 m), ±8 s at 2 s, 2 %, 60 | 9 × 0.15 ms | 6.1× |
+| 3×3 sub-grid at the dense sweep | 9 × 0.81 ms | 33.8× |
+| 1 km grid (4 points per cell), today's sweep | 4 × 0.21 ms | 4.0× |
+
+   - **Both of the PM's options cost more than 2×.** The dense version is 6.5×, about 18 min per case at Oyster Bay's 167 s coarse stage.
+   - **The sub-grid is the PM's upper bound.** It costs about the same (6.1×), and it samples position, which a denser shift or tone can't: the true cell's centre is 1.0 km from the truth, and a 1 km offset changes the curve's shape.
+   - **The data decides.** `coarse_variants` (unit truth3, 5ba8c4b) scores the true coarse cell under all four samplers, each with its own whole-box nulls. The sampler adopted is the cheapest whose true-cell Z ranks inside the margin.
+
+**The follow-ups' results** (`runs/2026-11-04-collective-truth-3/`, 5ba8c4b; truth-2 is the same pair detail, at fc224b3).
+
+1. **ace391's window loses half to its length, not to coverage.**
+   - **No split.** ace391 is one segment covering the 3,068 s window fully, with coverage 1.00.
+   - **The two scorers agree on the same window.** The find test's own brightness on that 240 s detect window (2,947–3,187 s) is 6.63, against the LogView's 6.39.
+   - **The 12.93 belongs to a shorter window.** It came from the saved-fit window, 3,020–3,130 s, 110 s long.
+   - **a1dfeb shows the same thing:** 20.24 on its saved-fit window, 11.42 on its 240 s detect window.
+   - **So both true lines lose about half their brightness.** The score is the mean over 240 s, and each line is bright for about 110 s. My coverage hypothesis was wrong.
+   - **The fix is in the score's support:** for example the best fixed-length sub-interval of the window, or the window's bounds cut to the line's extent. The window nulls must take the same rule.
+2. **Position, not sweep density, is what the coarse stage misses.** The true coarse cell under four samplers, each with its own whole-box nulls; on today's map the maximum is 14.80 and the margin threshold 11.41:
+
+| Sampler | Points per cell | True cell's Z | Cost against today |
+|---|---|---|---|
+| Today (±14 s at 2 s, 2 %, 60) | 1 | 7.36 | 1× |
+| Dense (±14 s at 1 s, 1 %, 120) | 1 | 10.04 | 6.5× |
+| 1 km grid, today's sweep | 4 | **16.61** | 4.0× |
+| 3×3 sub-grid (667 m), ±8 s | 9 | **20.76** | 6.1× |
+
+   - **The dense sweep lifts the cell by 2.7,** still below the margin.
+   - **Sampling position lifts it past today's whole-map maximum.** The best 667 m sub-point is 20.76, the best 1 km point 16.61.
+   - **Other cells rise too under a new sampler,** so the true cell's rank needs a full map. The 1 km grid is the cheapest sampler that sees the peak.

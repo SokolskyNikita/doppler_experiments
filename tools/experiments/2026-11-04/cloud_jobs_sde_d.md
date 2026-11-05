@@ -127,7 +127,25 @@ The branch is `claude/sde-c-pm-coordination-cbbe43`. Every change is committed. 
 - **Recorded** in the collective-find record.
 - **Coarse units 2–8** are launched (`2026-11-04-collective-coarse-v2-s2of8` … `s8of8`, 91fb1c1).
 
+**Done since the smoke read** (all recorded in the collective-find record):
+- **The true-cell diagnostic** (`2026-11-04-collective-truth`, 75a8e02). The fine grid reaches Z 17.54 in OB's true cell, so the coarse sampler is the fault; ace391's window is weak (z 1.97).
+- **The eight coarse units,** merged into `runs/2026-11-04-collective-coarse-v2-merge/` (`collective.json`, `KEPT.json`).
+
+**Running:** the fine stage.
+- OB's cells 1–19: `2026-11-04-collective-fine-v2-s1of19` … `s19of19`, 75a8e02, `--fine-from tools/experiments/2026-11-04/collective_kept_ob.json`.
+- The other seven cases' 120 cells: `…-s1of20` … `s20of20`, 80599d3, `--fine-from …/collective_kept_rest.json`.
+- Both run 91fb1c1's `collective.py`.
+
 **Next step:**
-1. Pull the eight coarse units and merge them (`--merge --resume <8 folders>`), which writes `KEPT.json` and each case's `coarse_truth`.
-2. Give the PM the eight coarse ranks.
-3. On their go-ahead, launch the fine stage (`--fine-from KEPT.json`, 19 units per capped case, about 8 min each). Merge it with `--extra-units`.
+1. Pull every fine job.
+2. Merge each case over both stages, from a checkout at 80599d3:
+   `collective_run.py <new run> --fine-from tools/experiments/2026-11-04/collective_kept_rest.json --merge --resume <the 20 …-s*of20 folders> --extra-units <the 8 collective-coarse-v2-s*of8 folders> <the 19 …-s*of19 folders>`.
+   Each case takes its best cell over the coarse stage's cell 0 and every fine cell.
+3. Report each case's best cell.
+4. **The diagnostics are read** (record, "The follow-ups' results").
+   - Both true lines lose about half their brightness to the 240 s window's length.
+   - The coarse stage misses position: a 1 km grid lifts OB's true cell to 16.61 and a 667 m sub-grid to 20.76, against today's 7.36 and map maximum 14.80.
+5. **Proposed to the PM, not built:**
+   - the coarse grid at 1 km (COARSE_M 1000), 4× today's coarse cost;
+   - a sub-interval score, the best fixed-length (about 110–120 s) stretch of each window, for the windows and their nulls alike;
+   - then the coarse stage rerun on the eight cases.

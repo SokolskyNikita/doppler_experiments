@@ -5,7 +5,7 @@ Doppler curves of propeller aircraft. `README.md` explains the method; `PLAN.md`
 `docs/experiments/` the record of what has been measured. Read PLAN.md's sections 2 and 4 before starting work.
 [docs/architecture.md](docs/architecture.md) traces the detector and the CPA build, the two pieces Phase 1 changes.
 
-**Handoff.** [docs/handoff-2026-11-05.md](docs/handoff-2026-11-05.md) is the state of play at the end of the first fleet day: the owner's standing rules that are not written elsewhere, who owned what and what is open, what was established, the Seattle pilot, the procedures a fresh operator needs, and the decisions pending on the owner. Read it first.
+**Handoff.** `$DOPPLERTRACK_DATA/private/handoff-2026-11-05.md` (outside the repo: it names the owner's machine, accounts and transcript locations, none of which belong in a public fork) is the state of play at the end of the first fleet day: the owner's standing rules that are not written elsewhere, who owned what and what is open, what was established, the Seattle pilot, the procedures a fresh operator needs, and the decisions pending on the owner. Read it first. Handoffs, like everything else under `private/`, never go into the tree.
 
 ## Setup
 

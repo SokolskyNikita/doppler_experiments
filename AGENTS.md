@@ -72,7 +72,10 @@ Doppler curves of propeller aircraft. `README.md` explains the method; `PLAN.md`
   account through a repo-local credential helper; leave it alone.
 - `main` mirrors upstream; never commit to it. `dev` is the fork's line, and all work branches off `dev`.
   Merge upstream into `dev`; never rebase or force-push `dev`.
-- Fork-only files: `PLAN.md`, `AGENTS.md`, `CLAUDE.md`, `.claude/`, `tools/`, `bench/`, `docs/reference/`,
+- `.claude/` is ignored and never committed: it holds the app's worktrees, this checkout's settings and the
+  PM's landing helper, none of which belong in the fork. History was rewritten on 2026-11-05 to drop it and the
+  handoff; every branch SHA from before then changed.
+- Fork-only files: `PLAN.md`, `AGENTS.md`, `CLAUDE.md`, `tools/`, `bench/`, `docs/reference/`,
   `docs/experiments/`, `docs/phase1-preparation.md`, `docs/architecture.md`. They may share a commit with upstream code; drop them when sending work upstream.
 - To send work upstream, branch `up/<topic>` from `upstream/main`, cherry-pick the topic's upstream commits
   by SHA, compare the series with `git range-diff`, and re-run the tests there. Don't use

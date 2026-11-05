@@ -317,3 +317,19 @@ Twelve units on 12 spot 8xlarge boxes, the unit shards relaunched after spot int
   - Either the best-120 s stretch or the 1 km cells cost it.
   - The true-point diagnostic on it (`collective-truth-s2of2`, 337f23f) says which.
 - **wsw150, a negative, reaches a coarse maximum of 18.22,** against Oyster Bay's 18.50. Only the other-day null can separate them.
+
+**The eagle cam's regression: the coarse sweep, not the 120 s stretch** (`runs/2026-11-04-collective-truth-s2of2`, 337f23f; a diagnostic that reads the labels).
+- **The fine grid sees the eagle cam's true point.** In its true 1 km cell (centre 146 m from the nest) the fine stage reaches Z 18.06, and 16.57 at the reference point with the clock 0.2 s from the reference clock. That's above the whole v3 coarse map's maximum (12.0).
+- **The true flights at the reference point and clock:** a2baea z 6.16 and 3.81, a336e4 z 1.93. So the best-120 s score keeps both true flights, and isn't what cost the case.
+- **The coarse stage missed it, again on sampling.** The true cell's coarse Z is 8.40, rank 37. Within that one 1 km cell, the other samplers give:
+
+| Sampler within the true 1 km cell | True cell's Z |
+|---|---|
+| Today's coarse sweep (±14 s at 2 s, 2 %, 60 samples) | 8.40 |
+| The dense sweep (±14 s at 1 s, 1 %, 120) | **13.66** |
+| A 2 × 2 grid (500 m) at today's sweep | **14.14** |
+| A 3 × 3 grid (333 m) at today's sweep | 11.85 |
+
+  - **Here sweep density matters, unlike at Oyster Bay.** With the best-120 s stretch, the coarse sweep's 60 samples over a 240 s window leave about 30 inside the stretch, 4 s apart. That's too sparse for a line that is bright for about 110 s.
+  - **The coarse stage needs the denser sweep as well as the 1 km cells.** Either sampler above lifts the true cell past the map's maximum.
+- **One pass counted twice.** Two overlapping windows (2,175 s and 2,247 s) both take a2baea's single pass, at z 6.16 and 3.81. "One window per pass" isn't enforced (design §1), so the sum counts that pass twice. The same can inflate chance matches; the null includes it, but the constraint should be enforced.

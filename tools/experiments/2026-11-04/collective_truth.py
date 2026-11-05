@@ -29,7 +29,7 @@ import shards  # noqa: E402
 from bench import cases, runner  # noqa: E402
 from collective_run import DETECT  # noqa: E402
 
-UNITS = ["oyster-bay--truth3"]
+UNITS = ["oyster-bay--truth3", "eagle-cam-clip-18000s--truth3"]
 
 
 def per_window(rows, wins, segs, pair):

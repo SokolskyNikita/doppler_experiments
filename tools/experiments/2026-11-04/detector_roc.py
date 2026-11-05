@@ -59,6 +59,31 @@ def synth(geom, amp, seed):
     return x.astype(np.float32), DUR / 2
 
 
+_NULL: dict = {}
+
+
+def _null_init(sp):
+    _NULL["sp"] = sp
+
+
+def _null_one(job):
+    ev, lo, hi = job
+    diag: list = []
+    (e,) = rescore_null(_NULL["sp"], [ev], lo, hi, c=C, diagnostics=diag)
+    return e, diag[0]
+
+
+def null_scores(sp, cands, lo, hi, workers):
+    """rescore_null over the candidates, one fit_event each, across `workers` processes holding sp once each (the
+    noise unit's 200 serial fits outlasted a spot box)."""
+    if workers <= 1 or len(cands) < 2:
+        diag: list = []
+        return rescore_null(sp, cands, lo, hi, c=C, diagnostics=diag), diag
+    with ProcessPoolExecutor(workers, initializer=_null_init, initargs=(sp,)) as ex:
+        got = list(ex.map(_null_one, [(e, lo, hi) for e in cands]))
+    return [g[0] for g in got], [g[1] for g in got]
+
+
 def detect(x, setting, workers, top):
     stat, (fmax, parts) = parse(setting)
     sp = audio.compute_spectrogram(x, SR, fmax=fmax)
@@ -70,8 +95,9 @@ def detect(x, setting, workers, top):
             if stat == "z":
                 found = rescore_z(sp, cands, lo, hi, c=C, top=top, diagnostics=diag)
             else:                                                         # D; S2 = D / sigma_null in summarise
-                found = sorted((e for e in rescore_null(sp, cands, lo, hi, c=C, diagnostics=diag) if np.isfinite(e.score)),
-                               key=lambda e: -e.score)[:top]
+                scored, d = null_scores(sp, cands, lo, hi, workers)
+                diag.extend(d)
+                found = sorted((e for e in scored if np.isfinite(e.score)), key=lambda e: -e.score)[:top]
         else:
             found = detect_events(sp, lo, hi, c=C, top=top, workers=workers)
         for e in found:

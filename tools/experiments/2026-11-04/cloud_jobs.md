@@ -193,6 +193,31 @@ After a rebuild, rerun the privacy check: no ICAO, registration or site coordina
 **Next step:** parallelise `rescore_null`, relaunch S₂, then finish item 6 (gate S₂, Tier 1, the record's outcome), then propose the next drawing-board step on
 the detector's statistic if S₂ also fails.
 
+### Stopped (2026-11-05, owner's order; the project continues in Codex)
+
+**Nothing is running.** No SDE-C fleet job was running or preparing when the order came, so none was cancelled. The
+last ones, item 6's S₂ boxes (2026-11-04-detector-roc-s2-s{7,8,9}of9), had already been spot-interrupted.
+
+**Item 6's search-max retune (S₂) is unrun.**
+- **What it is:** S₂ = (D − μ_null) / σ_null, with D = S₀ minus `fit_event`'s maximum on the event's window reversed
+  in time (`tracks.rescore_null`). Its criterion is written in `docs/proposals/2026-11-04-detector-threshold.md`
+  ("Retune 1"), and it is item 6's one counted retune.
+- **The process-pool fix is in the tip, untested.** `detector_roc.py`'s `null_scores` runs the reversed-window fits
+  across `DOPPLERTRACK_JOBS` processes, each holding the spectrogram once (via the pool initializer). The pass units
+  stay serial (workers = 1). It was stopped before its equivalence check ran, which should show serial and pooled
+  giving the same D on a few events.
+
+**To resume:**
+1. Run that check locally on one test file's worth, for example two `EventFit`s on 240 s of noise with
+   `null_scores(..., 1)` against `null_scores(..., 2)`.
+2. Launch from a clean commit:
+   `tools/aws/runs launch detector-roc-s2 --shards 9 --only-shard 7 --only-shard 8 --only-shard 9 --size 4xlarge --
+   'uv run --frozen python tools/experiments/2026-11-04/detector_roc.py "$RUN" roc'`.
+   The noise unit should then take about 200 fits / 16 workers ≈ 15–20 min.
+3. Collect the three S₂ shards with the six finished settings, and run `detector_roc.py RUN gate` on a box with
+   `--input-run`.
+4. Then do Tier 1 and the record's outcome, as in the handoff above.
+
 ## SDE-B
 
 # SDE-B's benchmark jobs for the fleet (2026-11-04)

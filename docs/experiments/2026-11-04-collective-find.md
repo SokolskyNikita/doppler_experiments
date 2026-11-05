@@ -2,8 +2,20 @@
 
 <!-- index
 question: Does the collective find (every detected window against every flight's own heard curve, summed non-coherently with a floor) locate the development recordings, and keep the negatives below the verdict null?
-outcome: (pending)
+outcome: Located by the search, not yet by the verdict: the third design (1 km coarse grid, best 120 s stretch, ±25 % tone) ranks Oyster Bay's true cell first of 15,253, winner 0.3 km with both true flights; the other-day null on Z decides
 -->
+
+**Where it stands: located by the search, not yet by the verdict.**
+- **Oyster Bay.** Under the third design step (a 1 km coarse grid, each window scored over its best 120 s stretch, each candidate's tone over ±25 %), Oyster Bay's true cell is the coarse map's maximum, rank 1 of 15,253. The top cell's fine winner is 0.3 km from the truth, with both true flights matched.
+- **The eagle cam** was found at 0.5 km with both flights under the earlier designs.
+- **A wrong box nearly ties it.** oyster-bay-moved-wsw150, a moved box with no true flight, reaches a coarse maximum of 18.22, against Oyster Bay's 18.50. So the collective Z at this site has a wrong-box ceiling near 18.
+  - "Found at rank 1" is the search's result, not a claim.
+  - oyster-bay-hp150-aac32k is the cleaner positive: rank 1, with only 4 cells inside the margin.
+- **The eagle cam regressed** under the third design, from 2nd to 37th, outside the margin. The true-point diagnostic says whether the fixed 120 s stretch cost it. If it did, the stretch becomes per-window, the line's own extent from the detector (PLAN item 6).
+- **Not yet a claim.** Only A's other-day null on the collective Z can say whether 18.50 clears that ceiling, and it hasn't been drawn for this statistic yet.
+- **Open:** ace391's weak window (z 0.62), now a detector-window question (PLAN item 6).
+
+The sections below follow the work in order: the first design, the second, the diagnostics that split their faults, and the third.
 
 **Question.** The design is [the collective-find proposal](../proposals/2026-11-04-collective-find.md), accepted by the PM.
 
@@ -285,3 +297,39 @@ Twelve units on 12 spot 8xlarge boxes, the unit shards relaunched after spot int
 - **Cost:** the coarse stage 607 s, 3.6× the 2 km stage, and one 25-point fine cell 143 s.
 - **Against the expectation.** The rank came out as I expected (the true cell inside the margin and near the top). The second half didn't: ace391 stays weak, at z 0.62 against 1.97 before. The best-120 s score lifted a1dfeb (9.67 to 10.43) but not ace391, whose window remains the open question.
 - **Whether the case passes criterion 1** waits for the fine stage over all 20 kept cells.
+
+**The third design's coarse stage on the eight cases** (`runs/2026-11-04-collective-coarse-v3-merge/`, 68a906c). These are cell 0's fine winners; the other kept cells are the fine stage's.
+
+| Case | True cell's rank | Kept | Cell 0's winner from the truth | True flights at the winner | Coarse, one fine cell |
+|---|---|---|---|---|---|
+| oyster-bay | **1** of 15,253 | 20 | **0.3 km** | a1dfeb z 10.43, ace391 z 0.62 | 607 s, 143 s |
+| oyster-bay-hp150-aac32k | **1** of 15,245 | 4 | **0.3 km** | a1dfeb z 9.11, ace391 z 0.53 | 659 s, 134 s |
+| eagle-cam-clip-18000s | 37 of 16,392 (outside the margin) | 9 | 1.9 km | neither | 239 s, 146 s |
+| eagle-cam-midnight | 280 of 16,843 | 20 | 5.8 km | – | 272 s, 172 s |
+| oyster-bay-sources-removed (−) | 5,821 of 15,255 | 20 | 67.4 km, Z 13.36 | – | 898 s, 192 s |
+| xenocanto-xc990819 (−) | 6,241 of 14,673 | 20 | 50.6 km, Z 9.66 | – | 184 s, 116 s |
+| oyster-bay-moved-north150 (−) | the true point is outside the box | 20 | coarse maximum 15.82 | – | 148 s, 134 s |
+| oyster-bay-moved-wsw150 (−) | the true point is outside the box | 20 | coarse maximum 18.22 | – | 518 s, 162 s |
+
+- **Oyster Bay and its hp150 copy are found.** In each the true cell is the coarse maximum, and the winner is 0.3 km off with both true flights matched.
+- **sources-removed behaves as a control should.** With the true flights deleted, the true cell falls to 5,821st.
+- **The eagle cam regressed.** Under the second design its true cell was 2nd and its winner 0.5 km off with both flights. Now it is 37th, outside the margin.
+  - Either the best-120 s stretch or the 1 km cells cost it.
+  - The true-point diagnostic on it (`collective-truth-s2of2`, 337f23f) says which.
+- **wsw150, a negative, reaches a coarse maximum of 18.22,** against Oyster Bay's 18.50. Only the other-day null can separate them.
+
+**The eagle cam's regression: the coarse sweep, not the 120 s stretch** (`runs/2026-11-04-collective-truth-s2of2`, 337f23f; a diagnostic that reads the labels).
+- **The fine grid sees the eagle cam's true point.** In its true 1 km cell (centre 146 m from the nest) the fine stage reaches Z 18.06, and 16.57 at the reference point with the clock 0.2 s from the reference clock. That's above the whole v3 coarse map's maximum (12.0).
+- **The true flights at the reference point and clock:** a2baea z 6.16 and 3.81, a336e4 z 1.93. So the best-120 s score keeps both true flights, and isn't what cost the case.
+- **The coarse stage missed it, again on sampling.** The true cell's coarse Z is 8.40, rank 37. Within that one 1 km cell, the other samplers give:
+
+| Sampler within the true 1 km cell | True cell's Z |
+|---|---|
+| Today's coarse sweep (±14 s at 2 s, 2 %, 60 samples) | 8.40 |
+| The dense sweep (±14 s at 1 s, 1 %, 120) | **13.66** |
+| A 2 × 2 grid (500 m) at today's sweep | **14.14** |
+| A 3 × 3 grid (333 m) at today's sweep | 11.85 |
+
+  - **Here sweep density matters, unlike at Oyster Bay.** With the best-120 s stretch, the coarse sweep's 60 samples over a 240 s window leave about 30 inside the stretch, 4 s apart. That's too sparse for a line that is bright for about 110 s.
+  - **The coarse stage needs the denser sweep as well as the 1 km cells.** Either sampler above lifts the true cell past the map's maximum.
+- **One pass counted twice.** Two overlapping windows (2,175 s and 2,247 s) both take a2baea's single pass, at z 6.16 and 3.81. "One window per pass" isn't enforced (design §1), so the sum counts that pass twice. The same can inflate chance matches; the null includes it, but the constraint should be enforced.

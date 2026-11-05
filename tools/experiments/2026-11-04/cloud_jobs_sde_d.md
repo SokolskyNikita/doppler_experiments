@@ -153,3 +153,30 @@ The branch is `claude/sde-c-pm-coordination-cbbe43`. Every change is committed. 
      3. report the ranks, the cost per case and the eagle cam's z to the PM;
      4. commit `KEPT.json` as `tools/experiments/2026-11-04/collective_kept_v3.json` and launch `--fine-from` it. The PM has approved the fine stage.
    - **The v2 fine stage** (2 km, whole-window score) is superseded by v3. Merge it for the record only.
+
+**SWFL and Essex null (first design), status about 00:40Z:** 20 of the 24 shards are done.
+- s4, s19, s20 and s23 were spot-interrupted and relaunched on demand as `…-s{4,19,20,23}of24-2` (a225ac8).
+- 84 of the 95 draws are pulled; the relaunches give the rest.
+- **To judge,** give A's `collective_null.py` the 24 first-run folders plus the four `-2` folders, and `runs/2026-11-04-collective-find-merge/OWN.json`.
+- The draws price the first design's statistic (2 km, top 5 cells, ±10 %), so their γ applies to that design's eagle cam result (Z 16.27), not to the third design's.
+
+**The third design, about 00:50Z.**
+- **Coarse stage:** merged into `runs/2026-11-04-collective-coarse-v3-merge/` (`collective.json`, `KEPT.json`).
+- **Fine stage, running:**
+  - OB's 19 cells: `2026-11-04-collective-fine-v3-s*of19`, 9334fab, `--fine-from …/collective_kept_v3_ob.json`.
+  - The other seven cases' 106 cells: `…-s*of20`, 337f23f, `--fine-from …/collective_kept_v3_rest.json`.
+- **The eagle cam's true-point diagnostic:** `2026-11-04-collective-truth-s2of2`, 337f23f.
+- **Next:**
+  1. Merge the fine stage per case, from a checkout at 337f23f: `collective_run.py <run> --fine-from tools/experiments/2026-11-04/collective_kept_v3_rest.json --merge --resume <the 20 …-s*of20 folders> --extra-units <the 8 coarse-v3 folders> <the 19 …-s*of19 folders>`.
+  2. Read the eagle cam's diagnostic: whether the 1 km cells or the 120 s stretch cost it.
+  3. The third design's own null, NY's 150 units first: `--null`, every kept cell per draw. Split it per cell or bound the cells before launching.
+
+**About 01:10Z.**
+- **The v2 fine stage** (2 km, superseded): 130 of 139 units are pulled into its `…-v2-s*of19` and `…-s*of20` folders, and left unmerged. Shards s5 and s6 of 20 were interrupted and aren't relaunched, since v2 changes no PLAN sentence.
+- **The v3 fine stage:**
+  - OB's s3–s7 of 19 were spot-interrupted and relaunched on demand as `…-v3-s{3..7}of19-2` (9334fab). Their merge passes those folders with `--extra-units` beside the first ones.
+  - The other seven cases' `…-v3-s*of20` (337f23f) are running.
+- **The eagle cam's diagnostic is read** (record, "The eagle cam's regression").
+  - The cause is the coarse sweep's sparse samples under the 120 s stretch.
+  - A pass is counted twice by overlapping windows.
+- **Proposed to the PM, not built:** a coarse sweep at n = 120, 1 s and 1 % (cost measured first), and one window per pass enforced in `point_scores`. Then the coarse stage rerun.

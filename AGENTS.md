@@ -2,10 +2,15 @@
 
 Fork of [mjshiggins/dopplertrack](https://github.com/mjshiggins/dopplertrack): acoustic geolocation from the
 Doppler curves of propeller aircraft. `README.md` explains the method; `PLAN.md` is the fork's roadmap, and
-`docs/experiments/` the record of what has been measured. Read PLAN.md's sections 2 and 4 before starting work.
+`docs/experiments/` the record of what has been measured.
+
+**Reading PLAN.md.** It is about 160 KB, so never read it whole. Before starting work, read section 2
+(Starting point, about 6 KB) and the opening of section 4 up to `### M1` (principles and the milestone table,
+about 3 KB). Read any other part only when the task touches it: list the headings with `rg -n '^#{2,3} ' PLAN.md`
+and read just that range (M2 alone is about 65 KB). A subagent reads only the sections its task names.
 [docs/architecture.md](docs/architecture.md) traces the detector and the CPA build, the two pieces Phase 1 changes.
 
-**Handoff.** `$DOPPLERTRACK_DATA/private/handoff-2026-11-05.md` (outside the repo: it names the owner's machine, accounts and transcript locations, none of which belong in a public fork) is the state of play at the end of the first fleet day: the owner's standing rules that are not written elsewhere, who owned what and what is open, what was established, the Seattle pilot, the procedures a fresh operator needs, and the decisions pending on the owner. Read it first. Handoffs, like everything else under `private/`, never go into the tree.
+**Handoff.** `$DOPPLERTRACK_DATA/private/handoff-2026-11-05.md` (outside the repo: it names the owner's machine, accounts and transcript locations, none of which belong in a public fork) is the state of play at the end of the first fleet day: the owner's standing rules that are not written elsewhere, who owned what and what is open, what was established, the Seattle pilot, the procedures a fresh operator needs, and the decisions pending on the owner. A session taking over coordination reads it first; a session on a narrow task reads only the parts that bear on it (the file is about 25 KB). Handoffs, like everything else under `private/`, never go into the tree.
 
 ## Setup
 

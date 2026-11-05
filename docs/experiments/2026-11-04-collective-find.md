@@ -333,3 +333,21 @@ Twelve units on 12 spot 8xlarge boxes, the unit shards relaunched after spot int
   - **Here sweep density matters, unlike at Oyster Bay.** With the best-120 s stretch, the coarse sweep's 60 samples over a 240 s window leave about 30 inside the stretch, 4 s apart. That's too sparse for a line that is bright for about 110 s.
   - **The coarse stage needs the denser sweep as well as the 1 km cells.** Either sampler above lifts the true cell past the map's maximum.
 - **One pass counted twice.** Two overlapping windows (2,175 s and 2,247 s) both take a2baea's single pass, at z 6.16 and 3.81. "One window per pass" isn't enforced (design §1), so the sum counts that pass twice. The same can inflate chance matches; the null includes it, but the constraint should be enforced.
+
+## The fourth design step, written before its run: a denser coarse sweep and one window per pass
+
+**Fixed now** (aeba858):
+- **The coarse sweep** keeps 60 samples per 120 s stretch, with 1 s shifts and 1 % f0. Each window's n scales with its length. For `detect`'s 240 s windows that is n = 120, so this is the dense sweep from the samplers table: about 7× today's coarse cost per evaluation.
+  - The PM preferred the scaled form expecting it to be cheaper. On 240 s windows it's the same sweep.
+  - The fine sweep is unchanged: 80 per stretch, which is 160 per 240 s window.
+- **One window per pass, enforced.** At a point and clock, a pass (a segment's CPA there) explains only its best window. A window whose best pass is taken falls back to its next, among its best 3 per clock bin. The same rule applies in `point_scores` and in `matched_at`.
+  - **The first three designs didn't enforce it.** Overlapping windows on one pass were summed twice: at the eagle cam's true point, a2baea counted at z 6.16 and 3.81.
+  - **Their nulls priced it,** since every draw was summed the same way.
+  - **Each run now also records its coarse maximum without the rule** (`counts.coarse_max_without_pass_rule`), so the rule's effect on Oyster Bay's and wsw150's maxima is reported.
+
+**Order:** Oyster Bay's coarse unit first, with its coarse time stated before the other seven; then the fine stage within the margin.
+
+**Expectation.**
+- The eagle cam's true cell lifts past its coarse maximum, as the samplers table's 13.66 against 12.0 says.
+- Oyster Bay stays first.
+- The pass rule lowers every maximum that leaned on overlapping windows, true or chance. I don't know in advance which of Oyster Bay and wsw150 it lowers more.

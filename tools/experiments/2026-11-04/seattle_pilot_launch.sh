@@ -2,7 +2,7 @@
 # The home recorder pilot (docs/experiments/2026-11-04-seattle-home-pilot.md) on one fleet box, shipping exactly the
 # files the owner approved, one --input per path, nothing else.
 #   tools/experiments/2026-11-04/seattle_pilot_launch.sh APPROVED_LIST [all|broadband|locate|bandtest] [--session ID]
-#       [--silence off] [--box KM] [--spacing M]
+#       [--silence off] [--box KM] [--spacing M] [--traces PATH --envelope S,N,W,E]
 # all (the default): the spectrogram, the known point, locate, the broadband check. broadband: no locate. locate: the
 # spectrogram and locate only. bandtest (a full-band session's pre-registered band test): the spectrogram at 40-450 Hz
 # and at the case's wide edge (its spectrogram_wide recipe), then the known-point and broadband checks on each, no
@@ -11,7 +11,9 @@
 # --box KM (the box series): locate's box becomes a KM-km square around the site, its centre 73 m west and 131 m south
 # of it so the site is off every 200 m node, with the metro box the cut was fetched for (adsbfetch's own record of
 # the query, public) as the flight data's envelope; into $RUN/locate[-silence-off]-box<KM>km. --spacing M (with
-# --box) sets the grid spacing in metres, into ...-box<KM>km-sp<M>m.
+# --box) sets the grid spacing in metres, into ...-box<KM>km-sp<M>m. --traces PATH (data-root relative, a public cut
+# under derived/ or raw/, shipped as a public input) replaces the case's flight data for locate, for a box wider than
+# its own cut, with --envelope the cut's box as its declared envelope; into ...-tr.
 # APPROVED_LIST: one path per line, relative to $DOPPLERTRACK_DATA, as the owner cleared them (blank lines and # comments
 # ignored). The pilot's run needs every one of these, so a missing one stops the launch before anything ships; another
 # session needs its case, the site files, its session.json and timeline.jsonl, and ships every approved file under its
@@ -44,14 +46,17 @@ while [ $# -gt 0 ]; do
     "--silence off") LOCATE_ARGS="$LOCATE_ARGS --search-param silence_d_m=null"; LOCATE_DIR=$LOCATE_DIR-silence-off ;;
     "--box "[0-9]*) KM=$2
       LOCATE_ARGS="$LOCATE_ARGS --search-param box_m=$((KM * 1000)) --search-param box_offset_m=[73.0,131.0]"
-      LOCATE_ARGS="$LOCATE_ARGS --search-param extraction_box=[47.45,47.80,-122.60,-122.05]"
       BOX_SUFFIX=-box${KM}km${BOX_SUFFIX:-} ;;
+    "--traces "[dr]*/*) TRACES_OVR=$2; LOCATE_ARGS="$LOCATE_ARGS --search-param traces=$2"; TR_SUFFIX=-tr ;;
+    "--envelope "*,*,*,*) ENVELOPE=$2 ;;
     "--spacing "[0-9]*) LOCATE_ARGS="$LOCATE_ARGS --search-param spacing_m=$2"; BOX_SUFFIX=${BOX_SUFFIX:-}-sp${2}m ;;
     *) echo "unknown option: $1 ${2:-}"; exit 1 ;;
   esac
   shift 2
 done
-LOCATE_DIR=$LOCATE_DIR${BOX_SUFFIX:-}
+[ -z "${KM:-}${TRACES_OVR:-}" ] || LOCATE_ARGS="$LOCATE_ARGS --search-param extraction_box=[${ENVELOPE:-47.45,47.80,-122.60,-122.05}]"
+[ -z "${TRACES_OVR:-}" ] || [ -n "${ENVELOPE:-}" ] || { echo "--traces needs --envelope (the cut's box)"; exit 1; }
+LOCATE_DIR=$LOCATE_DIR${BOX_SUFFIX:-}${TR_SUFFIX:-}
 CASE=seattle-home-$SESSION
 SDIR=raw/seattle-home/$SESSION
 RUNS=tools/aws/runs
@@ -95,6 +100,7 @@ EOF3
 )
 [ "$TRACES" = - ] || IFS=, read -r -a PUB_TRACES <<< "$TRACES"
 [ "$TRACES" = - ] || PUBLIC+=("${PUB_TRACES[@]}")
+[ -z "${TRACES_OVR:-}" ] || PUBLIC+=("$TRACES_OVR")
 [ "$MODE" != bandtest ] || [ "$WIDE" != - ] || { echo "$CASE has no spectrogram_wide: nothing to test"; exit 1; }
 INPUTS=()
 for p in "${REQUIRED[@]}" "${PUBLIC[@]}"; do INPUTS+=(--input "$p"); done

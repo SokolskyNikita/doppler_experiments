@@ -12,7 +12,9 @@ The search is coarse to fine (the proposal's section 4, corrected): a COARSE_M g
 cell's span (the residual shift and the f0 sweep widened to cover it), then the FINE_M grid inside the coarse cells
 within MARGIN_SIGMA x the coarse map's spread of its maximum, at most MAX_CELLS of them (the second design step: a fixed
 top 5 pruned Oyster Bay's true cell). Each candidate takes its own tone over +-F0_SPAN of detection's coarse tone,
-scored through a LogView. The fine stage's window nulls are drawn over the whole box (the coarse CPA table), so a fine
+scored through a LogView over its best SUB_S stretch of the window (the third design step, with COARSE_M at 1 km: a
+diagnostic at Oyster Bay's true cell found that position, not the sweep's density, is what a 2 km cell's span missed, and
+that a 240 s window's mean halves a line about 110 s long). The fine stage's window nulls are drawn over the whole box (the coarse CPA table), so a fine
 cell's scores depend on no other cell, and `only_cells` runs a subset of the kept cells as one fleet unit.
 """
 from __future__ import annotations
@@ -29,7 +31,7 @@ from .score import EventWindow, modelled_curve
 from .search import Grid, build_segments, cpa_table
 from .tracks import EventFit, local_whiten
 
-COARSE_M, FINE_M = 2000.0, 200.0
+COARSE_M, FINE_M = 1000.0, 200.0   # the third design step: position is what a 2 km cell's span missed
 MARGIN_SIGMA = 2.0            # fine cells: every coarse cell within MARGIN_SIGMA x the coarse map's spread of its maximum,
 MAX_CELLS = 20                #   at most MAX_CELLS of them by Z
 F0_SPAN = 0.25                # each candidate's own tone: the f0 sweep about detection's coarse tone
@@ -91,6 +93,8 @@ class Window:
 
 
 LOG_DU = float(np.log1p(0.0025))    # the log-frequency grid's step: 0.25 %, about one bin at 125 Hz
+SUB_S = 120.0                       # a (flight, window) scores its best SUB_S stretch: detect's 240 s windows are twice
+                                    # the length of the lines they hold (the find test's true lines: about 110 s)
 
 
 class LogView:
@@ -111,8 +115,9 @@ class LogView:
         self.A = crop.sample(T.ravel(), FF.ravel()).reshape(J, n).astype(np.float32) if J else np.zeros((0, n), np.float32)
 
     def sweep_scores(self, t_audio, ratio, shifts, offsets) -> np.ndarray:
-        """(shift, f0 offset) scores: the mean brightness along the curve over the n times, zero where the curve doesn't
-        cover them; offsets are f0 scales in LOG_DU steps (scale = exp(offset * LOG_DU))."""
+        """(shift, f0 offset) scores: the best mean brightness along the curve over any SUB_S stretch of the n times,
+        zero where the curve doesn't cover them; offsets are f0 scales in LOG_DU steps (scale = exp(offset * LOG_DU)).
+        The window nulls use the same rule, so the extra maximum over the stretch's position is priced there."""
         J, n = self.A.shape
         ok = np.isfinite(t_audio)
         if np.count_nonzero(ok) < 2 or J < 2:
@@ -129,7 +134,11 @@ class LogView:
         w = np.where(good, x - j0, 0.0)
         flat = self.A.ravel(); col = np.arange(n)[None, None, :]
         v = flat[j0 * n + col] * (1 - w) + flat[j1 * n + col] * w
-        total = np.where(good, v, 0.0).sum(axis=2) / n
+        v = np.where(good, v, 0.0)
+        span = (self.tq[-1] - self.tq[0]) / max(n - 1, 1)
+        L = int(min(n, max(1, round(SUB_S / span) + 1))) if span > 0 else n
+        cs = np.concatenate([np.zeros(v.shape[:2] + (1,)), np.cumsum(v, axis=2)], axis=2)
+        total = ((cs[..., L:] - cs[..., :-L]) / L).max(axis=2)
         total[~valid] = 0.0
         return total
 

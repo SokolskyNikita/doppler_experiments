@@ -180,3 +180,12 @@ The branch is `claude/sde-c-pm-coordination-cbbe43`. Every change is committed. 
   - The cause is the coarse sweep's sparse samples under the 120 s stretch.
   - A pass is counted twice by overlapping windows.
 - **Proposed to the PM, not built:** a coarse sweep at n = 120, 1 s and 1 % (cost measured first), and one window per pass enforced in `point_scores`. Then the coarse stage rerun.
+
+**The fourth design step, about 01:25Z** (aeba858; the record has it before its run; check.sh passes).
+- **What it changes:** the coarse sweep at 60 samples per 120 s stretch with 1 s shifts and 1 % f0, and one window per pass enforced.
+- **Smoke:** OB's coarse unit (`2026-11-04-collective-coarse-v4-s1of8`, 347786b, on demand). Its `walls.coarse` is the per-case coarse time to report before the other seven. Its `counts.coarse_max_without_pass_rule` against `margin.coarse_max` is the pass rule's effect.
+- **Next:**
+  1. Read the smoke.
+  2. Launch shards 2–8 from a checkout at 347786b.
+  3. Merge, report the ranks, then run the fine stage from the merged `KEPT.json` (committed as a file, as for v3).
+- **The v3 fine stage** (`…-fine-v3-*`) is superseded by v4 once v4's coarse ranks are in. Merge it only for the record.

@@ -50,6 +50,15 @@ be consulted before any more filings. Check with
   remove them.
 - The three detector-roc-s2 shards (above), if still running long past their siblings.
 
+**Stopped (2026-11-05, about 02:00 UTC).** Work stopped on the owner's order and continues in Codex; the PM cancelled
+the remaining jobs, stopped the dev box and checked every region for instances, so the at-handoff box list above is
+history: confirm with `runs fleet` (expect no job boxes) and `runs dev status` (expect stopped). The repository's
+history was rewritten that night, so every commit ID from before it changed. `runs` keys nothing on a commit ID
+(each launch and `runs dev run` bundles the current checkout fresh), and `runs dev run -- tools/check.sh` passed from
+the rewritten dev (6df0448). One edge: `runs launch --resume JOB` for a job launched before the rewrite reuses that
+job's own bundle from `jobs/JOB/code/`, so it reruns the old code as intended, but its recorded `git_commit` no
+longer exists in the repository; read the bundle, not git, for that code.
+
 **How to launch.** `tools/aws/runs launch TOPIC --shards N [--size 8xlarge] [--on-demand] [--repo CHECKOUT]
 --inputs-from '<the job's --inputs or bench inputs command>' -- <command>`: one box per shard, each with
 `DOPPLERTRACK_SHARD_SPEC=k/N`; spot in us-west-2, then us-west-1, then us-east-2, waiting up to

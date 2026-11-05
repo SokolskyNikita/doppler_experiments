@@ -142,5 +142,10 @@ The branch is `claude/sde-c-pm-coordination-cbbe43`. Every change is committed. 
    `collective_run.py <new run> --fine-from tools/experiments/2026-11-04/collective_kept_rest.json --merge --resume <the 20 …-s*of20 folders> --extra-units <the 8 collective-coarse-v2-s*of8 folders> <the 19 …-s*of19 folders>`.
    Each case takes its best cell over the coarse stage's cell 0 and every fine cell.
 3. Report each case's best cell.
-4. **Read the two diagnostics.** `2026-11-04-collective-truth-2` (fc224b3) gives `pair_detail`: ace391's segments, coverage and the find test's brightness per window. `2026-11-04-collective-truth-3` (5ba8c4b) adds `coarse_variants`: the true cell's Z under the today, dense, sub-grid and 1 km samplers. Their costs are in the record.
-5. **Fix** ace391's window, if segment coverage is the cause (score a flight's segments joined), and **adopt the cheapest coarse sampler** whose true-cell Z enters the margin. Rerun the coarse stage.
+4. **The diagnostics are read** (record, "The follow-ups' results").
+   - Both true lines lose about half their brightness to the 240 s window's length.
+   - The coarse stage misses position: a 1 km grid lifts OB's true cell to 16.61 and a 667 m sub-grid to 20.76, against today's 7.36 and map maximum 14.80.
+5. **Proposed to the PM, not built:**
+   - the coarse grid at 1 km (COARSE_M 1000), 4× today's coarse cost;
+   - a sub-interval score, the best fixed-length (about 110–120 s) stretch of each window, for the windows and their nulls alike;
+   - then the coarse stage rerun on the eight cases.

@@ -123,6 +123,6 @@ limitations are listed in architecture; resolve them before depending on those i
 
 ## 8. Owner decisions
 
-No new scientific decision is needed to finish the reset. After review, the owner decides whether to integrate the
-local branch into `dev`, and separately whether to authorize the first frozen research proposal with its scope and
-spending limit. Private-file transfers, publishing and irreversible infrastructure/data actions remain separate decisions.
+The owner authorized integrating the reset fixes as part of the independent-method refactor on `main`.
+The next scientific decision is whether to authorize the first frozen research proposal with its scope and
+spending limit. Private-file transfers and irreversible infrastructure/data actions remain separate decisions.

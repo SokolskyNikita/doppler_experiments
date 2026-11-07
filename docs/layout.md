@@ -49,3 +49,11 @@ The refactor changed code organization only. Existing files remain in their exte
 Several substantial implementations remain in single modules, including `components/detection/grid_scan.py`, `components/tracking/viterbi.py`, `components/search/grid.py`, `methods/grid_pair/pipeline.py`, `methods/grid_pair/runner.py`, `methods/collective/search.py`, `evaluation/runner.py`, `evaluation/tier1.py`, and `reporting/html.py`. Their placement gives them package ownership; it does not claim that they have already been decomposed internally.
 
 Dated experiment records under `docs/experiments/` and historical recipes under `tools/experiments/` are retained deliberately so prior runs can be interpreted and, where possible, reproduced against their recorded code and inputs. The package changes do not rewrite those records or imply that their results validate the current methods.
+
+## Verification
+
+The refactor and reconciled reset fixes were checked on the dev box using a history-free snapshot with
+exactly the same Git tree (`44edd21f4e883b3675e8d2fa26ae799509163a75`). The full check passed: lint,
+experiment-index validation, typing, 362 tests passed, 4 skipped, 2 expected failures, and an installed-wheel
+smoke test. Pytest took 112.46 seconds and emitted two existing multiprocessing fork deprecation warnings;
+the 60-second test target remains unmet. No scientific experiment or private-data transfer was performed.

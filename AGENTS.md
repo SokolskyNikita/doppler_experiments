@@ -1,7 +1,7 @@
 # Working in this repository
 
-Fork of [mjshiggins/dopplertrack](https://github.com/mjshiggins/dopplertrack): acoustic geolocation from the
-Doppler curves of propeller aircraft. `README.md` explains the method; `PLAN.md` is the fork's roadmap, and
+Independent research workspace derived from [mjshiggins/dopplertrack](https://github.com/mjshiggins/dopplertrack): acoustic geolocation from the
+Doppler curves of propeller aircraft. `README.md` explains the method; `PLAN.md` is the research roadmap, and
 `docs/experiments/` the record of what has been measured.
 
 **Reading PLAN.md.** It is about 160 KB, so never read it whole. Before starting work, read section 2
@@ -73,10 +73,11 @@ and read just that range (M2 alone is about 65 KB). A subagent reads only the se
 
 ## Git
 
-- `origin` is the fork (SokolskyNikita/dopplertrack), `upstream` is mjshiggins. Pushes use the SokolskyNikita
+- `origin` is the independent repo (SokolskyNikita/doppler_experiments), `upstream` is mjshiggins. Pushes use the SokolskyNikita
   account through a repo-local credential helper; leave it alone.
-- `main` mirrors upstream; never commit to it. `dev` is the fork's line, and all work branches off `dev`.
-  Merge upstream into `dev`; never rebase or force-push `dev`.
+- `main` preserves the historical upstream baseline; never commit to it. `dev` is our development line,
+  and all work branches off `dev`. Evaluate upstream changes as explicit method imports; do not routinely
+  merge upstream into `dev`. Never rebase or force-push `dev`.
 - `.claude/` is ignored and never committed: it holds the app's worktrees, this checkout's settings and the
   PM's landing helper, none of which belong in the fork. History was rewritten on 2026-11-05 to drop it and the
   handoff; every branch SHA from before then changed.

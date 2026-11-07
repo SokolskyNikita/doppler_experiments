@@ -1,13 +1,28 @@
-# dopplertrack (fork)
+# doppler_experiments
 
-Acoustic geolocation from the Doppler curves of propeller aircraft. You give it a recording, the date and a
-rough region, and it works out where the recording was made.
+An independent research workspace for testing acoustic aircraft geolocation methods against shared
+benchmarks. The goal is to compare separate approaches, preserve negative results, and find out what
+works on unfamiliar recordings. This is experimental software, not a validated general-purpose locator.
 
-This is a fork of [mjshiggins/dopplertrack](https://github.com/mjshiggins/dopplertrack) by MacCallister
-Higgins (MIT licence). Higgins wrote the method's implementation, the pipeline and both validations described
-below. That project in turn reimplements the technique colsto demonstrated in the video
-["I discovered a sound that leaks your exact location"](https://www.youtube.com/watch?v=UytYrhYLOKI), which
-came with no code. Fixes that don't need anything from the fork go back upstream as pull requests.
+## Origins and independence
+
+This project began as a fork of [dopplertrack](https://github.com/mjshiggins/dopplertrack) by
+**MacCallister Higgins**. He wrote the original implementation, pipeline and the two demonstration
+validations described below. His work provided the foundation for these experiments, and the original
+MIT copyright and licence are retained in [LICENSE](LICENSE).
+
+Our research directions and code have diverged enough that merging this research workspace back into
+the original project has become impractical. We are continuing independently as `doppler_experiments`,
+with separate methods and shared evaluation as the intended architecture. This is our project decision,
+not a statement that the original author rejected collaboration. Individual reusable improvements may
+still be contributed separately.
+
+The original project reimplements the technique colsto demonstrated in
+["I discovered a sound that leaks your exact location"](https://www.youtube.com/watch?v=UytYrhYLOKI).
+
+The remaining method and result descriptions document the inherited baseline, not a validation of all
+experiments or a description of the original project's latest release. The Python package and CLI remain
+named `dopplertrack` for now.
 
 ## How it works
 
@@ -39,10 +54,10 @@ found by `detect`, brought it to 592 m. Both aircraft in the pair had passed alm
 from overhead passes the slant distance barely changes as you move the listener around, so they can't pin
 the spot. Low passes off to one side can. The full tables are in [docs/results/](docs/results/).
 
-Starting from upstream's saved event fits, the fork gets the same rankings on both recordings
+Starting from upstream's saved event fits, this project's inherited baseline gets the same rankings on both recordings
 ([PLAN.md](PLAN.md), section 2).
 
-## What I want from this fork
+## Research goals
 
 Upstream is a proof of concept. Someone has to pick the flyover windows by eye, it has only been run on the
 two recordings it was developed on and it always prints a top answer whether or not that answer is right.
@@ -211,7 +226,8 @@ empty detection. GitHub CI expansion is deferred.
 | `tools/`, `bench/` | data handling, experiment scripts, the manifest of raw inputs |
 | [AGENTS.md](AGENTS.md) | working rules: where data lives, branches, how experiments get recorded |
 
-`main` mirrors upstream. `dev` is the fork's own line, and work branches off it.
+`dev` is the independent project's default development branch. `main` preserves the historical upstream
+baseline; new work branches off `dev`. Upstream changes are evaluated explicitly rather than routinely merged.
 
 All inputs are free: adsb.lol's daily ADS-B archives, the OpenSky mirror of ICAO Doc 8643 for engine types
 and AWS Terrain Tiles for elevation.

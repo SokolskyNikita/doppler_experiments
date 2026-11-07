@@ -24,7 +24,7 @@ outcome: Not met: with the committed fits no positive clears its threshold; the 
 
 ## Question and criterion
 
-PLAN Phase 4, "Thresholds", as designed in [the proposal](../proposals/2026-11-04-verdict-null.md); the criteria were
+PLAN Phase 4, "Thresholds", as designed in [the proposal](designs/2026-11-04-verdict-null.md); the criteria were
 written there before anything ran.
 - **The verdict:** "located" when exactly one distinct mode's score clears γ, the 1 % point of the case's null of the
   maximum. Otherwise "ambiguous", with `competing_mode` or `below_null_threshold`.

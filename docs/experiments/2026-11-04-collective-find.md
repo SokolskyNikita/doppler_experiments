@@ -32,7 +32,7 @@ outcome: Partial development evidence only: v3 Oyster Bay has a 318 m cell0 cand
 
 The sections below follow the work in order: the first design, the second, the diagnostics that split their faults, and the third.
 
-**Question.** The design is [the collective-find proposal](../proposals/2026-11-04-collective-find.md), accepted by review.
+**Question.** The design is [the collective-find proposal](designs/2026-11-04-collective-find.md), accepted by review.
 
 **Why drop the event fit.** The case is in [event-fit](2026-11-04-event-fit.md): the brightness objective's flat v–d ridge, and finds that are the true flights' lines bent into a straight-pass shape. There is independent evidence from the window study’s round 2 ([window-round2](2026-11-04-window-round2.md)).
 - **Brightness is bimodal on synthetic passes.** On delay-synthesised straight passes at amplitude 0.03, `fit_event`'s brightness objective lands within about 0.5 % or 20–80 % off, about half the time each, under every window tried. C0's 1,500 m pass gives v errors of 21 %, 0.2 % and 68 % over three seeds.

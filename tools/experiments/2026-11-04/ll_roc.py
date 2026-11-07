@@ -1,4 +1,4 @@
-"""Item 3 round 3 (docs/proposals/2026-11-04-tracker-likelihood.md): the likelihood tracker's constants and its two
+"""Item 3 round 3 (docs/experiments/designs/2026-11-04-tracker-likelihood.md): the likelihood tracker's constants and its two
 knobs, before any Livermore pass is tracked.
 
 1. constants: T_pass, T_run and T_dip from the development events (Oyster Bay ev1/ev2, eagle cam ev1/ev2, ob-e03,

@@ -1,4 +1,4 @@
-"""Coherent alignment duration for weak flyovers (docs/proposals/2026-11-04-coherent-duration.md).
+"""Coherent alignment duration for weak flyovers (docs/experiments/designs/2026-11-04-coherent-duration.md).
 
 Methods, on the same 18 s of audio and the same search per candidate (clock +-10 s in 0.25 s steps, a constant pitch
 over the pass's third-octave band, no drift):

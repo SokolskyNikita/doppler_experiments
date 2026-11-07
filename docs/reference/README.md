@@ -11,7 +11,9 @@ The files themselves live outside the repo, in `$DOPPLERTRACK_DATA/reference/` (
 
 The material is copyrighted and the upstream repo is public, so it stays on this machine and never goes into git.
 
-Open-source projects on the same problem, the commits inspected and what PLAN.md takes from them: [related-projects.md](related-projects.md). Every search for data, what it found and why each source was taken, deferred or rejected: [datasets.md](datasets.md).
+Open-source projects on the same problem, the commits inspected and what PLAN.md takes from them: [related-projects.md](related-projects.md). Every search for data, what it found and why each source was taken, deferred or rejected: [datasets.md](datasets.md). Public course materials mapped to the method's steps:
+[course-materials.md](course-materials.md); what they say about our failures: [course-reading-review.md](course-reading-review.md)
+(2026-11-04; its "PLAN phases" refer to the plan of that date).
 
 ## How to use this folder
 

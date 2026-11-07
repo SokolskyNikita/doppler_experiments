@@ -3,7 +3,7 @@
 PLAN Phase 2 item 3, round 3. This is a design, written before any code or run.
 
 **Why a new objective.** Rounds 1 and 2 rewarded each cell E − θ on the whitened dB image
-([freqtrack](../experiments/2026-11-04-freqtrack.md), [hmm-tracker](../experiments/2026-11-04-hmm-tracker.md)).
+([freqtrack](../2026-11-04-freqtrack.md), [hmm-tracker](../2026-11-04-hmm-tracker.md)).
 Neither found a θ that is quiet on noise and still continuous on a pass. Round 2 shows the floor: with θ_cont below
 about 7 dB, the best of about 800 correlated fundamentals stays above it in noise, so a noise track never ends.
 This round replaces that reward with a likelihood, so that no dB threshold is left to set.
@@ -15,7 +15,7 @@ This round replaces that reward with a likelihood, so that no dB threshold is le
 - **Normalised power.** Each cell's linear power P = |X|² (the package STFT) is divided by the frame's noise level
   across frequency, σ² = median(P over ±bg_hz) / ln 2, which gives z = P/σ². The median of an exponential is
   σ² ln 2. The noise level is Ramseier & Pieren's eq. 11 background. It was the better image for both trackers,
-  though not as the package default ([whitening](../experiments/2026-11-04-whiten-frequency.md)). Invalid frames
+  though not as the package default ([whitening](../2026-11-04-whiten-frequency.md)). Invalid frames
   carry no evidence.
 - **The two hypotheses.** In noise, z ~ Exp(1). With a tone of per-cell SNR a, z is Rician:
   f₁(z) = e^(−z−a) I₀(2√(az)). The log-likelihood ratio is ℓ(z; a) = −a + ln I₀(2√(az)). This is Kay I Ex. 7.16:

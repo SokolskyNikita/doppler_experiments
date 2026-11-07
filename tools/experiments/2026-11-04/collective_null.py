@@ -1,4 +1,4 @@
-"""The other-day null for the model-error study's collective find (docs/proposals/2026-11-04-collective-find.md), judged with the
+"""The other-day null for the model-error study's collective find (docs/experiments/designs/2026-11-04-collective-find.md), judged with the
 verdict null's machinery (docs/experiments/2026-11-04-verdict-null.md). Written before any draw was read.
 
 Inputs:

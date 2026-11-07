@@ -9,7 +9,7 @@ From the outside reviewer's advice (2026-11-04), as review adopted it. This is a
 **decision:** whether a 6 s or 18 s coherent scorer earns a test on the locator's shortlist, in the collective find's
 weak-window case (the eagle cam's event 2, at 6 dB on half its frames). Otherwise the shortlist keeps today's scorer.
 
-**Prior work.** the earlier replay study’s [doppler-integration-coverage](../experiments/2026-11-04-doppler-integration-coverage.md) record.
+**Prior work.** the earlier replay study’s [doppler-integration-coverage](../2026-11-04-doppler-integration-coverage.md) record.
 - With the true flight and clock supplied, 18 s of coherent integration against nine 2 s power blocks on eight real
   Livermore passes won 3, tied 2 and lost 3.
 - On 28 passes, the 18 s phase concentration had a median of 0.36 with a ±2 Hz constant-offset search, and 0.11
@@ -19,7 +19,7 @@ weak-window case (the eagle cam's event 2, at 6 dB on half its frames). Otherwis
 ## The methods
 
 All four read the same 18 s of audio, and each has the same constant pitch-offset search per candidate. None has any
-freedom for drift (the [warp](../experiments/2026-11-04-warp.md) record found drift lifts wrong candidates more than
+freedom for drift (the [warp](../2026-11-04-warp.md) record found drift lifts wrong candidates more than
 the true one).
 - **C1:** nine 2 s blocks. **C3:** three 6 s blocks. **C9:** one 18 s block. **T:** today's trajectory-curve scorer.
   - C1 and T are the baselines.

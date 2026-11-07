@@ -1,4 +1,4 @@
-"""Frequency tracks from a likelihood (PLAN Phase 2 item 3, round 3; docs/proposals/2026-11-04-tracker-likelihood.md).
+"""Frequency tracks from a likelihood (PLAN Phase 2 item 3, round 3; docs/experiments/designs/2026-11-04-tracker-likelihood.md).
 
 Each cell's power over the frame's noise level across frequency, z = P / sigma^2, is Exp(1) in noise and Rician
 with a tone of per-cell SNR a; the cell's evidence is the log-likelihood ratio l(z; a) = -a + ln I0(2 sqrt(a z))

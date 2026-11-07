@@ -19,7 +19,7 @@ outcome: Not decided: both gates failed again after the one retune (C9 over C1 6
 
 ## Question and criterion
 
-As set in [the proposal](../proposals/2026-11-04-coherent-duration.md), fixed before any run.
+As set in [the proposal](designs/2026-11-04-coherent-duration.md), fixed before any run.
 - **The methods:**
   - C1, C3 and C9: nine 2 s, three 6 s and one 18 s coherent block, on `warp.py`'s emission-time resampling.
   - T: today's kind of curve score.

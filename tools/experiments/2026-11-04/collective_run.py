@@ -1,4 +1,4 @@
-"""The collective find on the development cases (docs/proposals/2026-11-04-collective-find.md; criteria and design
+"""The collective find on the development cases (docs/experiments/designs/2026-11-04-collective-find.md; criteria and design
 steps in docs/experiments/2026-11-04-collective-find.md, written before each run): locate's detection (60-300 Hz,
 harmonics 1, top 10, 240 s windows) on the case's spectrogram, its usable windows as collective.Window (bounds, coarse
 tone, coarse heard CPA only), then collective.collective_find over the case's box with its flight data, 15 C, the

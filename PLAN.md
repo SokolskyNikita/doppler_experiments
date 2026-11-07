@@ -1,128 +1,201 @@
-# Dopplertrack: current decisions and next research gates
+# Dopplertrack research plan
 
-Reset baseline, 2026-11-04 (Pacific). Historical records also use 2026-11-05 UTC.
-The scientific campaign is **paused**. This plan authorizes no experiment, upload or release.
+**Status:** research is paused until [research readiness](docs/plans/research-readiness.md) closes (its §5 exit
+checks). This plan authorizes no experiment, upload or release; each gate below needs its own approval with a
+spending limit (§8). The engineering that research depends on is in the readiness plan, not here.
 
 ## 1. Destination and claim boundary
 
 The goal is a reproducible acoustic geolocator that reports alternatives and can abstain when evidence is weak.
-The current package is a research tool. A rank-one candidate, small reference error, winning margin, synthetic gain
-or frequency-estimation bound is not a validated receiver localization. There is no calibrated `located` claim or
-validated uncertainty region in the present pipeline.
+A rank-one candidate, small reference error, winning margin, synthetic gain or frequency-estimation bound is not
+a validated receiver localization. No calibrated `located` claim or validated uncertainty region exists today.
 
-The owner's practical release-resolution target remains a 1 km radius. The historical collective development
-gate below permits 2 km; meeting that mechanism test would not meet the release target or validate a region.
+The owner's release target is a 1 km radius. The development gate below permits 2 km; meeting it is a mechanism
+test, not the release target and not a validated region.
 
-Keep four quantities separate: modeled aircraft opportunity, acoustic detection, flight identification and receiver
-localization. Flight coverage says what could have been heard under stated assumptions, not what was audible.
+Keep four quantities separate: modeled aircraft opportunity, acoustic detection, flight identification and
+receiver localization. Flight coverage says what could have been heard under stated assumptions, not what was
+audible.
 
-## 2. Current baseline
+## 2. What the evidence supports
 
-| Area | What exists | What the evidence supports |
+| Area | Evidence | What it supports |
 |---|---|---|
-| Installed workflow | `spectrogram`, `detect`, `fit`, `extract-region`, `fetch-day`, `search`, `refine`, `search-single`, `locate` | Working research interfaces; see README and architecture for defaults and limitations. `bench report` is a separate repository workflow. Presence in this local branch is not a published release. |
-| Saved-fit search | Reproductions on Oyster Bay and eagle-cam development recordings | Useful regression baselines with selected/fitted events; not untouched evaluation or end-to-end detection success. |
-| `locate` | Automatic detection, comparable pair selection, optional metadata clock gate, winner refinement, schema-v2 result | At best `ambiguous`; the single refined winner does not eliminate competing modes. Its defaults differ from benchmark case settings. |
-| Collective search | Experimental library and dated drivers; successive coarse-to-fine designs | Development evidence motivates trajectory-based candidates. It is not a `locate` pair rule. Partial fine searches and old-design nulls do not validate the current design. |
-| Sound speed | Explicit temperature/path options and benchmark weather opt-in | Default remains 15 °C. Physical correction alone did not consistently improve the saved-fit path; fitter conditioning and reproduction matter. |
-| Data and caches | External roots, input hashes, keyed caches and per-run records | Reproducibility machinery exists; hashes do not by themselves establish complete execution, untouched data or correct provenance. |
-| Verification | Offline unit checks, scoped typing, index consistency, installed-wheel smoke | Software invariants only. Historical checks are not checks of the reset branch; final verification is recorded separately. |
+| Saved-fit search | Reproductions on the Oyster Bay and eagle-cam development recordings | Regression baselines with selected or fitted events; not untouched evaluation or end-to-end detection. |
+| `locate` | Automatic detection, comparable pair selection, optional metadata clock gate, winner refinement | At best `ambiguous`: refining one winner does not eliminate competing modes. |
+| Collective search | Coarse-to-fine designs v1–v4 on development recordings | Motivates trajectory-based scoring as a hypothesis. Partial fine searches and nulls of older designs do not validate any current design; v4 was never measured. |
+| Sound speed | Temperature and path options, benchmark weather opt-in | Physical correction alone did not consistently improve the saved-fit path. Default stays 15 °C. |
+| Private recording pilot | One development group ([record](docs/experiments/2026-11-04-seattle-home-pilot.md)) | The 200 m-grid box series failed its 300 m criterion; the detector found 2 of 11 ear-audible passes. |
 
-The implementation/verification map is [architecture](docs/architecture.md). The audited evidence, design history,
-artifact availability and dated corrections are in the [reset record](docs/experiments/2026-11-04-research-reset.md).
-Original failed criteria stand. No historical queue, proposal or resume command overrides this plan's pause.
+The audited evidence, design history and dated corrections are in the
+[reset record](docs/experiments/2026-11-04-research-reset.md). The readiness plan ends with a new baseline run of
+the rebuilt recipes; its record replaces this table's numbers as the starting point. Earlier numbers stay history.
 
 ## 3. Decisions from the evidence
 
-- Retain the installed pair-based path as a regression baseline with explicit abstention. Metadata clock gating is
-  useful when its source and tolerance are independently justified; a clock inferred from the winning match is not
+- Keep the pair-based path as a regression baseline with explicit abstention. A metadata clock gate is useful
+  when its source and tolerance are independently justified; a clock inferred from the winning match is not
   independent metadata.
-- Investigate collective trajectory scoring as a **hypothesis**, not an adopted replacement. Versions 1–3 changed
-  tone sweeps, coarse selection, window extent and sampling; v4 introduced denser sampling and pass exclusivity.
-  A corrected assignment implementation defines another statistic and cannot inherit earlier calibration.
-- The saved-fit maximum-score verdict failed its positive criterion. Do not lower its threshold after seeing the
-  results or infer that every future statistic must fail. The unrun locate arm remains unrun.
-- Tracker, window, hypotheses and warp rounds that missed their criteria remain closed failures of those designs.
-  A successor must state the defect it addresses and new criteria before execution. Coherent synthetic gains and
-  frame-noise bounds are conditional development findings, not demonstrated location accuracy.
-- Do not promote weather, a new fitter, a detector threshold or an uncertainty radius on the present evidence.
-- No broad rearchitecture is justified. The smallest justified code change repairs a demonstrable inconsistency
-  between collective assignment scoring and its reported matches. Other integration and coverage defects are
-  documented before they become follow-on work; they are not reasons to reorganize folders.
+- Treat collective trajectory scoring as a **hypothesis**, not an adopted replacement. Versions 1–3 changed tone
+  sweeps, coarse selection, window extent and sampling; v4 added denser sampling and pass exclusivity. The
+  repaired selector is a new statistic (`collective-Z-greedy-v1`) and inherits no earlier calibration.
+- These designs failed their criteria and stay closed: the saved-fit maximum-score verdict (its locate arm was
+  never run), the tracker rounds, window round 2, the hypotheses and warp rounds, detector S1, and the first
+  coherent-duration round (undecided after its one retune). A successor must state the defect it addresses and
+  new criteria before running.
+- Do not lower a failed threshold after seeing results. Coherent synthetic gains and frame-noise bounds are
+  conditional development findings, not location accuracy. A small Cramér–Rao bound does not guarantee a correct
+  global estimate: at low SNR an estimate can jump to a distant peak.
+- Weighting log evidence by one effective-sample-size scalar is not a joint likelihood; it needs empirical
+  calibration before any probability reading.
+- Do not promote weather, a new fitter, a detector threshold or an uncertainty radius on present evidence.
 
-## 4. Ordered next gates
+## 4. Gates
 
-These gates are proposed work, requiring a separate decision to resume research. Freeze each design and record
-its commit, dirty patch if any, case versions, input hashes, settings, seed, full selection budget and criteria before
-execution. Preserve missing units and failures; do not replace them with successful shards or change the denominator.
+Before each gate runs, freeze its design and record the commit, case versions, input hashes, settings, seed,
+full selection budget and criteria. Report every case in the categories of the readiness plan's study runner (R6.4);
+never replace missing units or failures with successful shards. Score, hash and seal outputs before labels are read. Any failure closes that fixed design:
+there is no automatic retune, and a successor needs its own written design and approval.
 
-The [successor contract](docs/proposals/2026-11-04-collective-decision.md) is the concrete proposal. Its research
-budget, independently established midnight associations, and a frozen available-day sampling frame require
-resolution before the development study. A larger independent certification frame is a later dependency. The old 180 s
-runtime gate remains unmet; repeating a dense search merely to fail that known gate changes no decision.
-The successor asks whether its information warrants making the procedure efficient, under a separately approved
-resource ceiling shared by own-day and null arms. A timeout is incomplete evidence, never a null nonexceedance.
+### G1. Freeze the collective successor design
 
-After the common design and inputs are frozen, own-day development searches and matched null searches can run
-concurrently on separate boxes under one explicit authorization and spending cap. Neither depends on the other's
-numerical result. Keep any threshold-validation draws sealed until the decision rule is frozen. A failed development
-criterion still rejects adoption, even if the null arm looks favorable. Detector/coherence redesign waits for an
-identified bottleneck; it is not needed to interpret the present partial collective evidence.
+**Hypothesis.** Scoring trajectory-shaped curves jointly at one receiver location and clock keeps evidence that
+straight-pass event fits lose, and separates the true solution from competitors across the whole search.
 
-| Gate | Hypothesis and dependencies | Acceptance and stopping rule | Decision for each outcome |
-|---|---|---|---|
-| 0. Reproducible software baseline | Scored and explained assignments agree; the reset interfaces are accurately documented. Requires final reset review and dev-box checks. | Required checks pass on the final implementation; changed statistic has a distinct identity. Missing historical checks stay marked missing. | Pass: freeze baseline for a proposed study. Fail: fix bounded software defects before science. No experiment is authorized by passing. |
-| 1. Freeze one complete search design | A fully specified collective design can retain the relevant development modes without relying on labeled truth during selection. Requires a new proposal, audited case roles, and resolution of coarse/fine/null equivalence. | Declare all locations, clocks, flights, windows, tone ranges, fallback/assignment rules, sampling, mode retention, refinement and computational budget. Positive and null arms must execute the identical selection/statistic pipeline. Tiny deterministic equivalence checks must pass. | Pass: seek approval for Gate 2. Missing parity or undefined budget: stop and repair design. No historical job is resumed. |
-| 2. Complete development search | The frozen design places the maximum within 2 km and includes both reference flights on each original positive family, including the correct midnight day. Requires Gate 1 and an approved run. | Run every retained fine region and finish the predefined merge; report truth-cell survival separately from final winner. Preserve the original collective runtime target (2–3 min warm per positive on a 4xlarge) as failed/unmet unless a new study explicitly changes its objective in advance. Transformed copies are sensitivity checks. | All search criteria pass: proceed to matched null assessment, still no `located` claim. Any miss or incomplete stage: fail or incomplete as applicable; stop, diagnose once, and require a new named design before another configuration. |
-| 3. Complete matched null diagnostic | The full-search statistic separates development positives from realistic wrong-day/wrong-box/wrong-flight maxima. Requires the identical frozen procedure and all completed stages; own/null computation can run concurrently. | Use the preselected available historical days (at most 50 per applicable group, 45 for Essex), complete-search empirical .99 higher quantile, fixed uniqueness/abstention rule and explicit incomplete-draw accounting in the successor contract. Every positive must clear the diagnostic threshold uniquely; controls must abstain. This is no 1% tail certificate. | Pass: development separation at the disclosed cost, sufficient to decide whether to invest in integration/efficiency. Fail: reject this fixed design. Missing stages/settings: incomplete, no favorable judgment. Independent tail certification and region coverage remain later gates. |
-| 4. Target a measured bottleneck | One detector/window/coherent or model change addresses a failure exposed by Gates 2–3. Requires a concrete failure attribution and its own proposal. | One primary comparison, matched search budgets and complete controls; count every retune. Synthetic signal gains must survive real development recordings before integration. Preserve prior failures. | Pass: version the entire design and repeat affected validation/null gates. Fail: close that design. Inconclusive: stop at the written limit; no third configuration by default. |
-| 5. Independent claims and release | A frozen pipeline can meet a stated error/abstention/region-coverage target on independent recording groups. Requires separated calibration groups, truly unseen evaluation, full-pipeline verdict and competitor/region machinery. | Before certification, require a feasible independent traffic-day frame, fixed thresholds and conservative tail uncertainty bounds; development diagnostic draws cannot certify 1%. Define independent site/day/source groups, denominators, target population, sample-size justification and confidence bounds before unsealing. No tuning after evaluation. Test complete installation and documented failure modes on supported systems. | Pass: report only measured claims with intervals and population limits; owner decides release. Fail/inconclusive: retain research status and abstention, with a new evaluation set required after any tuning. |
+**Design to freeze**, starting from dense v4: 60–300 Hz, harmonic 1, top 10 usable 240 s detections; 1 km coarse and
+200 m fine grids; best 120 s support; ±25% fine tone search; the dense coarse sweep; a two-spread margin capped at
+20 cells with the top-three fallback; 15 °C, weather off; the repaired selector. Tone and CPA come from **refined**
+detections; state that dependence. Distinct modes are separated by more than 2 km **or** more than 20 s in clock,
+suppressed greedily in descending score; keep enough candidates for every clearing mode, not a fixed top five.
+Own-day and wrong-day searches use the identical finite search and mode rule, with equal relative-day trace
+coverage (including second-day data where applicable). Record every sweep, sample count, weak-window rule,
+normalization seed and clock setting.
 
-For perspective on Gate 3, even zero exceedances in 50 *independent* draws gives a one-sided 95% binomial upper
-bound near 5.8%, not 1%. Reused traffic days and recordings may reduce effective independence. A fitted tail can
-extrapolate, but its model assumptions and uncertainty must be tested and reported rather than hidden by a point estimate.
+**Inputs to settle before freezing:**
+- The midnight case has `true_pair: null`. Establish its reference associations independently of any search
+  result, or preregister a different criterion that can be evaluated. Never fill labels from search results.
+- Inventory the available days and sources and their trace coverage; freeze each case's wrong-day list (at most
+  50 days per group, 45 for Essex) before any score.
+- The owner approves the per-unit cap and the total spend (G2).
 
-## 5. Data roles and provenance
+A metadata gate, weather change, new detection support or changed selector after the freeze is a new version
+needing new own-day and null results.
 
-- Oyster Bay and eagle cam, including crops, filters, encodings, moved boxes, removed-source controls and midnight
-  variants, are development families. They do not increase the number of independent receiver recordings.
-- Treat a corpus or site/day used to choose a setting, diagnose a failure or select a successor as development for
-  that decision. A JSON `set` value is a declared role, not evidence that it stayed sealed. The reset record audits
-  actual usage; do not silently relabel old case definitions and thereby erase tuning history.
-- Synthetic signals test mechanism and invariants. Livermore/Alaska fit studies measure conditional parameter error;
-  repeated passes are not automatically independent receiver-localization trials. Modeled opportunity studies keep
-  their time/range/aircraft/coverage assumptions and denominators.
-- For every run, record the exact design and stage completeness before reading labels. Record hashes before reveal
-  where supported. A hash guards integrity, not blindness: code can contain labels or development truth.
-- Pre-rewrite commit IDs remain quoted in historical records. Resolve them using the private revision map or original
-  saved bundle; never substitute today's HEAD silently. Record unavailable artifacts explicitly.
+### G2. Complete development search
 
-## 6. Documentation authority and preservation
+Run all eight development cases, every retained fine cell and all mode outputs. The four positives represent two
+source groups, not four independent trials.
 
-| Document | Owns |
-|---|---|
-| `AGENTS.md` | Durable working, privacy, compute and verification rules |
-| `README.md` | Installed user-facing behavior and limitations |
-| `PLAN.md` | Current research decisions, open questions and next gates |
-| `docs/architecture.md` | Current implementation paths, invariants and verification gaps |
-| Dated `docs/experiments/` records | Historical evidence, failures, retunes and corrections; generated index is navigation |
-| `docs/proposals/` | Explicitly labeled designs; never execution authorization |
-| `tools/aws/README.md` | Operational mechanics; never live fleet status or research decisions |
+- **Pass:** each positive's winning mode is within 2 km and includes both true flights; the midnight case picks
+  the correct UTC day. Truth-cell survival is reported separately from the winner.
+- **Budget:** proposed cap of 120 minutes per unit (own-day or wrong-day) on a pinned 4xlarge, warm cache,
+  including merge; a unit that hits the cap is incomplete. The worst-case envelope is 408 units (8 own-day plus
+  at most 50 days for each of 8 cases), 816 box-hours; publish the actual unit list and total before asking for
+  approval. The original 2–3 minute release runtime gate remains **not met**.
+- **On failure:** if recall fails, diagnose once from the per-window contributions and pruning output to choose a
+  successor, keeping three causes apart: wrong frequency measurement, wrong source or trajectory association, and
+  wrong motion model. If only the budget fails, decide whether to optimize the same statistic or replace the budget.
 
-The former accumulated PLAN and internal fleet ledgers were preserved outside the repository with original paths,
-source revision and SHA-256 integrity records. Git history and dated research records retain their original evidence.
-Current conclusions supersede old roadmap instructions without pretending they were known before the experiments.
-Internal assignments, session notes and machine/account details belong only in the private coordination ledger.
+### G3. Matched null diagnostic
+
+Runs the identical frozen procedure on the frozen wrong-day lists; it can run concurrently with G2.
+
+- **Threshold:** the empirical .99 `higher` quantile of complete-search maxima per case. At these counts it is the
+  maximum, a diagnostic and **not a validated 1% threshold**. Gumbel fits are diagnostics only.
+- **Accounting:** a complete draw with no candidate scores −∞; an interrupted draw is never counted as a
+  non-exceedance.
+- **Pass:** exactly one own mode exceeds the threshold on every positive, and none on the four controls. Zero or
+  several clearing modes mean abstention.
+- **On failure:** keep abstention and redesign aggregation or assignment; more positive fitting is not evidence of
+  false-match control.
+- **If G2 and G3 pass:** the mechanism earns consideration for research-only integration and for G5. It earns no
+  `located` verdict and no 1% claim.
+
+### G4. Target a measured bottleneck
+
+One change addressing a failure that G2 or G3 exposed, with its own design, one primary comparison, matched
+budgets and complete controls; every retune is counted. Synthetic gains must hold on real development recordings
+before integration. Candidates, each opened only when a measured failure points to it:
+
+- **Assignment:** exact maximum-weight pass-window matching instead of greedy, on the same graph, and later
+  one-to-one event-to-flight assignment that models missed detections and clutter. Choose it only if existing
+  artifacts separate objective loss on the same graph from loss due to the top-three cap or earlier pruning, and
+  show an effect on correct-flight association or location ranking.
+- **Joint clock shift:** `locked_score` picks the clock shift from the first event alone; fit it on the joint
+  evidence of all events.
+- **Detector:** finish the interrupted S2 retune, or use 120 s windows (today's 240 s windows are about twice the
+  length of the lines they contain); the wider S0 band passed only the synthetic gate and is unmeasured on real
+  Tier 1 data.
+- **Coherent duration, second round:** gate 1's target from an operating-point Monte Carlo (10,000 noise windows
+  per method and 1,000 tone windows per level, hashed before the gate runs), levels +12 to −20 dB in 0.5 dB steps,
+  gate 2 at ±1 dB, wrong-flight set A (real propeller traffic within 12 km and ±30 min) decides, and a coherent
+  method wins with an L80 at least 3 dB better.
+- **Tracker:** Quinn–Hannan phase linking; the likelihood tracker with Viterbi path decoding instead of a per-frame
+  posterior argmax (readiness adds the decoder as an option only).
+- **Fitting:** the least-squares straight-pass fit, once a reliable track exists.
+- **Silence filter:** conditioned on traffic density for busy sites; another site's default removed every candidate
+  in the private pilot.
+
+Pass: version the entire design and repeat the affected G2–G3 checks. Fail: close it. Inconclusive: stop at the
+written limit; no third configuration by default.
+
+**Upstream ideas not imported**, to weigh as explicit method imports when a gate needs them: a verdict that fits
+an exponential tail to the best wrong pairs of the same search (p = exp(−gap/width)); a nationwide search that
+pairs flights first and grids only each pair's region; rescoring the top pairs with further flyovers
+(`search-wide --extra`); a ridge-residual score; and flagging broadband bursts such as trains and vehicles
+(`detect --max-burst`).
+
+### G5. Independent claims and release
+
+Before any 1% claim, preregister a feasible frame with disjoint threshold-selection data and at least 300
+independent validation units from a stated competitor population. The validation event is "complete-search
+maximum above the frozen threshold", including draws with several clearing modes; complete no-candidate draws stay
+in the denominator. Require an exact one-sided 95% upper bound of at most 1% per claimed case distribution (zero
+exceedances in 300 gives 0.994%); shared traffic days, fixed audio or source variants break that independence.
+Define site, day and source groups, denominators, target population and sample size before unsealing, and do not
+tune after evaluation. The calibration recordings are listed in the [verdict-null](docs/experiments/2026-11-04-verdict-null.md)
+and [evaluation-prep](docs/experiments/2026-11-04-evaluation-prep.md) records; the prepared evaluation groups stay
+sealed. Coverage measured only over answers that were not abstentions is a different claim from coverage over
+all cases; state which one is reported. Pass: report only measured claims with intervals and population limits;
+the owner decides release.
+
+For perspective: even zero exceedances in 50 independent draws gives a one-sided 95% upper bound near 5.8%, not 1%.
+
+## 5. Private recording pilot
+
+Paused, like all use of private recordings, until the owner decides how sessions are recorded and moved (§8).
+Open items:
+
+- A band test, pre-registered in the pilot record, for the first full-band session.
+- A 20 km box search, which needs the regional day cut.
+- Known-point detection: only 2 of 11 ear-audible passes were found.
+- A re-listen to the band-limited copy at the audible passes' times: if they are still audible, the content is in
+  band.
+
+Running `locate` on a private site needs the private-case interface's missing pieces (`locate --site`, and a review
+of the path and per-file approval guards); that work belongs to this item when it opens.
+
+## 6. Data roles and provenance
+
+- Oyster Bay and the eagle cam, including crops, filters, encodings, moved boxes, removed-source controls and
+  midnight variants, are development families. They do not add independent receiver recordings.
+- A corpus or site-day used to choose a setting, diagnose a failure or select a successor is development for that
+  decision. A declared `set` value in a case file is not evidence that the data stayed sealed; do not relabel old
+  case definitions and erase their tuning history.
+- Synthetic signals test mechanism. Livermore and Alaska fit studies measure conditional parameter error; repeated
+  passes are not independent localization trials. Opportunity studies keep their assumptions and denominators.
+- A hash guards integrity, not blindness: code can contain labels or development truth.
 
 ## 7. Open questions
 
 The complete collective design's behavior, its matched search-maximum null, a usable detector threshold,
-independent localization error/coverage and a robust uncertainty region remain unknown. Historical top-cell results,
-unit tests and successful shards cannot close these questions. Temporal coverage gaps and other implementation
-limitations are listed in architecture; resolve them before depending on those interfaces in a study.
+independent localization error and coverage, and a robust uncertainty region all remain unknown. Historical
+top-cell results, unit tests and successful shards cannot close them.
 
 ## 8. Owner decisions
 
-The owner authorized integrating the reset fixes as part of the independent-method refactor on `main`.
-The next scientific decision is whether to authorize the first frozen research proposal with its scope and
-spending limit. Private-file transfers and irreversible infrastructure/data actions remain separate decisions.
+- **Now:** none for research; readiness comes first.
+- **Before G1–G3:** the midnight-association method; the frozen day inventory; the per-unit cap and total spend.
+- **Private pilot:** when and where the first full-band session is recorded, and whether files move to the Mac
+  hourly (keeping per-file approval) or upload directly (needing a scoped key and a change to the approval rule).
+- Private-file transfers and irreversible infrastructure or data actions remain separate decisions.

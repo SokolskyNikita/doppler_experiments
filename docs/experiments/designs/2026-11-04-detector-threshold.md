@@ -4,7 +4,7 @@
 > only. S2's counted retune is interrupted and partial, with no complete gate/Tier1 decision; the final
 > rescore parallelization has no completed equivalence check. The earlier eight-copy and band definitions
 > below are preserved as design history, superseded by their explicit amendments. No new default is justified
-> by this proposal yet; see [the audit](../experiments/2026-11-04-research-reset.md).
+> by this proposal yet; see [the audit](../2026-11-04-research-reset.md).
 
 PLAN Phase 2 item 6: the band and the threshold curve. This is a design, written before any code or run.
 
@@ -14,7 +14,7 @@ PLAN Phase 2 item 6: the band and the threshold curve. This is a design, written
 
 The collective find takes the top k = 10 detected windows per recording, so the detector's false-alarm rate and
 its recall on weak passes decide what the find has to work with. The measured starting point (PLAN item 6, from
-the [tier1](../experiments/2026-11-04-tier1.md) background spans) is that the shipped score doesn't separate
+the [tier1](../2026-11-04-tier1.md) background spans) is that the shipped score doesn't separate
 flyovers from background at any threshold:
 - 7.2 countable hours with no propeller pass raise 30.6 false alarms per hour at min_score 0, 1.0 at 6 and 0.3
   at 7.

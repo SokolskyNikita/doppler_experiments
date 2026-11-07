@@ -1,4 +1,4 @@
-"""Judge coherent_duration.py's gates and test (docs/proposals/2026-11-04-coherent-duration.md), all fixed before
+"""Judge coherent_duration.py's gates and test (docs/experiments/designs/2026-11-04-coherent-duration.md), all fixed before
 any result was read.
 
 Thresholds: per pass, method and candidate set, 1 false alarm per hour, P = 18/3600 = 1/200 per window, the empirical

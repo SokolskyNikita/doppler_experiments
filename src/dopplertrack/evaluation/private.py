@@ -1,4 +1,4 @@
-"""Private cases (docs/proposals/2026-11-04-private-cases.md): the owner's recordings, run on this Mac only.
+"""Private cases (design: `git show 64e8337:docs/proposals/2026-11-04-private-cases.md`): the owner's recordings, run on this Mac only.
 
 A private case in bench/cases.json names a `site` and carries no coordinate, audio path or derived file. Those live
 under $DOPPLERTRACK_DATA/private/:

@@ -1,4 +1,4 @@
-"""The other days' flight data for the "located" verdict's null (docs/proposals/2026-11-04-verdict-null.md).
+"""The other days' flight data for the "located" verdict's null (docs/experiments/designs/2026-11-04-verdict-null.md).
 
 Each unit is one UTC day, streamed once from adsb.lol's GitHub release (extract_boxes.py --stream, as fetch-day
 streams) and cut into every box its recording group needs, with the same margin and extraction metadata as the

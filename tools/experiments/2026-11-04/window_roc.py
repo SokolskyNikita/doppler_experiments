@@ -1,4 +1,4 @@
-"""Item 5 round 2 (docs/proposals/2026-11-04-window.md): the synthetic ROC of the window candidates, before any real
+"""Item 5 round 2 (docs/experiments/designs/2026-11-04-window.md): the synthetic ROC of the window candidates, before any real
 recording is read.
 
 Candidates (window, hop, taper), every one on the 0.488 Hz grid (nfft 8192; the 4.096 s window is read at that

@@ -1,14 +1,24 @@
 # Working in this repository
 
 Independent research workspace derived from [mjshiggins/dopplertrack](https://github.com/mjshiggins/dopplertrack): acoustic geolocation from the
-Doppler curves of propeller aircraft. `README.md` explains the method; `PLAN.md` is the research roadmap, and
-`docs/experiments/` the record of what has been measured.
+Doppler curves of propeller aircraft. `README.md` explains the method; `docs/experiments/` is the record of what
+has been measured.
 
-**Reading PLAN.md.** It is about 160 KB, so never read it whole. Before starting work, read section 2
-(Starting point, about 6 KB) and the opening of section 4 up to `### M1` (principles and the milestone table,
-about 3 KB). Read any other part only when the task touches it: list the headings with `rg -n '^#{2,3} ' PLAN.md`
-and read just that range (M2 alone is about 65 KB). A subagent reads only the sections its task names.
-[docs/architecture.md](docs/architecture.md) traces the detector and the CPA build, the two pieces Phase 1 changes.
+**Two plans, in order.** [docs/plans/research-readiness.md](docs/plans/research-readiness.md) is the engineering
+plan: one method per file, configurable recipes, a minimal study runner. It must close (its §5 exit checks) before
+any research starts. [PLAN.md](PLAN.md) is the research plan that builds on it: claim boundary, evidence, gates,
+owner decisions. Both are short enough to read whole. Work that seeks accuracy or a scientific verdict belongs in
+PLAN.md; an engineering need found during research is handled inside that research item.
+[docs/architecture.md](docs/architecture.md) traces the current code paths.
+
+| Document | Owns |
+|---|---|
+| `AGENTS.md` | working, privacy, compute and verification rules |
+| `README.md` | installed user-facing behavior and limitations |
+| `docs/plans/research-readiness.md` | the engineering plan and its exit checks |
+| `PLAN.md` | research decisions, gates, open questions and owner decisions |
+| `docs/architecture.md` | current implementation paths and verification gaps |
+| `docs/experiments/` | dated records of evidence, failures, retunes and corrections; `designs/` holds the frozen designs of experiments that ran |
 
 **Handoff.** `$DOPPLERTRACK_DATA/private/handoff-2026-11-05.md` (outside the repo: it names the owner's machine, accounts and transcript locations, none of which belong in a public fork) is the state of play at the end of the first fleet day: the owner's standing rules that are not written elsewhere, who owned what and what is open, what was established, the Seattle pilot, the procedures a fresh operator needs, and the decisions pending on the owner. A session taking over coordination reads it first; a session on a narrow task reads only the parts that bear on it (the file is about 25 KB). Handoffs, like everything else under `private/`, never go into the tree.
 
@@ -38,17 +48,17 @@ and read just that range (M2 alone is about 65 KB). A subagent reads only the se
   - CPA cache: `uv run pytest -q tests/test_cache.py`.
 - Run the full `tools/check.sh` on the AWS dev box with `tools/aws/runs dev run -- tools/check.sh`; it covers
   lint, typing, the offline suite, and the installed-wheel smoke check. Follow the fleet check and rehearsal
-  rules below before any real job launch.
+  rules in Setup above before any real job launch.
 - Real data, opt-in, about 2 min:
   `DOPPLERTRACK_OYSTER_BAY="$DOPPLERTRACK_DATA/derived/oyster_bay" uv run pytest -q tests/test_oyster_bay.py`.
   It downloads terrain tiles the first time, so it needs the network on a cold cache.
-  `test_detect_output_passes_the_filters_at_truth` is a strict expected failure until PLAN Phase 2 fixes
+  `test_detect_output_passes_the_filters_at_truth` is a strict expected failure until a research gate fixes
   that path.
 - The benchmark: `uv run python -m bench run [case ...]` makes a run folder, writes each case's `result.json`
   and its hash before reading any label, and collects `results.json`; `bench compare <a> <b>` diffs two runs.
   With a cold CPA table it is a long job: say so first and run it in the background.
   `--profile saved-fit|raw-audio` picks the events; `--revision a16b700` runs another commit through its own
-  CLI in an exported, hash-verified environment under `$DOPPLERTRACK_CACHE/revisions/` (`bench/revisions.py`).
+  CLI in an exported, hash-verified environment under `$DOPPLERTRACK_CACHE/revisions/` (`src/dopplertrack/evaluation/revisions.py`).
   Run Python from that export only with `-B`: bytecode in its tree fails the check.
 
 ## Data rules
@@ -80,11 +90,11 @@ and read just that range (M2 alone is about 65 KB). A subagent reads only the se
   PM's landing helper, none of which belong in the fork. History was rewritten on 2026-11-05 to drop it and the
   handoff; every branch SHA from before then changed.
 - Fork-only files: `PLAN.md`, `AGENTS.md`, `CLAUDE.md`, `tools/`, `bench/`, `docs/reference/`,
-  `docs/experiments/`, `docs/phase1-preparation.md`, `docs/architecture.md`. They may share a commit with upstream code; drop them when sending work upstream.
+  `docs/experiments/`, `docs/plans/`, `docs/architecture.md`, `docs/layout.md`. They may share a commit with upstream code; drop them when sending work upstream.
 - To send work upstream, branch `up/<topic>` from `upstream/main`, cherry-pick the topic's upstream commits
   by SHA, compare the series with `git range-diff`, and re-run the tests there. Don't use
   `git rebase --onto upstream/main dev <topic>`: it drops every commit `dev` already contains.
-- A fix that needs nothing from the fork can instead start from `upstream/main` and be merged into `dev`.
+- A fix that needs nothing from the fork can instead start from `upstream/main` and be merged into `main`.
 - Never push, open a pull request or post upstream without the user's go-ahead.
 - Commit messages follow upstream's `<area>: <summary>` style.
 
@@ -101,6 +111,9 @@ and read just that range (M2 alone is about 65 KB). A subagent reads only the se
 - Say before starting a long job (`fetch-day`, `detect` on hours of audio, blind searches), run it in the
   background, and keep its log in the run folder.
 - Don't edit or move files another session created; ask it or the user.
+- Never cancel another session's jobs or delete cloud objects without the owner's explicit approval.
+- Before retiring a worktree, check its starting revision and save its uncommitted changes as a patch outside the
+  repo; removed files go to the Trash.
 - Record every experiment as `docs/experiments/<date>-<topic>.md`: the question, what ran on which recordings,
   the numbers, the outcome, and the script and run folder. Oyster Bay and the eagle cam are development data, not
   evaluation. PLAN.md keeps only the conclusions.
@@ -123,5 +136,6 @@ and read just that range (M2 alone is about 65 KB). A subagent reads only the se
 | `bench/cases.json` | benchmark cases: sources, start times, recipes for derived files, search parameters, labels |
 | `bench/*.py` | `uv run python -m bench validate\|build\|run\|merge\|inputs\|tier1\|report\|compare`: rebuild a case's derived files, run cases blind into a run folder (`--shard`, `--resume`), merge shards, list a job's inputs, render each record's HTML report into a new run folder, compare two runs |
 | `docs/architecture.md` | edit map: the detector and CPA-build code paths and the tests that check them |
-| `docs/experiments/` | one record per experiment: question, setup, numbers, outcome, script and run folder |
+| `docs/experiments/` | one record per experiment: question, setup, numbers, outcome, script and run folder; `designs/` the frozen designs of experiments that ran |
+| `docs/plans/` | the research-readiness plan |
 | `docs/reference/README.md` | reading list for the papers in `$DOPPLERTRACK_DATA/reference/` |

@@ -1,7 +1,7 @@
-"""Item 6 (docs/proposals/2026-11-04-detector-threshold.md): the synthetic ROC of detect's statistic and band, before
+"""Item 6 (docs/experiments/designs/2026-11-04-detector-threshold.md): the synthetic ROC of detect's statistic and band, before
 any real recording is read.
 
-Settings (S2 is retune 1, docs/proposals/2026-11-04-detector-threshold.md): statistic S0 (today: the sweep-weighted mean contrast) or S1 (tracks.rescore_z over every event detect
+Settings (S2 is retune 1, docs/experiments/designs/2026-11-04-detector-threshold.md): statistic S0 (today: the sweep-weighted mean contrast) or S1 (tracks.rescore_z over every event detect
 proposes: curve_zscore, a z-score over the curve's frames with Harris's overlap weight), by band:
   B0 fundamentals 60-300 Hz on the 40-450 Hz image (today's raw-audio profile)
   B1 fundamentals 60-900 Hz on a 40-1000 Hz image, one search

@@ -43,7 +43,7 @@ def cache_root() -> Path:
 
 
 def is_private(case: dict) -> bool:
-    """A case of the owner's private recordings (docs/proposals/2026-11-04-private-cases.md): never off this Mac."""
+    """A case of the owner's private recordings (design: `git show 64e8337:docs/proposals/2026-11-04-private-cases.md`): never off this Mac."""
     return bool(case.get("private")) or "site" in case
 
 
@@ -179,7 +179,7 @@ def validate_case(case: dict, manifest_files: dict[str, str]) -> None:
     if runnable and ev.get("mode") == "saved_fits" and not ev.get("files"):
         problems.append(f"{where}: saved_fits needs events.files")
     if "site" in case or case.get("private"):
-        # a private case names its site and carries nothing that places it (docs/proposals/2026-11-04-private-cases.md)
+        # a private case names its site and carries nothing that places it (design: `git show 64e8337:docs/proposals/2026-11-04-private-cases.md`)
         if not (case.get("private") is True and isinstance(case.get("site"), str) and case["site"].strip()):
             problems.append(f"{where}: a private case needs private: true and a site id")
         ref = (case.get("labels") or {}).get("reference")

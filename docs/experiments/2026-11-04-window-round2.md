@@ -12,7 +12,7 @@ outcome: No candidate passes the synthetic gate: C1, C2 and C3h each miss one of
 ## Question
 
 PLAN Phase 2 item 5, second round, to the design in
-[the proposal](../proposals/2026-11-04-window.md) (written before any code ran).
+[the proposal](designs/2026-11-04-window.md) (written before any code ran).
 
 Item 3's third round found that per-frame evidence over eightfold-overlapping frames is not independent
 (Harris's weight w = 0.254 today). At a given window the hop only resamples: about 61 independent frames a minute

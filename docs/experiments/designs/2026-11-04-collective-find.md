@@ -8,13 +8,13 @@
 > top-five own-day run. Later v2/v3/v4 are successive designs, not a pass of this proposal or its one
 > clock-width retune. v3 has only top-cell fine summaries; v4 has no completed result. No matching collective
 > verdict null has passed. The original failed criteria remain failed; see [the
-> audit](../experiments/2026-11-04-research-reset.md).
+> audit](../2026-11-04-research-reset.md).
 
 PLAN Phase 3, `locate`'s step B. This is a design, written before any code or run.
 
 **decision:** whether `locate`'s step B becomes the collective find described here. It would retire the per-event straight-pass fits as the events' representation, along with item 7's pair rules (`top2`, `comparable`) and stage B's hypotheses.
 
-**Why** ([event-fit](../experiments/2026-11-04-event-fit.md)).
+**Why** ([event-fit](../2026-11-04-event-fit.md)).
 - **The evidence and the objective are right; the candidate set is wrong.** On Oyster Bay event 2 the true flight's line is in the spectrogram at 15.6 dB on 96 % of frames. Brightness scores it 16 % above any straight-pass curve. But a straight pass can't express ace391's heard curve, so the fit settles on a straight compromise 2.3 km and 38 m/s from the truth.
 - **The search already does the right thing.** It scores each flight's own heard curve against the spectrogram. That is why Oyster Bay ranks its true pair first with event fits 57σ off.
 - **So the event fit adds nothing but a lossy intermediate.** Its v and d gate the search, and its f0 and CPA anchor it.
@@ -72,7 +72,7 @@ The silence filter is out of scope here and stays as it is.
 
 ## 4. Cost, and what is reused
 
-> **Correction (before the build).** The bound below is wrong: today's 197,177 and 84,441 time-joined triples are counted after the speed and distance gates (v ±35 %, d ×0.4–2.5), which leave 16.35 M of Oyster Bay's 86.2 M CPA rows per event, and the design drops those gates. At 200 m the clock vote keeps on the order of 10⁸–10⁹ window pairs. The build therefore takes the review’s coarse-to-fine lever as a design step: a 2 km grid scored as the maximum over each cell's span (shift ±14 s, f0 ±12 %), then 200 m inside the cells at ≥ 0.7 of the coarse maximum ([collective-find record](../experiments/2026-11-04-collective-find.md)).
+> **Correction (before the build).** The bound below is wrong: today's 197,177 and 84,441 time-joined triples are counted after the speed and distance gates (v ±35 %, d ×0.4–2.5), which leave 16.35 M of Oyster Bay's 86.2 M CPA rows per event, and the design drops those gates. At 200 m the clock vote keeps on the order of 10⁸–10⁹ window pairs. The build therefore takes the review’s coarse-to-fine lever as a design step: a 2 km grid scored as the maximum over each cell's span (shift ±14 s, f0 ±12 %), then 200 m inside the cells at ≥ 0.7 of the coarse maximum ([collective-find record](../2026-11-04-collective-find.md)).
 
 Measured today on the saved-fit Tier 2 cases:
 - **Grid points:** 378,500 (Oyster Bay) and 430,882 (the eagle cam) at 200 m.

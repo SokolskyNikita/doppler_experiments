@@ -14,7 +14,7 @@ outcome: S1 failed the synthetic gate; wider S0 passed synthetic only; S2 is int
 
 ## Question
 
-PLAN Phase 2 item 6, to the design in [the proposal](../proposals/2026-11-04-detector-threshold.md), written
+PLAN Phase 2 item 6, to the design in [the proposal](designs/2026-11-04-detector-threshold.md), written
 before any code ran.
 - **Settings:** the statistic S₀ (today), S₁ (a z-score over the curve's frames with Harris's weight) or S₂ (the
   retune: S₀ less the search's maximum on the window reversed in time, standardised on the null), crossed with the

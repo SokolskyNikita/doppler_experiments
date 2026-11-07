@@ -1,5 +1,5 @@
 #!/bin/sh
-# Round 3's fleet steps (docs/proposals/2026-11-04-tracker-likelihood.md), in order, every one skipping its finished
+# Round 3's fleet steps (docs/experiments/designs/2026-11-04-tracker-likelihood.md), in order, every one skipping its finished
 # units so the same command resumes a stopped box:
 #   roc         the development references and constants, then this box's grid points of the synthetic ROC
 #               (runs launch --shards n splits them, units.shard)

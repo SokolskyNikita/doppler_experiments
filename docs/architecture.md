@@ -60,7 +60,7 @@ site-relative frame. Version 2 allows `located`, `ambiguous` and `insufficient_e
 fields, types, enumerations and finite floats; it permits extra fields and does not prove cross-field scientific
 validity. `write_record` validates and writes canonical bytes atomically, returning their SHA-256. The benchmark
 writes the record/hash before opening labels and refuses altered records/sidecars. This is procedural blinding,
-not evidence that development data became held-out evaluation. Schema v3 remains a proposal.
+not evidence that development data became held-out evaluation. Schema v3 was never adopted; the readiness plan adds a minimal collective record (R6.6).
 
 The installed CLI produces no HTML report. `bench report` uses [report.py](../src/dopplertrack/report.py),
 local result records and optional sidecars to render reports into a new run folder. Execution errors are distinct

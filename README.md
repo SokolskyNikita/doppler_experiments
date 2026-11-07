@@ -85,23 +85,18 @@ From raw audio alone, the tool can't yet locate even Oyster Bay. `detect` does f
 Its curve fits of them are off, though: event 2's frequency comes out 5–11 % high and the time between the
 events 5–10 s short. The search turns each fit into hard limits on timing and frequency, so the true answer
 gets filtered out and nothing says so. Widening those limits let a wrong pair win on both recordings.
-Fitting in narrower windows fixed Oyster Bay and broke the eagle cam. The ideas I'm testing next are pairing
-flyovers on the moment the tone falls fastest instead of the heard closest approach, extracting a frequency
-track to fit by least squares and checking each candidate against the flyovers the search didn't use. Each
-experiment has a write-up in [docs/experiments/](docs/experiments/README.md).
+Fitting in narrower windows fixed Oyster Bay and broke the eagle cam. Later rounds (trackers, windows,
+hypotheses, a whole-search null, a collective trajectory search) are written up, with their failures, in
+[docs/experiments/](docs/experiments/README.md).
 
 What does work: both published results reproduce, a cache of the closest-approach table cuts a repeat
 search from about 8 minutes to 2 and the data sits outside the repo with a hashed manifest and one folder
 per experiment run.
 
-The roadmap is in [PLAN.md](PLAN.md). In short:
-
-| Milestone | What it delivers |
-|---|---|
-| M1 | the known small bugs fixed, a versioned result format, a seed benchmark with baseline scores |
-| M2 | `locate` with verdicts, the HTML report, an installable release |
-| M3 | error rate and uncertainty-region coverage measured on independent recordings |
-| M4 | uncertain dates, larger regions, jets as a signal source, single flyovers with only a rough time |
+Work now goes in two steps. First, [research readiness](docs/plans/research-readiness.md): every statistical
+method in its own file, both recipes configurable, and a small study runner that compares variants with complete
+case accounting. Then the [research plan](PLAN.md): the collective-search successor, its matched null, targeted
+fixes for measured bottlenecks, and only then independent claims.
 
 ## Pipeline
 
@@ -220,7 +215,8 @@ empty detection. GitHub CI expansion is deferred.
 | `tests/` | unit tests, plus an opt-in test on the real Oyster Bay data |
 | `docs/results/` | upstream's committed results |
 | `docs/superpowers/specs/` | upstream's design spec |
-| [PLAN.md](PLAN.md) | the roadmap: the target, open problems, phases, how progress is measured |
+| [docs/plans/research-readiness.md](docs/plans/research-readiness.md) | the engineering plan that comes first |
+| [PLAN.md](PLAN.md) | the research plan: the target, evidence, gates, owner decisions |
 | [docs/experiments/](docs/experiments/README.md) | one write-up per experiment |
 | [docs/reference/](docs/reference/README.md) | reading list for the papers behind the physics |
 | `tools/`, `bench/` | data handling, experiment scripts, the manifest of raw inputs |

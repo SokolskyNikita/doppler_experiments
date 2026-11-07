@@ -1,4 +1,4 @@
-"""The collective find (docs/proposals/2026-11-04-collective-find.md): every detected window against every flight's own
+"""The collective find (docs/experiments/designs/2026-11-04-collective-find.md): every detected window against every flight's own
 heard curve, summed non-coherently with a floor, at each grid point and shared clock (Axelrad et al. 2011).
 
 For a grid point x and a clock b (audio = unix + b), each window w scores the best pass near it:

@@ -10,7 +10,7 @@
 > conservativeness and exchangeability with deployment false matches remain assumptions. Fifty draws plus a
 > fitted Gumbel do not independently establish a 1% error rate, and fitted-parameter KS/ordinary bootstrap
 > diagnostics do not settle tail misspecification. Preserve the failures and freeze the complete search/null
-> procedure in any successor; see [the audit](../experiments/2026-11-04-research-reset.md).
+> procedure in any successor; see [the audit](../2026-11-04-research-reset.md).
 
 PLAN Phase 4, "Thresholds". This is a design, written before any code or run.
 
@@ -18,7 +18,7 @@ PLAN Phase 4, "Thresholds". This is a design, written before any code or run.
 point of its own null of the maximum. The alternative is step A's rule, which never says "located", with PLAN's
 fixed-rule fallback.
 
-**Where `locate` starts** ([locate](../experiments/2026-11-04-locate.md), Tier 2, `runs/2026-11-04-locate-t2b-*-merged/`).
+**Where `locate` starts** ([locate](../2026-11-04-locate.md), Tier 2, `runs/2026-11-04-locate-t2b-*-merged/`).
 - With automatic events, only the `comparable` pair rule with the silence filter on picks a seed case's true pair:
   Oyster Bay and its degraded copy, refined 278 m from the truth on the copy.
 - The eagle cam's pick is the 14.6 km wrong pair a0e90b/a25807.
@@ -81,7 +81,7 @@ locate record) or their clocks differ by more than a pass resolves.
 - The two reason codes are in the v2 list (`988a0df`).
 - The eagle cam's true pair and its 14.6 km wrong pair are this case today: two modes about 0.02 apart in Z. A third
   flyover that only the true clock explains is what can separate them, and it does, via m = 3
-  ([frozen-clock](../experiments/2026-11-04-comparable-score.md)).
+  ([frozen-clock](../2026-11-04-comparable-score.md)).
 
 ## What counts as calibrated
 
@@ -111,7 +111,7 @@ Criteria, each case judged against its own null's γ_m:
   - It runs on 4xlarge boxes, one search per box where memory decides. Stage B's d4 + d3 pairs exceed 128 GB, so
     `hypotheses` stays off.
   - Its merge fits γ_m and κ per case, then judges the Tier 2 cases.
-- **The null days' traces** come first ([`verdict_null_days.py`](../../tools/experiments/2026-11-04/verdict_null_days.py),
+- **The null days' traces** come first ([`verdict_null_days.py`](../../../tools/experiments/2026-11-04/verdict_null_days.py),
   planned in `verdict_null_days.json`).
   - Each day is streamed once from adsb.lol's release and cut into every box its group needs, by `extract_boxes.py
     --stream`, with the same recipe and margin as the cases' own cuts.
@@ -120,7 +120,7 @@ Criteria, each case judged against its own null's γ_m:
   - A day already in derived/ is never fetched again.
   - The cuts are published read-only to `derived/traces/<day>/` and recorded in the data manifest (adsb.lol,
     ODbL 1.0).
-- **The clock gate.** `locate`'s clock gate ([clock-gate](../experiments/2026-11-04-clock-gate.md)) keeps only
+- **The clock gate.** `locate`'s clock gate ([clock-gate](../2026-11-04-clock-gate.md)) keeps only
   triples whose clock lies within the case's stated start and tolerance. Another day's flights would all fail it.
   - So the locate arm shifts each null day's traces by whole days onto the recording's date, keeping the time of
     day, and runs with the gate on, as the case does.

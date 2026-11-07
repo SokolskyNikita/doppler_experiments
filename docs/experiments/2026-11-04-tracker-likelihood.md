@@ -9,7 +9,7 @@ outcome: Not met: at the one ROC point that qualified (a 2, β 1e-3), error 0.60
 
 PLAN Phase 2 item 3, round 3, after the dB thresholds of rounds 1 and 2 failed
 ([freqtrack](2026-11-04-freqtrack.md), [hmm-tracker](2026-11-04-hmm-tracker.md)). The design was written before any
-code ran: [the proposal](../proposals/2026-11-04-tracker-likelihood.md).
+code ran: [the proposal](designs/2026-11-04-tracker-likelihood.md).
 - **Evidence.** Each cell's power over the frame's noise level across frequency, z = P/σ², is scored by the
   log-likelihood ratio of a Rician tone at design SNR a against Exp(1) noise (Kay I Ex. 7.16). Each of harmonics
   1–3 is present with prior 0.5.

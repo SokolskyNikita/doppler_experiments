@@ -53,7 +53,7 @@ their 64 GB, so a 4xlarge would have done; the table jobs at 1.8–2.0 GB of 32 
 ## Outcome
 
 The three Eclipse evaluation cases are ready: a passing design runs on them as soon as the milestone opens, with only
-the CPA table's 8 s to rebuild. Private recording cases were not prepared; they waited on the private-case design (`docs/proposals/2026-11-04-private-cases.md`) and the fleet guard.
+the CPA table's 8 s to rebuild. Private recording cases were not prepared; they waited on the [private-case design](https://github.com/SokolskyNikita/doppler_experiments/blob/64e8337/docs/proposals/2026-11-04-private-cases.md) and the fleet guard.
 
 ## Files
 

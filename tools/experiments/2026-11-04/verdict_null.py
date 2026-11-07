@@ -1,4 +1,4 @@
-"""The "located" verdict's null of the maximum, saved-fit arm (docs/proposals/2026-11-04-verdict-null.md).
+"""The "located" verdict's null of the maximum, saved-fit arm (docs/experiments/designs/2026-11-04-verdict-null.md).
 
 For each case run under the saved-fit profile, one search per day: the case's committed fits, box, grid and gates
 with run_search(comparable=True), against the flight data of each null day verdict_null_days.py cut for its box,

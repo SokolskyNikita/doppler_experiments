@@ -55,3 +55,38 @@ def test_a_pass_explains_one_window_and_the_other_falls_back():
                            "b": [-50.0, -50.0, -50.0], "s": [0.0] * 3, "f0_scale": [1.0] * 3, "z": [5.0, 4.0, 1.0]})
     assert collective.point_scores(scored, 2).Z.iloc[0] == 6.0                     # window 1 falls back to segment 1
     assert collective.point_scores(scored, 2, one_pass=False).Z.iloc[0] == 9.0     # the old rule counted segment 0 twice
+
+
+def _scored_rows(rows):
+    import pandas as pd
+    return pd.DataFrame([dict(gidx=0, w=w, seg=seg, t_heard=heard, b=-50.0, s=z, f0_scale=1.0, z=z)
+                         for w, seg, heard, z in rows])
+
+
+def _assert_report_matches_score(scored, n_windows, expected_z, expected_windows):
+    from types import SimpleNamespace
+    point = collective.point_scores(scored, n_windows).iloc[0]
+    segs = [SimpleNamespace(icao=f"flight-{i}") for i in range(int(scored.seg.max()) + 1)]
+    wins = [SimpleNamespace(f0=120.0) for _ in range(n_windows)]
+    matches, _ = collective.matched_at(scored, 0, float(point.b), segs, wins)
+    positive = {i: m for i, m in enumerate(matches) if m and m["z"] > 0}
+    assert point.Z == expected_z
+    assert set(positive) == set(expected_windows)
+    assert point.n_matched == len(positive)
+    assert sum(m["z"] for m in positive.values()) == point.Z
+
+
+def test_greedy_fallback_does_not_consume_an_unused_alternate_pass():
+    scored = _scored_rows([(0, 0, 100.0, 5.0), (0, 1, 200.0, 4.0), (1, 1, 200.0, 3.0)])
+    _assert_report_matches_score(scored, 2, 8.0, [0, 1])
+
+
+def test_report_uses_the_same_rounded_pass_identity_as_the_score():
+    scored = _scored_rows([(0, 0, 100.1, 5.0), (1, 0, 100.4, 4.0)])
+    _assert_report_matches_score(scored, 2, 5.0, [0])
+
+
+def test_report_respects_the_same_bounded_fallback_as_the_score():
+    scored = _scored_rows([(0, 0, 100.0, 10.0), (0, 1, 200.0, 9.0), (0, 2, 300.0, 8.0), (0, 3, 400.0, 7.0),
+                           (1, 0, 100.0, 11.0), (2, 1, 200.0, 12.0), (3, 2, 300.0, 13.0)])
+    _assert_report_matches_score(scored, 4, 36.0, [1, 2, 3])

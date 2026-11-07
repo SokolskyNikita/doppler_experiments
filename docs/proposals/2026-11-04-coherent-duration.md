@@ -1,16 +1,20 @@
 # Coherent alignment duration for weak flyovers (proposal)
 
-From the outside reviewer's advice (2026-11-04), as the PM adopted it. This is a design, written before any code or run.
+> **Documentation privacy correction, 2026-11-04.** Personal provenance and internal attribution
+> are neutralized; numerical outcomes and artifact identifiers are retained. The original is privately
+> hash-preserved at source revision `17758a5`, SHA-256 `e95e8a1e6b6ff0c68b54025ec60f15eb1ae417ed179b71cd25b939462f96df09`.
+
+From the outside reviewer's advice (2026-11-04), as review adopted it. This is a design, written before any code or run.
 
 **decision:** whether a 6 s or 18 s coherent scorer earns a test on the locator's shortlist, in the collective find's
 weak-window case (the eagle cam's event 2, at 6 dB on half its frames). Otherwise the shortlist keeps today's scorer.
 
-**Prior work.** Codex's [doppler-integration-coverage](../experiments/2026-11-04-doppler-integration-coverage.md) record.
+**Prior work.** the earlier replay study’s [doppler-integration-coverage](../experiments/2026-11-04-doppler-integration-coverage.md) record.
 - With the true flight and clock supplied, 18 s of coherent integration against nine 2 s power blocks on eight real
   Livermore passes won 3, tied 2 and lost 3.
 - On 28 passes, the 18 s phase concentration had a median of 0.36 with a ±2 Hz constant-offset search, and 0.11
   without one.
-- Its replays used the Seattle home background, which is private and local-only. Nothing here touches it.
+- Its replays used the private reference background, which is private and local-only. Nothing here touches it.
 
 ## The methods
 
@@ -20,7 +24,7 @@ the true one).
 - **C1:** nine 2 s blocks. **C3:** three 6 s blocks. **C9:** one 18 s block. **T:** today's trajectory-curve scorer.
   - C1 and T are the baselines.
 - **The C methods:**
-  - The audio is resampled to emission time by C's `warp.py`, for the candidate's trajectory and clock, so its tone
+  - The audio is resampled to emission time by `warp.py`, for the candidate's trajectory and clock, so its tone
     becomes a stationary line. That aligns the waveform cycles.
   - Each block is one FFT. The block powers are added at each pitch bin, so the constant pitch search is the bins.
   - The statistic is the best pitch's summed power, over the median of the bins within ±20 Hz.
@@ -33,7 +37,7 @@ the true one).
 
 - **Passes:** 27 Livermore props from the 28 the coherence diagnostic took (`runs/2026-11-04-real-tone-coherence/`,
   dropping the jet N958JX_R50). Each is the original 18 s around its fitted CPA, with its own ambient, at 2 kHz.
-  - **Verification set:** Codex's eight replays, N373DF_R06, N4004R_R19, N60RS_R11, N61NG_R37, N662EZ_R48,
+  - **Verification set:** the earlier replay study’s eight replays, N373DF_R06, N4004R_R19, N60RS_R11, N61NG_R37, N662EZ_R48,
     N784MB_R04, N795MM_R13 and N913TC_R15.
   - **Test set:** the other 19.
 - **Backgrounds:** Tier 1's nine independent development spans, 7.2 h of waveform audio.
@@ -65,8 +69,8 @@ the true one).
     +3.0 dB over C3.
   - **Gate 2, the eight passes.** On the eight verification passes, on development background with the true flight
     and clock supplied, the median paired difference in recovering level, C9 − C1, must lie within ±1 dB, as
-    Codex's did (3 wins, 2 ties, 3 losses, medians 0.5 dB apart).
-  - The Seattle background stays untouched.
+    the earlier replay study’s did (3 wins, 2 ties, 3 losses, medians 0.5 dB apart).
+  - The reference background stays untouched.
 - **Then frozen.** The test set runs blind, with the flight and pitch chosen by the search. There is one counted retune.
 - **Caveat on wrong flights.** The other 26 passes' trajectories at the same recorder are real curves, but they aren't
   that day's traffic. So the wrong-flight rate measured here is a lower bound on what a live search faces.

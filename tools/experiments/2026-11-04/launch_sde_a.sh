@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# SDE-A's fleet jobs (cloud_jobs.md, "## SDE-A"), every one sharded over its own boxes at once, and the steps after.
-# Needs tools/aws/runs on this branch. Calendar time is the scarce thing (PM, 2026-11-04), so stage B's null-N
+# the timing study's fleet jobs (cloud_jobs.md, "## the timing study"), every one sharded over its own boxes at once, and the steps after.
+# Needs tools/aws/runs on this branch. Calendar time is the scarce thing (review, 2026-11-04), so stage B's null-N
 # follow-up launches with the rest; its result is read only if A1 needs it (docs/experiments/2026-11-04-hypotheses.md).
 #
 #   launch_sde_a.sh launch PINNED [JOB ...] the jobs named (default all, in this order): b (stage B's A1/A3) and n (its
@@ -27,7 +27,7 @@ DATA=${DOPPLERTRACK_DATA:-$HOME/data/dopplertrack}
 BASE=runs/2026-11-04-bench-5314396-raw-audio-t2
 CASES="eagle-cam-clip-18000s oyster-bay oyster-bay-moved-wsw150"
 BRANCH=claude/sde-stageb-pairs-45d0bd8
-NULL_N_CAP=250000                         # the PM's cap on the follow-up's N
+NULL_N_CAP=250000                         # the predeclared cap on the follow-up's N
 SHARDS_B=${SHARDS_B:-10} SHARDS_N=${SHARDS_N:-30} SHARDS_A=${SHARDS_A:-5} SHARDS_B12=${SHARDS_B12:-3}
 SHARDS_SWEEP=${SHARDS_SWEEP:-15}
 # the pairs jobs: one search per 8xlarge (64 GB), since two to a box ran out of memory; their CPUs then idle about

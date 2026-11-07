@@ -5,12 +5,16 @@ question: Can each event's own hypotheses (optima with profile ranges in v, k, t
 outcome: Not met: B1 fails before and after the one retune; with the first run's hypotheses A1 is not met outside the null's noise (true pair 3rd) and A3 is not met
 -->
 
+> **Documentation privacy correction, 2026-11-04.** Personal provenance and internal attribution
+> are neutralized; numerical outcomes and artifact identifiers are retained. The original is privately
+> hash-preserved at source revision `17758a5`, SHA-256 `7567caa95085010d5032759d865c0bb406b5256f6d3c019239a1c35f5cfa1c71`.
+
 ## Question and criterion
 
 PLAN Phase 2, item 7, stage B. Can each event's own hypotheses replace the search's independent speed, distance
 and f0 gates? Each hypothesis is an optimum of the event's fit with the region in v, k = v²/d, τ and f0 that it
 supports. Can they keep the true flights while admitting no more candidates than today? Written before
-anything ran; the design was agreed with the PM in advance.
+anything ran; the design was agreed with review in advance.
 
 **Criterion** (PLAN's, as agreed):
 - **B1.** On every positive case, each event's hypotheses admit its true flight. That means the true flight's
@@ -39,7 +43,7 @@ anything ran; the design was agreed with the PM in advance.
   other three, with the range where it stays within the threshold. They are sensitivity ranges, since
   neither objective is a calibrated likelihood.
   - "ls": the track's RSS within 3.84 × 3 residual variances. The 3 is the variance inflation of 88 %
-    overlapping frames from SDE-D's c(r)² model.
+    overlapping frames from the geometry study’s c(r)² model.
   - "fit_event": the brightness under the ideal curve within 2 σ of the event's null. That brightness is the
     null's own scale (`event_null`, N = 1,000).
 - **Weak flags.** A range that reaches its bound before the objective falls off is weak and widened to the
@@ -88,9 +92,9 @@ score triples, so neither fix touches it, and it stands.
 - **B2.** It fails only where one fit_event optimum, flat in every profile, widened to every bound and so
   admitted the whole table. Elsewhere the hypotheses admit 20–60× fewer rows than today.
 
-**The one retune, written before its rerun** (agreed with the PM, counted). One change, in two parts:
+**The one retune, written before its rerun** (agreed with review, counted). One change, in two parts:
 1. **Thresholds scaled for model error.** A profile of a misspecified model measures spread about the
-   model's best approximation, not distance to the truth (White 1982). SDE-D measured that distance at
+   model's best approximation, not distance to the truth (White 1982). the geometry study measured that distance at
    2.8–3.2× the information bound in slant range, on Livermore's trajectory curves
    ([model-error](2026-11-04-model-error.md)), not on these cases.
    - Taking the middle, a factor of 3, and the profile thresholds' quadratic scale, every parameter's
@@ -154,7 +158,7 @@ background is only a handful of null sigmas.
     the kept nulls and `null_n`, whose default is 1,000.
   - **A gap in its provenance.** It launched on 2026-11-04 as jobs `2026-11-04-hypotheses-pairs-s1of8` to `-s8of8`,
     on 8 spot 8xlarge boxes in us-west-1, before `runs` was on `dev`.
-    - The `runs` that launched it was SDE-E's uncommitted `tools/aws` at `0cbc405`, copied into a scratch worktree
+    - The `runs` that launched it was the infrastructure study’s uncommitted `tools/aws` at `0cbc405`, copied into a scratch worktree
       of `dev` at `9b1b684`.
     - That `runs` shipped the pinned checkout with `--repo`, so the boxes ran `6f0ce38`, which each shard's run.json
       records.
@@ -184,7 +188,7 @@ Written 2026-11-04, before the fleet run, which is the first A1/A3 run whose ran
 
 **What each outcome leads to:**
 - **Met or not met:** that is A1's result, recorded here with A3. No further run is read.
-- **Inside the noise:** stage A's one retune is spent on N, as the PM approved, with N capped at 250,000.
+- **Inside the noise:** stage A's one retune is spent on N, as review approved, with N capped at 250,000.
   - N is the value that would put the observed gap at 2 standard deviations.
   - **Over 250,000:** this record says the test can't decide at any affordable N. A lower-variance scale estimate is
     written down as the method change it would be, for a later item, and is not run now.

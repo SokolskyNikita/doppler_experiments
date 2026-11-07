@@ -5,6 +5,10 @@ question: Does a window or hop with nearly independent frames (w → 1) detect a
 outcome: No candidate passes the synthetic gate: C1, C2 and C3h each miss one of nine 0.03 passes at 1 false alarm per hour, and C2, C3r and C4 exceed 1.05× today's ridge() error; the package window stays. fit_event's brightness objective is bimodal across seeds under every window
 -->
 
+> **Documentation privacy correction, 2026-11-04.** Personal provenance and internal attribution
+> are neutralized; numerical outcomes and artifact identifiers are retained. The original is privately
+> hash-preserved at source revision `17758a5`, SHA-256 `6b4dae5dd500ef0050694389ae3df788af9b7aebb82e76b1975669791f02abdc`.
+
 ## Question
 
 PLAN Phase 2 item 5, second round, to the design in
@@ -84,7 +88,7 @@ setting worth trying, and with nine passes a single miss is the whole difference
   detector's ROC (thresholds 0.98–1.21) and `ridge()`'s errors (0.087–0.124 %) are close across all six
   candidates, so the overlap finding is a matter for statistics that sum frames (item 3's trackers, which can
   weight by w), not a reason to change the image.
-- **For SDE-D's step** (brightness to find, gate to measure, least squares to fit). `fit_event`'s brightness
+- **For the geometry study’s step** (brightness to find, gate to measure, least squares to fit). `fit_event`'s brightness
   objective falls into a wrong basin on about half of these synthetic passes at 0.03 under every window,
   and the contrast objective doesn't (≤ 2.3 % in v and d). The finding step should not trust a single brightness
   fit. No candidate here changes that, so no basin shift comes from the window.

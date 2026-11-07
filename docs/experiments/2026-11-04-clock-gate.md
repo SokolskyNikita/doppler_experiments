@@ -2,8 +2,19 @@
 
 <!-- index
 question: Does gating each pair's clock on the recording's stated start time reject the wrong clocks locate found, without losing a true pair?
-outcome: Yes at both settings: no true pair dropped, every wrong clock gone; with it the eagle cam is located to 0.33–0.39 km and the 15 °C defaults hold
+outcome: Conditional development candidate recovery with emitted ambiguous verdicts; clock gate rejects tested wrong clocks, but success depends on weather/filter and does not establish calibrated location
 -->
+
+> **Documentation privacy correction, 2026-11-04.** Personal provenance and internal attribution
+> are neutralized; numerical outcomes and artifact identifiers are retained. The original is privately
+> hash-preserved at source revision `17758a5`, SHA-256 `11fb8c4c6f0e875c22ac18daedabcc3e647b0187ec37fbfc3411eb9026d07194`.
+
+> **Research reset qualification, 2026-11-04.** “Located” in the narrative means a near-reference search
+> candidate; emitted outcomes in these runs are ambiguous, without a calibrated verdict. At15°C the literal
+> criterion that Oyster Bay remain found is not met; the favorable clock-gate conclusion uses no additional
+> loss relative to the same-temperature baseline. Near-reference eagle winners under some settings use a
+> different flight pair. These development results justify a conditional engineering gate/default decision,
+> not a general location or false-positive-rate claim; see [the audit](2026-11-04-research-reset.md).
 
 ## Question
 
@@ -53,21 +64,21 @@ Then the eagle cam's and the midnight cases' outcomes are read and reported as t
 them: found, a different wrong pair inside the gate, or `no_surviving_candidate`.
 
 **Conditions, added before the run's other shards (after its smoke shard).** The smoke shard (Oyster Bay and the
-cut-short case, `runs/2026-11-04-locate-gate-s4of5/`) ran at 15 °C. Since the Tier 2 runs, SDE-D's change made a case's
+cut-short case, `runs/2026-11-04-locate-gate-s4of5/`) ran at 15 °C. Since the Tier 2 runs, the geometry study’s change made a case's
 station temperature apply only when a run asks for it (`bench run --weather`), and the Tier 2 finds were made with it
 (Oyster Bay at 25.6 °C, each flight's own speed from its height). At 15 °C Oyster Bay's comparable search ranks the true
 pair third (the winner, a26f86 + a77707, scores 17.98), with the gate keeping the whole stated day. So the gate is judged
 against Tier 2 at Tier 2's conditions: all ten cases with `--weather`, criterion as above. The 15 °C reading is reported
 beside it, since it says the Tier 2 find depends on the station temperature.
 
-**Both settings, added before the 15 °C runs (PM, 2026-11-04).** Weather stays off by default, so the gate and
+**Both settings, added before the 15 °C runs (review, 2026-11-04).** Weather stays off by default, so the gate and
 locate's two new defaults are judged at both settings. At the station temperature: `locate-gate-w` (the gate,
 locate's defaults, `--weather`). At 15 °C: `locate-gate-15` (the gate, `--pair-rule both`, the filter on) and
 `locate-15-off` (the same with the filter off); `both` refines comparable's answer and reports top2's beside it. The
 gate is judged at each setting by the criterion above. The defaults are judged at 15 °C by the Tier 2 record's
 criteria 3 and 4 (comparable finds more seed cases than top2 and loses none; the filter on finds more and loses none,
 with the negatives still unlocated), with the gate on in all of them. If either fails at 15 °C, that is reported with
-the numbers for the PM to decide, not applied by rule.
+the numbers for review to decide, not applied by rule.
 
 ## Results
 
@@ -133,10 +144,10 @@ plus 6 s (it must be 0). From `tools/experiments/2026-11-04/locate_tier2.py`, af
 - **locate's defaults hold at 15 °C with the gate.** Pair rule (criterion 3): comparable finds the eagle cam with the
   filter on; top2 finds no seed case at either filter setting (its eagle-cam search keeps no candidate, its Oyster Bay
   pick is the 77 km pair). Silence filter (criterion 4): on finds the eagle cam, off finds no seed case, and the
-  negatives stay unlocated. Both defaults stand at the benchmark's present setting, so nothing is put to the PM here.
+  negatives stay unlocated. Both defaults stand at the benchmark's present setting, so nothing is put to review here.
 - **What it means for step A.** With the gate, step A locates one recording of two at each setting, but not the same
   one: Oyster Bay at the station temperature, the eagle cam at 15 °C (true pair) and to 0.33–0.39 km at every setting.
-  That one recording's find flips with the speed of sound is the ill-conditioned event fit SDE-D traced, now seen from
+  That one recording's find flips with the speed of sound is the ill-conditioned event fit the geometry study traced, now seen from
   automatic events too. The midnight check still never fires on these clips: the gate leaves no pair to give it a
   clock past midnight.
 

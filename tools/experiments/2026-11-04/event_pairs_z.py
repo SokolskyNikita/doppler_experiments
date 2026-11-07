@@ -1,4 +1,4 @@
-"""PLAN Phase 2 item 7, stage A: event choice by the comparable score Z. SDE-B's event_pairs.py (copied, not
+"""PLAN Phase 2 item 7, stage A: event choice by the comparable score Z. the benchmark study's event_pairs.py (copied, not
 changed) with run_search(comparable=True): each event is scored against its own null and the ten pairs of
 detect's top five are ranked by their search's top Z, blind, and the ranking hashed before any label is read.
 
@@ -7,7 +7,7 @@ Criterion (docs/experiments/2026-11-04-comparable-score.md, fixed before running
   A2  oyster-bay-moved-wsw150: the top pair's Z margin over the second pair is no larger than the eagle cam's
       true pair's Z margin over its second.
   A3  oyster-bay: events 1 + 2 stay first of its ten.
-Reported separately, as the PM asked: whether the true pair survives the coarse search within 250 m of the
+Reported separately, as specified: whether the true pair survives the coarse search within 250 m of the
 reference (the runner's triples sidecar), and its rank once retained.
 
 usage, from the repo root:
@@ -18,7 +18,7 @@ usage, from the repo root:
 Each of the pairs' searches is a unit (tools/data/shards.py): --shard splits them across machines, a stopped run
 resumes from its folder with --resume, and once every unit is finished in RUN or the --resume folders the ranking
 is written, hashed and only then revealed. The searches run $DOPPLERTRACK_JOBS / --workers-per-search at a time.
---score raw ranks by the search's own score, as SDE-B's event_pairs.py did; --hypotheses is stage B's
+--score raw ranks by the search's own score, as the benchmark study's event_pairs.py did; --hypotheses is stage B's
 run_search(hypotheses=True) (the EVENT_PAIRS_HYPOTHESES=1 switch before)."""
 import argparse
 import hashlib

@@ -5,6 +5,23 @@ question: Does the winner of a whole search clear the 1 % point of its own null 
 outcome: Not met: with the committed fits no positive clears its threshold; the eagle cam's own day sits at its null's median and Oyster Bay's is beaten by 3 of 50 other days, so the maximum score alone can't carry "located"
 -->
 
+> **Documentation privacy correction, 2026-11-04.** Personal provenance and internal attribution
+> are neutralized; numerical outcomes and artifact identifiers are retained. The original is privately
+> hash-preserved at source revision `17758a5`, SHA-256 `cc7a18eed4c91ee3a337c008d3214164c98a0b68f684720f6ec3e6dd66a6cdf4`.
+
+> **Research reset correction, 2026-11-04.** The usefulness criterion fails as reported; none of its
+> positive cases clears the fitted threshold. The 0/3 Clopper–Pearson interval below must not be interpreted
+> as a population interval: hp150 shares Oyster Bay's source, leaving two positive recording groups. Fifty
+> null days do not empirically certify a 1% tail; fitted-Gumbel bootstrap intervals are conditional on that
+> family. A standard fixed-distribution KS cutoff after fitting its parameters is not a calibrated
+> goodness-of-fit test. Repeated routes do not prove this null conservative for every live false-match
+> distribution. The automatic arm was unrun, not mathematically guaranteed to be worse. This is evidence
+> against this statistic's usefulness under this specified null, not against all threshold methods; see [the
+> audit](2026-11-04-research-reset.md).
+> The saved verdicts.json also corrects the later “true pair is the search's own winner” claim:
+> on the eagle cam its highest mode is the wrong pair a0e90b/a25807 at 8.596579; the true pair is second
+> at 8.559615. The raw saved-fit baseline's rank1 is a different statistic/run. Both remain below gamma.
+
 ## Question and criterion
 
 PLAN Phase 4, "Thresholds", as designed in [the proposal](../proposals/2026-11-04-verdict-null.md); the criteria were
@@ -59,8 +76,8 @@ written there before anything ran.
 - **The fits behave.** The KS statistics are 0.09–0.19 at n = 50; about 0.19 is the 5 % point, so the eagle cam's fit
   is at the edge. γ's bootstrap intervals are 1.8–4.4 wide, against gaps of 5.4–6.3 between the positives' scores and
   γ.
-  - So under the PM's rule the extension to 100 days isn't needed for this arm: no gap is inside the interval. Its
-    cuts are still published, for the locate arm and for SDE-D.
+  - So under the review’s rule the extension to 100 days isn't needed for this arm: no gap is inside the interval. Its
+    cuts are still published, for the locate arm and for the geometry study.
 - **The caveat holds.** Other days' traffic flies the same routes, so it nearly matches the audio by construction.
   That makes this null conservative, and it is, by a wide margin.
 

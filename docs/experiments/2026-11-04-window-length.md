@@ -5,6 +5,10 @@ question: Does a shorter STFT window, or a short-near-CPA composite, give the sa
 outcome: No variant meets the criterion (corrected: 0.512 s first read as kept, on a mis-fitted ob-e03). 0.512 s lowers Livermore's brightness v and d medians, but no paired test separates it and the development events are mixed; the gain is resolution, not effective sample count
 -->
 
+> **Documentation privacy correction, 2026-11-04.** Personal provenance and internal attribution
+> are neutralized; numerical outcomes and artifact identifiers are retained. The original is privately
+> hash-preserved at source revision `17758a5`, SHA-256 `98d8480042be67e873d7161ba7c8092c7af4ba7041ca22ad4b7d6a62f1ad39dd`.
+
 ## Question
 
 PLAN Phase 2 item 5. The 2.048 s STFT window smears a pass's steepest part by g·T. Does a shorter
@@ -42,7 +46,7 @@ The paired sign test is reported alongside.
   - (d) `fit_event` again on it, initialised from (a).
   - An **oracle composite** does the same with g taken from the reference curve. It decides nothing:
     it bounds what the first fit's bias costs the selection.
-- **Fits.** `fit_event` (SDE-A's, called unchanged), both objectives, c at 15 °C.
+- **Fits.** `fit_event` (the verdict study’s, called unchanged), both objectives, c at 15 °C.
   - **Livermore:** harmonics 1, the window is the published ridge's span, the band is 0.85–1.15× the
     reference's range (the oracle band, as in [freqtrack](2026-11-04-freqtrack.md)).
   - **Development events:**
@@ -222,7 +226,7 @@ bridges fewest at 0.512 s; the rise and hop cuts still fire.
   count (the 2.048 s window at a 1 s hop is worse).
 - **The two-window rule isn't safe.** Choosing windows from the true sweep rate does worse than from
   the first fit, so the composite's one significant gain is likely its narrowed second fit.
-- **Recommendation**, for the PM:
+- **Recommendation**, for review:
   - keep 2.048 s as the package default;
   - re-measure the window at Phase 2 item 4, on the least-squares fit, where a track rather than a
     brightness sum carries the steep part. Errors of 13–27 % in d are dominated by model error, not
@@ -242,7 +246,7 @@ The first version of this record fitted the blind-labelled event ob-e03 on the w
   the label's first line (130 → 65 Hz). The flight N360NY is associated with its second line,
   345 → 255 Hz (`bench/labels/oyster_bay-0000-1200.json`). So that row compared a fit to another
   source's line against N360NY's speed and distance.
-- **Found by** an outside review, verified by the PM.
+- **Found by** an outside review, verified by review.
 - **Fix.** ob-e03 was re-fitted at every window on 0.85 × 255 to 1.15 × 345 Hz (`window_length.py
   correct-ob-e03`). The other five events and all Livermore numbers are unchanged.
 - **First version's numbers:**

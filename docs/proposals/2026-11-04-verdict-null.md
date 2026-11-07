@@ -1,5 +1,17 @@
 # A null of the maximum for the "located" verdict (proposal)
 
+> **Documentation privacy correction, 2026-11-04.** Personal provenance and internal attribution
+> are neutralized; numerical outcomes and artifact identifiers are retained. The original is privately
+> hash-preserved at source revision `17758a5`, SHA-256 `58de32d6d7c0a4d94268cd3caa8a71b072c64b0e2b4bdb4ce850baa9919a63bf`.
+
+> **Research reset correction, 2026-11-04.** The saved-fit arm failed; the automatic arm and matched-extra
+> penalty were not validated. The proposed 4/4 and 0/4 binomial intervals are not valid population intervals
+> for source-dependent variants. Other-day traffic is a specified competitor distribution; its
+> conservativeness and exchangeability with deployment false matches remain assumptions. Fifty draws plus a
+> fitted Gumbel do not independently establish a 1% error rate, and fitted-parameter KS/ordinary bootstrap
+> diagnostics do not settle tail misspecification. Preserve the failures and freeze the complete search/null
+> procedure in any successor; see [the audit](../experiments/2026-11-04-research-reset.md).
+
 PLAN Phase 4, "Thresholds". This is a design, written before any code or run.
 
 **decision:** whether `locate`'s schema v2 verdict emits "located" when the winner's penalised score clears the 1 %
@@ -33,7 +45,7 @@ single cell's score.
 - **The statistic per draw:** for each number of matched flights m, the best penalised score S_m over every
   distinct mode (below), and the two best modes.
 - **The days:** a fixed, seeded list from the 120 days around each recording's date, skipping ±2 days. It starts at
-  50 per recording group (PM, 2026-11-04). It grows to 100 only if the fitted 1 % point's bootstrap interval is wider
+  50 per recording group (review, 2026-11-04). It grows to 100 only if the fitted 1 % point's bootstrap interval is wider
   than the gap between the positives' scores and the threshold. Each day is cut to the case's margin-padded box, with extraction metadata, as the case's
   own traces are.
 - **A caveat the record keeps.** Another day's traffic flies the same routes, so it can come close to matching the
@@ -61,12 +73,12 @@ Every extra flight is one more chance under H0.
 
 ## Modes and regions
 
-Modes are PLAN's: two candidates are distinct when they lie farther apart than the resolution (2 km, as in B's
+Modes are PLAN's: two candidates are distinct when they lie farther apart than the resolution (2 km, as in the
 locate record) or their clocks differ by more than a pass resolves.
 - **Located:** exactly one mode's S_m clears its threshold γ_m.
 - **Ambiguous, reason `competing_mode`:** two or more modes clear it. Each region is listed, never merged.
 - **Ambiguous, reason `below_null_threshold`:** none clears it.
-- The two reason codes are in B's v2 list (`988a0df`).
+- The two reason codes are in the v2 list (`988a0df`).
 - The eagle cam's true pair and its 14.6 km wrong pair are this case today: two modes about 0.02 apart in Z. A third
   flyover that only the true clock explains is what can separate them, and it does, via m = 3
   ([frozen-clock](../experiments/2026-11-04-comparable-score.md)).
@@ -113,7 +125,7 @@ Criteria, each case judged against its own null's γ_m:
   - So the locate arm shifts each null day's traces by whole days onto the recording's date, keeping the time of
     day, and runs with the gate on, as the case does.
   - The saved-fit arm runs `run_search`, which has no gate, so its days need no shift.
-  - The null block's names follow B's schema v3 (`verdict.null`).
+  - The null block's names follow schema v3 (`verdict.null`).
 - The null replicates the pair rule and silence filter that `locate`'s verdict uses. A `comparable` draw is ten
-  searches, like the case itself, and the `saved-fit` arm is one. B's final locate record sets the rule; the null
+  searches, like the case itself, and the `saved-fit` arm is one. The final locate record sets the rule; the null
   waits on it.

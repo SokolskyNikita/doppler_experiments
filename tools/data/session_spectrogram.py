@@ -1,6 +1,6 @@
-"""The spectrogram of one session of the owner's home recorder, for a private case's recipe.
+"""The spectrogram of one private recorder session, for a private case recipe.
 
-The recorder (samsung-a17/mic-recorder) writes hourly mono FLACs, a new file after every gap, and a timeline.jsonl whose
+The supported recorder format uses mono FLACs, a new file after every gap, and a timeline.jsonl whose
 file_close events give each file's first-sample UTC (the clock's final estimate) and sample count. The files are placed
 on one timeline by those times, so a gap between files is marked invalid, and transformed with `dopplertrack
 spectrogram`'s defaults: a 2.048 s Hann window, 0.25 s hop, 0.49 Hz bins, whitened by a 600 s running median per bin.

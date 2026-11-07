@@ -118,7 +118,7 @@ def test_a_rising_track_never_gives_a_negative_speed():
 
 
 def _straight_pass_ls():
-    """SDE-D's independent implementation (tools/experiments/2026-11-04/straight_pass_ls.py)."""
+    """the model-error study's independent implementation (tools/experiments/2026-11-04/straight_pass_ls.py)."""
     import importlib.util
     from pathlib import Path
     path = Path(__file__).resolve().parents[1] / "tools/experiments/2026-11-04/straight_pass_ls.py"

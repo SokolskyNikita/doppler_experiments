@@ -56,17 +56,14 @@ CACHE_ROOT = Path(os.environ.get("DOPPLERTRACK_CACHE", Path.home() / ".cache" / 
 SEED_DATA = ("derived", "raw/audio/youtube", "raw/audio/xenocanto", "raw/aux", "raw/models", "raw/audio/a2o",
              "raw/seismic")
 TOOLS = "tools.json"
-# Never on the fleet or in the bucket: the owner's home recordings and anything derived from them (household
-# audio, exact home coordinates, the ADS-B the recorder fetches for a circle around the home). Paths are relative
-# to the data root (PM and SDE-B, 2026-11-04):
-# - these prefixes, any path with a "private" folder in it, and each prefix listed in private/fleet-exclude.txt;
-# - under derived/traces/, everything but the date-named day traces (YYYY-MM-DD/, YYYY-MM-DD.log): the recorder
-#   writes its sessions there (20261104-ha-pilot, -coexist, ...), so only the public day archives' cuts go up.
+# Private recordings and their derivatives are refused unless each file has current approval.
+# These data-root prefixes, any path containing a private folder, and configured exclusions
+# are guarded. Under derived/traces/, only public date-named day cuts bypass this classification.
 PRIVATE_PREFIXES = ("private/", "incoming/", "raw/seattle-home/")
 DAY_TRACE = re.compile(r"derived/traces/\d{4}-\d{2}-\d{2}(\.log|/.*)?")
 
 
-# the owner's recorder sessions, by name: seed refuses to run while one sits under derived/traces/ outside the
+# Recorder session naming patterns: seed refuses to run while one sits under derived/traces/ outside the
 # allow list (private/seed-allow.txt), even though the day-trace rule already keeps it out
 RECORDER_SESSION = re.compile(r"2026\d{4}-(ha-)?(pilot|selftest|speakertest|subtest|coexist|latency)")
 
@@ -99,7 +96,7 @@ def fleet_allow() -> set[str]:
 
 def owner_allowed(rel: str) -> bool:
     """rel is listed in fleet-allow.txt exactly, and is a file: a folder, or a path inside a listed one, is never
-    cleared (the owner approves each file by name; PM, 2026-11-04)."""
+    cleared (the owner approves each file by name; review, 2026-11-04)."""
     rel = rel.strip("/")
     return rel in fleet_allow() and not (DATA_ROOT / rel).is_dir()
 
@@ -111,7 +108,7 @@ def refuse_private(paths, what: str) -> None:
         sys.exit(f"{what} {bad[0]}: a private folder never goes as a whole; the owner clears each file by name in "
                  "private/fleet-allow.txt, and each goes as its own --input")
     if bad:
-        sys.exit(f"{what} {bad[0]}: private data (the owner's home recordings and what is derived from them) never "
+        sys.exit(f"{what} {bad[0]}: private data and its derivatives never "
                  "goes to the fleet or the bucket; it is processed on the Mac only")
 
 

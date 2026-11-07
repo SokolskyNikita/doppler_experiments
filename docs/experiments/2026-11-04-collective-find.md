@@ -2,8 +2,23 @@
 
 <!-- index
 question: Does the collective find (every detected window against every flight's own heard curve, summed non-coherently with a floor) locate the development recordings, and keep the negatives below the verdict null?
-outcome: Located by the search, not yet by the verdict: the third design (1 km coarse grid, best 120 s stretch, ±25 % tone) ranks Oyster Bay's true cell first of 15,253, winner 0.3 km with both true flights; the other-day null on Z decides
+outcome: Partial development evidence only: v3 Oyster Bay has a 318 m cell0 candidate with both true flights, no all-kept-cell winner or matched null; eagle regresses, v4 unmeasured
 -->
+
+> **Documentation privacy correction, 2026-11-04.** Personal provenance and internal attribution
+> are neutralized; numerical outcomes and artifact identifiers are retained. The original is privately
+> hash-preserved at source revision `17758a5`, SHA-256 `9f9c7e3eec91d4eb40ab481cd9598863d9cd787019b16f3b6996f9a35eff1a87`.
+
+> **Research reset correction, 2026-11-04.** “Found” below describes selected search candidates, not a
+> passed locator or verdict criterion. The v2 fine merge is incomplete (nine of 120 non-Oyster extra-cell
+> units missing); v3's saved merge contains only cell0's fine result for each of eight cases. Oyster Bay's 318
+> m v3 candidate is therefore not the winner over all retained cells. The v3 eagle candidate fails the
+> true-flight requirement, and v4 has no completed local result. The pulled 84 other-day draws use v1's 2
+> km/top5/±10% statistic, not v2/v3/v4; no matching collective verdict was established. Their local folders
+> contain result.json but lack the null_draws.npz consumed by the current judge. Claims that “their nulls
+> priced” later changes are conditional design statements, not completed calibration. Successive
+> margin/tone/grid/subwindow/pass-rule changes are new designs, beyond the original single clock-width retune.
+> See [the audit](2026-11-04-research-reset.md).
 
 **Where it stands: located by the search, not yet by the verdict.**
 - **Oyster Bay.** Under the third design step (a 1 km coarse grid, each window scored over its best 120 s stretch, each candidate's tone over ±25 %), Oyster Bay's true cell is the coarse map's maximum, rank 1 of 15,253. The top cell's fine winner is 0.3 km from the truth, with both true flights matched.
@@ -12,14 +27,14 @@ outcome: Located by the search, not yet by the verdict: the third design (1 km c
   - "Found at rank 1" is the search's result, not a claim.
   - oyster-bay-hp150-aac32k is the cleaner positive: rank 1, with only 4 cells inside the margin.
 - **The eagle cam regressed** under the third design, from 2nd to 37th, outside the margin. The true-point diagnostic says whether the fixed 120 s stretch cost it. If it did, the stretch becomes per-window, the line's own extent from the detector (PLAN item 6).
-- **Not yet a claim.** Only A's other-day null on the collective Z can say whether 18.50 clears that ceiling, and it hasn't been drawn for this statistic yet.
+- **Not yet a claim.** Only the other-day null on the collective Z can say whether 18.50 clears that ceiling, and it hasn't been drawn for this statistic yet.
 - **Open:** ace391's weak window (z 0.62), now a detector-window question (PLAN item 6).
 
 The sections below follow the work in order: the first design, the second, the diagnostics that split their faults, and the third.
 
-**Question.** The design is [the collective-find proposal](../proposals/2026-11-04-collective-find.md), accepted by the PM.
+**Question.** The design is [the collective-find proposal](../proposals/2026-11-04-collective-find.md), accepted by review.
 
-**Why drop the event fit.** The case is in [event-fit](2026-11-04-event-fit.md): the brightness objective's flat v–d ridge, and finds that are the true flights' lines bent into a straight-pass shape. There is independent evidence from C's window round 2 ([window-round2](2026-11-04-window-round2.md)).
+**Why drop the event fit.** The case is in [event-fit](2026-11-04-event-fit.md): the brightness objective's flat v–d ridge, and finds that are the true flights' lines bent into a straight-pass shape. There is independent evidence from the window study’s round 2 ([window-round2](2026-11-04-window-round2.md)).
 - **Brightness is bimodal on synthetic passes.** On delay-synthesised straight passes at amplitude 0.03, `fit_event`'s brightness objective lands within about 0.5 % or 20–80 % off, about half the time each, under every window tried. C0's 1,500 m pass gives v errors of 21 %, 0.2 % and 68 % over three seeds.
 - **Contrast stays at or under 2.3 %** in v and d.
 
@@ -27,14 +42,14 @@ So a single brightness fit was never a safe find, even on straight passes. Does 
 
 **What runs** (`src/dopplertrack/collective.py`; `tools/experiments/2026-11-04/collective_run.py`; fleet, one (case, f0 sweep) per 4xlarge box; 15 °C, the weather off).
 - **Detection,** locate's: 60–300 Hz, harmonics 1, top 10, 240 s windows. Its usable windows, the top 10 by score, keep only their bounds, coarse tone and coarse heard CPA.
-- **Coarse to fine.** This is the proposal's section 4 as corrected to the PM before the build: its cost bound counted the time-joined triples after today's speed and distance gates, which the design drops.
+- **Coarse to fine.** This is the proposal's section 4 as corrected to review before the build: its cost bound counted the time-joined triples after today's speed and distance gates, which the design drops.
   - **Coarse:** a 2 km grid with its own CPA table. Each cell is scored as the maximum over its span, with the residual shift ±14 s at 2 s and the f0 sweep ±12 % at 2 %, on 60 samples.
   - **Fine:** a 200 m grid inside the coarse cells with Z ≥ 0.7 of the coarse maximum, with the shift ±8 s at 0.5 s and the f0 sweep ±10 % at 0.5 %, on 160 samples.
 - **The clock vote:** clocks binned at 20 s, keeping a (row, window) when its bin and the two beside it hold at least two windows.
 - **The sum:** windows add at a point where their best clocks agree within ±6 s (bins of 3 s, ±2 bins).
 - **The normalisation:** each window's z is against its own null, 1,000 CPA rows drawn uniformly, anchored on its coarse CPA, with the same sweep.
 - **Not enforced:** "one window per pass". The record reports any pass matched twice.
-- **The PM's note (1):** the positives run a second time with the f0 sweep at ±5 %, so that the record can say which change did what.
+- **The review's note (1):** the positives run a second time with the f0 sweep at ±5 %, so that the record can say which change did what.
 
 **A design step, recorded before the rerun: the top 5 coarse cells.** The first run's fine stage kept every coarse cell with Z ≥ 0.7 of the coarse maximum.
 - That is 141 cells on north150, a negative, against 12–16 on the positives, and it made the fine stage take 1,400–6,300 s.
@@ -51,20 +66,20 @@ So a single brightness fit was never a safe find, even on straight passes. Does 
 **Criteria (the proposal's, fixed before the run).**
 1. Each positive's maximum lies within 2 km of the truth, and its matched set (windows with z > 0 at the winning point and clock) includes both true flights.
 2. eagle-cam-midnight's winning clock puts the recording on the right UTC day.
-3. Each negative's maximum stays below A's verdict null for Z.
+3. Each negative's maximum stays below the verdict null for Z.
 4. Each positive's search fits Tier 2's budget, 2–3 min per case on a 4xlarge, with its CPA table warm.
 
 One counted retune is allowed, of the clock vote's cluster width.
 
 **The eagle cam's event 2,** the weak window, is reported explicitly: its z at the winning clock, and whether the maximum lands within 2 km while it contributes nothing.
 
-**From the first run, said plainly.** The eagle cam at ±10 % is the first time any method has put both true flights in the matched set from automatic windows: 0.5 km from the nest, with the weak window contributing (a336e4 at z 1.96). But north150, a negative, reaches Z = 16.7 against the eagle cam's 17.2. So the sum alone is not yet a verdict, and A's null is what decides.
+**From the first run, said plainly.** The eagle cam at ±10 % is the first time any method has put both true flights in the matched set from automatic windows: 0.5 km from the nest, with the weak window contributing (a336e4 at z 1.96). But north150, a negative, reaches Z = 16.7 against the eagle cam's 17.2. So the sum alone is not yet a verdict, and the null is what decides.
 
 **Expectation, written before the run.**
 - Oyster Bay and its copy pass 1, with event 2 matched through ace391's own curve.
 - The eagle cam passes 1 only if its event 2's window earns z > 0 at the true clock, or if another window carries a336e4. I expect the latter to be unlikely, so it may land with a2baea and some other window.
 - The runtime is the open risk: the coarse stage's candidates are unbounded by any speed or distance gate.
-- **Against the verdict null, written before it is drawn.** A's saved-fit arm isn't met: against 50 other days' traffic, the eagle cam's own-day best pair Z (8.60) sits at the null's median, Oyster Bay's (19.96) is beaten by 3 of 50 days, and the WSW negative's best wrong answer (17.88) looks like Oyster Bay's truth.
+- **Against the verdict null, written before it is drawn.** the saved-fit arm isn't met: against 50 other days' traffic, the eagle cam's own-day best pair Z (8.60) sits at the null's median, Oyster Bay's (19.96) is beaten by 3 of 50 days, and the WSW negative's best wrong answer (17.88) looks like Oyster Bay's truth.
   - The statistic that has separated the eagle cam's true candidate from its 14.6 km rival is the frozen-clock count of extra flyovers, and Z summed over all windows at one clock generalises it. So it is the statistic with a chance.
   - The two negatives already finished reach Z = 12.7 and 16.7, against the eagle cam's 17.2. So I expect the collective Z's own-day maxima to sit in the upper part of the other-day null at best, and not to clear γ on the eagle cam.
   - If it doesn't clear, the record says so, and the evidence, not the threshold, is what gets rethought.
@@ -101,12 +116,12 @@ One counted retune is allowed, of the clock vote's cluster width.
 - **It is general** if the pair rule also fails on straight controls that the collective find gets.
 
 **Expectation.**
-- The pair rule lands in wrong basins on most turn and both cases at every amplitude, and on some straight ones at 0.02. C's window round 2 found brightness bimodal even on straight synthetic passes, though `detect` and locate's ten searches use contrast.
+- The pair rule lands in wrong basins on most turn and both cases at every amplitude, and on some straight ones at 0.02. The window study’s round 2 found brightness bimodal even on straight synthetic passes, though `detect` and locate's ten searches use contrast.
 - The collective find is within 2 km on all cases at 0.05 and 0.03, and on some at 0.02.
 
 ## The own-day rerun: the top 5 coarse cells (40454ae)
 
-Twelve units on 12 spot 8xlarge boxes, the unit shards relaunched after spot interruptions at the same commit, merged into `runs/2026-11-04-collective-find-merge/` (`collective.json`, and `OWN.json` for A's null). Each unit's result was written before any label was read.
+Twelve units on 12 spot 8xlarge boxes, the unit shards relaunched after spot interruptions at the same commit, merged into `runs/2026-11-04-collective-find-merge/` (`collective.json`, and `OWN.json` for the null). Each unit's result was written before any label was read.
 
 | Case | Sweep | Z | Second mode ≥ 2 km off | Distance from truth | True flights matched | Fine stage |
 |---|---|---|---|---|---|---|
@@ -123,10 +138,10 @@ Twelve units on 12 spot 8xlarge boxes, the unit shards relaunched after spot int
 | eagle-cam-clip-18000s | ±5 % | 17.21 | 14.76 | 1.3 km | both (z 6.59, 2.44) | 816 s |
 | eagle-cam-midnight | ±5 % | 10.10 | 9.50 | 23.5 km | – | 553 s |
 
-**Against the criteria.** Criterion 3 waits for A's γ; its draws are the other-day null below.
+**Against the criteria.** Criterion 3 waits for the verdict threshold γ; its draws are the other-day null below.
 1. **Fails on Oyster Bay and its copy at both sweeps; holds on the eagle cam clip at both.** eagle-cam-midnight's winner is 19 km off.
 2. **Holds only trivially.** eagle-cam-midnight's clock puts the recording on 2024-12-28, but 9.3 h from its start.
-3. **Waits for A's γ.**
+3. **Waits for the verdict threshold γ.**
 4. **Fails.** The fine stage alone takes 6–42 min per case against 2–3 min, though the top-5 rule cut it 2–6× from the first run.
 
 **Why Oyster Bay fails.**
@@ -151,7 +166,7 @@ Twelve units on 12 spot 8xlarge boxes, the unit shards relaunched after spot int
 **The step, fixed now.**
 1. **The coarse map is written whole,** every cell's Z, so the true cell's rank is known on each case. The fine stage keeps every coarse cell with Z ≥ Z_max − 2σ_c, where σ_c is 1.4826 × the MAD of the coarse Z over the cells with Z > 0. The count is reported, not fixed, under a cap of 20 cells by Z. Where the cap binds, the record gives the margin it reached.
 2. **The tone is each candidate's own.** For each (point, flight, window), the score is maximised over f0 across ±25 % of detection's coarse tone: the crop's span holds it, and ace391 needs −10.4 %. So each candidate flight's curve picks its own f0 from the window's observed frequencies, instead of starting from detection's.
-   - This is the PM's variant (b). Its look-elsewhere cost is the same as any ±25 % sweep's. Each window's null is drawn with the same rule, so the cost is priced there, and the other-day null redraws on it.
+   - This is the review’s variant (b). Its look-elsewhere cost is the same as any ±25 % sweep's. Each window's null is drawn with the same rule, so the cost is priced there, and the other-day null redraws on it.
    - The coarse stage takes the same ±25 % (at 2 % steps); the fine stage steps at 0.5 %.
 
 **The cost, and its bound.**
@@ -248,8 +263,8 @@ Twelve units on 12 spot 8xlarge boxes, the unit shards relaunched after spot int
 | 3×3 sub-grid at the dense sweep | 9 × 0.81 ms | 33.8× |
 | 1 km grid (4 points per cell), today's sweep | 4 × 0.21 ms | 4.0× |
 
-   - **Both of the PM's options cost more than 2×.** The dense version is 6.5×, about 18 min per case at Oyster Bay's 167 s coarse stage.
-   - **The sub-grid is the PM's upper bound.** It costs about the same (6.1×), and it samples position, which a denser shift or tone can't: the true cell's centre is 1.0 km from the truth, and a 1 km offset changes the curve's shape.
+   - **Both of the review’s options cost more than 2×.** The dense version is 6.5×, about 18 min per case at Oyster Bay's 167 s coarse stage.
+   - **The sub-grid is the review’s upper bound.** It costs about the same (6.1×), and it samples position, which a denser shift or tone can't: the true cell's centre is 1.0 km from the truth, and a 1 km offset changes the curve's shape.
    - **The data decides.** `coarse_variants` (unit truth3, 5ba8c4b) scores the true coarse cell under all four samplers, each with its own whole-box nulls. The sampler adopted is the cheapest whose true-cell Z ranks inside the margin.
 
 **The follow-ups' results** (`runs/2026-11-04-collective-truth-3/`, 5ba8c4b; truth-2 is the same pair detail, at fc224b3).
@@ -338,7 +353,7 @@ Twelve units on 12 spot 8xlarge boxes, the unit shards relaunched after spot int
 
 **Fixed now** (aeba858):
 - **The coarse sweep** keeps 60 samples per 120 s stretch, with 1 s shifts and 1 % f0. Each window's n scales with its length. For `detect`'s 240 s windows that is n = 120, so this is the dense sweep from the samplers table: about 7× today's coarse cost per evaluation.
-  - The PM preferred the scaled form expecting it to be cheaper. On 240 s windows it's the same sweep.
+  - The review preferred the scaled form expecting it to be cheaper. On 240 s windows it's the same sweep.
   - The fine sweep is unchanged: 80 per stretch, which is 160 per 240 s window.
 - **One window per pass, enforced.** At a point and clock, a pass (a segment's CPA there) explains only its best window. A window whose best pass is taken falls back to its next, among its best 3 per clock bin. The same rule applies in `point_scores` and in `matched_at`.
   - **The first three designs didn't enforce it.** Overlapping windows on one pass were summed twice: at the eagle cam's true point, a2baea counted at z 6.16 and 3.81.

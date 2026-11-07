@@ -1,5 +1,11 @@
 # The detector's statistic, threshold and band (proposal)
 
+> **Research reset status, 2026-11-04.** S1 failed its synthetic gate. Wider S0 settings passed that gate
+> only. S2's counted retune is interrupted and partial, with no complete gate/Tier1 decision; the final
+> rescore parallelization has no completed equivalence check. The earlier eight-copy and band definitions
+> below are preserved as design history, superseded by their explicit amendments. No new default is justified
+> by this proposal yet; see [the audit](../experiments/2026-11-04-research-reset.md).
+
 PLAN Phase 2 item 6: the band and the threshold curve. This is a design, written before any code or run.
 
 **decision:** whether `detect`'s statistic, threshold and band change.

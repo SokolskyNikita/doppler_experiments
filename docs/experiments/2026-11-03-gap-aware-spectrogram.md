@@ -5,6 +5,10 @@ question: Can the spectrogram keep a recording's timeline through gaps, and what
 outcome: Yes: frames over a gap are invalid, Oyster Bay is unchanged byte for byte, and a gap over the steep part weakens the fit. ESID 740's and 710's minute files abut; their only gaps are two missing-file holes a day
 -->
 
+> **Documentation privacy correction, 2026-11-04.** Personal provenance and internal attribution
+> are neutralized; numerical outcomes and artifact identifiers are retained. The original is privately
+> hash-preserved at source revision `17758a5`, SHA-256 `d3522fcfa023326f4aff06ec317d8438768eff5daeaf7872d2479be3fb452c4f`.
+
 ## Question
 
 PLAN Phase 1 item 8. Can the spectrogram keep a recording's timeline through gaps in the audio,
@@ -206,7 +210,7 @@ same seeds:
   96–97 s per site-day, each followed by a jump in the start second that looks like a device
   restart. ESID 375 and 937 have one 2 s hole between their two files. The cause of the 60 s files
   is undetermined (see above).
-- **Acceptance, as agreed with the PM.** For f0, v and d, the mean shift over seeds is within 2
+- **Acceptance, as agreed with review.** For f0, v and d, the mean shift over seeds is within 2
   standard errors of zero and each seed's shift within 4 % of the parameter, with every gap at least
   20 s from CPA. t_cpa is within one hop on every seed. A gap centred on CPA weakens the score below
   (1 − invalid share) × uncut, and below the same pass with its gaps elsewhere. Both pass.
@@ -222,7 +226,7 @@ same seeds:
   > calibration or evaluation (decision 2). 740 and 710 hold 60 s files that abut, with two
   > missing-file holes a day; 375 has a 2 s hole between its two files. All need the gap-aware
   > spectrogram (Phase 1 item 8), which marks the holes invalid
-- **MANIFEST.md.** SDE-D has already written the corrected ESID 740/710 note (data root
+- **MANIFEST.md.** the geometry study has already written the corrected ESID 740/710 note (data root
   MANIFEST.md, lines 49–55), and it agrees with these numbers. It cites this record as
   `2026-11-04-gap-aware-spectrogram.md`; the record's name is `2026-11-03-gap-aware-spectrogram.md`.
   The note could also add 710's holes (03:09:06 → 03:11:43 and 15:34:43 → 15:37:20) and 375's and

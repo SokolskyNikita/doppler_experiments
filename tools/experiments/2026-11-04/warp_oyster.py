@@ -341,7 +341,7 @@ def peak_rates(lat0, lon0, cands, traces):
     return out
 
 
-# ---- refinement (PM's option (a)): around each scorer's top candidate, its flight pair fixed -----------
+# ---- refinement (review option (a)): around each scorer's top candidate, its flight pair fixed -----------
 
 REFINE_CLOCK = (1.0, 0.1)               # +-1 s at 0.1 s around the top candidate's best clock
 

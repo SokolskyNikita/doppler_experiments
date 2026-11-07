@@ -5,6 +5,10 @@ question: Does a local tracker with an off state beat `ridge()` against the traj
 outcome: Not met: run 1 had lower error (0.45 % against 0.48 %) and 2.8× fewer bridges but 17× more fragments; the one retune (run 2) failed all three. The off state keeps it on manoeuvring passes (0.84 % against 15 %); ssqueezepy locks onto other lines (14 %)
 -->
 
+> **Documentation privacy correction, 2026-11-04.** Personal provenance and internal attribution
+> are neutralized; numerical outcomes and artifact identifiers are retained. The original is privately
+> hash-preserved at source revision `17758a5`, SHA-256 `1ffd74c267f44d1ccb4aa9ed8ce5a24f81ae016941cf9e8abf7d6b232dd0b0cc`.
+
 ## Question
 
 PLAN Phase 2 item 3. Does a local tracker beat `tracks.ridge()` against the trajectory-derived
@@ -74,7 +78,7 @@ error than `ridge()`, with no more false bridges and no more fragments.
 
 ## Knobs
 
-`TrackParams` has 23 fields. The 21 I quoted to the PM missed two: `exclusion_bins` and `max_tracks`.
+`TrackParams` has 23 fields. The 21 I quoted to review missed two: `exclusion_bins` and `max_tracks`.
 
 | Knob | Run 1 | Run 2 | How it was set |
 |---|---|---|---|

@@ -5,6 +5,10 @@ question: Does scoring each event pair in units of its own wrong guesses put eve
 outcome: Not met: A1 is inside the null's noise and not separable; the comparable score moves the eagle cam's true pair from 5th to 2nd and no further
 -->
 
+> **Documentation privacy correction, 2026-11-04.** Personal provenance and internal attribution
+> are neutralized; numerical outcomes and artifact identifiers are retained. The original is privately
+> hash-preserved at source revision `17758a5`, SHA-256 `062fd67434a63aa8c2f07cb35a5726a7d1401cdd86c59260f4c8cd73ba0e0c38`.
+
 ## Question and criterion
 
 PLAN Phase 2, item 7, stage A. The [event-pairs](2026-11-04-event-pairs.md) test found that ranking `detect`'s
@@ -30,7 +34,7 @@ scale. Does scoring each event against its own null put them on one? Written bef
 - **z₂ errs low.** Event 2 is scored at event 1's shift, while its null maximises over shifts.
 
 **Criterion.** At raw-audio, on the ten pairs of each case's top five `detect` events, from the raw-audio
-baseline at `5314396` (SDE-B's selection), ranked blind:
+baseline at `5314396` (the benchmark study’s selection), ranked blind:
 - **A1.** On `eagle-cam-clip-18000s`, the true pair (`detect` ranks 2 + 5) ranks first of the ten by top Z.
 - **A2.** On `oyster-bay-moved-wsw150`, the top pair's Z margin over the second pair is no larger than the
   eagle cam's true pair's Z margin over its second.
@@ -54,7 +58,7 @@ If A1–A3 pass, stage A ships: `comparable` as library code, and a runner profi
 events, ten pairs, ranked by Z) beside `raw-audio`. `raw-audio`'s top-two rule is unchanged until stage B's
 B1 and B2 pass and a Tier 2 run shows no regression on the seed cases.
 
-**Script:** [`event_pairs_z.py`](../../tools/experiments/2026-11-04/event_pairs_z.py), SDE-B's
+**Script:** [`event_pairs_z.py`](../../tools/experiments/2026-11-04/event_pairs_z.py), the benchmark study’s
 `event_pairs.py` copied with `comparable=True` added, using its run-folder layout.
 
 ## Results
@@ -101,13 +105,13 @@ in its search, against 10th by raw score. The other nine pairs don't hold the tr
   true flyovers, which are genuinely the best-explained events in that audio, so Z picks them for the right
   reason. A busy box then offers a wrong flight pair that explains them well. So event-pair ranking can't
   make a wrong location less decisive: A2 asks event choice to do the verdict's job.
-- **Two results kept apart, as the PM asked.** Survival: on the eagle cam the true pair survives the coarse
+- **Two results kept apart, as review asked.** Survival: on the eagle cam the true pair survives the coarse
   search within 250 m in its own search; on Oyster Bay, under today's heard gate, it doesn't. Rank once
   retained: 1st on the eagle cam, 4th on Oyster Bay.
 - **The size of the eagle-cam miss.** At 0.03 in Z, it is well inside the run's noise. A different null
   draw of the same size would move each event's median by about 1.25σ/√1000 ≈ 0.04σ, which is enough to
   swap the two pairs.
-- **Not spent.** The one retune is kept, by the PM's decision. `comparable=True` stays as off-by-default library
+- **Not spent.** The one retune is kept, by the review’s decision. `comparable=True` stays as off-by-default library
   code (`a440f85`).
 
 **A2 is withdrawn as a pass/fail criterion. This is a criterion change, made after seeing the result,
@@ -133,7 +137,7 @@ test can't decide at this N, and the retune, if spent, goes on N.
 
 ## A frozen-clock test of the eagle cam's two best candidates
 
-Asked for by the PM; development data only. Inside the eagle cam's true-pair search, the two best candidates score
+Asked for by review; development data only. Inside the eagle cam's true-pair search, the two best candidates score
 almost alike:
 - 1st: Z 8.342, the true flights a2baea/a336e4, 917 m from the nest;
 - 2nd: Z 8.323, a0e90b/a25807, 14.6 km away, with a recording clock 792 s (13.2 min) different.
@@ -191,7 +195,7 @@ Rerun on 2026-11-04 at `18ff8b4` to answer cloud_jobs.md's decision line: is eve
   8.157 and 8.176 now.
 - So the call between them is the null's sampling, not the recording.
 
-**Outcome (PM, 2026-11-04).**
+**Outcome (review, 2026-11-04).**
 - A1 is inside the null's noise at N = 1,000, and is not separable. A true pair that a 14.6 km wrong pair beats by
   0.05 in Z ≈ 8 is not something this score separates, whatever the null's size.
 - The comparable score moves the eagle cam's true pair from 5th to 2nd, and no further. A3 is met.

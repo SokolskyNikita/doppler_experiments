@@ -2,8 +2,20 @@
 
 <!-- index
 question: How much of the straight-pass fit's error on Livermore is model error, noise or the optimiser, and what is the information limit?
-outcome: Model error: a median 15.6 % in slant range from the trajectory curve alone, about 3× the Cramér–Rao bound (3.4–4.0 %, 63–74 m, provisional covariance); noise sits at the bound and the optimiser is exact. f0 drift of 0.5 % enters; temperature, interpolation and datum don't
+outcome: Livermore straight-pass trajectory fits miss range by 15.6% (229 m); model mismatch and production-fit failures dominate conditional ideal noise bounds; heavier models and weave flag fail
 -->
+
+> **Documentation privacy correction, 2026-11-04.** Personal provenance and internal attribution
+> are neutralized; numerical outcomes and artifact identifiers are retained. The original is privately
+> hash-preserved at source revision `17758a5`, SHA-256 `ff80b59d56b2d2a87186c70f8b6db2868b0dabe349d6b8d0df02081003e48887`.
+
+> **Research reset status, 2026-11-04.** Later sections supersede intermediate “queued/not started”
+> statements: the corrected full Alaska fleet summary is present (788 crossings, 775 complete at all three
+> sound speeds). Its crossing-bootstrap intervals do not account for repeated flights/nodes/days. Alaska's
+> supplied CPA window and tone-selected band make it an assisted fitter check, not blind location evaluation.
+> The later 20–50 m working bound remains conditional on ideal-model covariance/SNR assumptions, not empirical
+> position coverage. All heavier-model and weave-flag failures below stand; see [the
+> audit](2026-11-04-research-reset.md).
 
 **Question** (PLAN Phase 2 item 2). How much of the fit error on real passes is model error, meaning a turning, climbing or accelerating aircraft fitted as a straight constant-speed pass? How much is measurement noise, and how much is the optimiser? Before that: how much does one pass's curve tell us at all?
 
@@ -326,7 +338,7 @@ Never judged on the residual: RSS ratios are reported only. Curve D (the publish
   - A straight pass is the limit r² = R² + v²u², so the turn model adds one parameter, ω, not three.
 - **Consequences for the approved criterion.** Criteria (1)–(3), on R, stand. (4) is read on |ω|: the sign is not a parameter of the curve. (5) can't be met by construction: the sign and φ are unidentifiable. The φ–R trade becomes a K–R and ω–R trade.
 - **The parametrization to use.** (f0, τ, R, K, ω). Its bound needs ω fixed where ω's interval includes 0, since K and ω merge into Kω² there.
-- **Status.** Nothing has run on Livermore. The amendment waits for the PM.
+- **Status.** Nothing has run on Livermore. The amendment waits for review.
 
 **Numbers** (`runs/2026-11-04-turn-model-fit/`, the design as approved; `runs/2026-11-04-turn-model-profile/`, the identifiable form). Median |R − R*|:
 

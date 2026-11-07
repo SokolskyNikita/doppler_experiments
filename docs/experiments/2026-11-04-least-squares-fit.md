@@ -5,6 +5,16 @@ question: Does a least-squares fit of a frequency track give smaller f0, speed, 
 outcome: Not met; deferred until a track meets item 3's criterion: it beats both objectives on speed and slant range, not on f0 or timing
 -->
 
+> **Documentation privacy correction, 2026-11-04.** Personal provenance and internal attribution
+> are neutralized; numerical outcomes and artifact identifiers are retained. The original is privately
+> hash-preserved at source revision `17758a5`, SHA-256 `b5ba7610af8682a1d37c20ee00c88bbacadba05fdf41f2be0131ab208571e22c`.
+
+> **Research reset provenance note, 2026-11-04.** The failed f0/timing criterion stands. Saved
+> livermore_summary.json contains NaN slant-range medians; the record's stated convention of counting
+> nonfinite fits as infinite error reproduces the printed primary medians (16.7% ordinary,15.2% weighted) from
+> livermore.json. Treat the narrative convention and raw per-fit values as explicit provenance, not as a
+> finite value present in that saved summary. See [the audit](2026-11-04-research-reset.md).
+
 ## Question and criterion
 
 PLAN Phase 2, item 4 (E1, E3). Does fitting the straight-pass model to a frequency track by least
@@ -95,7 +105,7 @@ band. The least-squares f0 errors came out at a median 33 %.
 - So it isn't counted as the retune. Run 1's outputs are kept as `run1_padded_band_*`.
 
 Before run 2 was read, `t_c` was reparametrised relative to the track's first point (`cfd466a`), after
-SDE-D found least squares stopping early on unix-scale times. Refitting all 44 tracks of run 2 with both
+the geometry study found least squares stopping early on unix-scale times. Refitting all 44 tracks of run 2 with both
 versions changed no parameter by more than 2 × 10⁻¹³ relative or 10⁻¹¹ s (`lsfit_reparam_check.py`,
 `reparam_check.json`), so run 2 stands.
 
@@ -151,9 +161,9 @@ by the same method. True gaps: 922.96 s and 331.61 s.
 - **The estimator is right.**
   - It recovers noiseless passes exactly.
   - Its optimum matches a direct four-parameter fit, weighted and not.
-  - It agrees with SDE-D's independent implementation (`straight_pass_ls.py`) to 10⁻⁷ on ideal curves,
+  - It agrees with the geometry study’s independent implementation (`straight_pass_ls.py`) to 10⁻⁷ on ideal curves,
     and to a thousandth of its own SD on a noisy one (`tests/test_track_fit.py`).
-  - SDE-D's item 2 finds a straight-pass fit at the Cramér–Rao bound, with model error setting what real
+  - the geometry study’s item 2 finds a straight-pass fit at the Cramér–Rao bound, with model error setting what real
     passes allow.
 - **The prediction** held on the straight passes for speed and distance, not for f0. On the flagged passes
   and the development recordings it was too kind: there the fit is only as good as `ridge()`'s track, and
@@ -166,7 +176,7 @@ by the same method. True gaps: 922.96 s and 331.61 s.
   variable projection: where the best unbounded β would be positive, the bounded optimum is a flat line.
   A time-reversed pass now fits as flat and not identified, never with a negative speed.
 - **A polish of the best optimum.** `least_squares`, to numerical precision, which the agreement test with
-  SDE-D's fit needed: Nelder-Mead alone stopped at about 10⁻⁷ relative on ideal curves.
+  the geometry study’s fit needed: Nelder-Mead alone stopped at about 10⁻⁷ relative on ideal curves.
 - **Their effect on run 2's tracks** (`bound_polish_change.json`, parameters only):
   - The bound changes exactly the 8 fits that rose (6 Livermore fits, and the two weighted event-2 fits).
     They now fit flat or barely falling curves on the same wrong line.

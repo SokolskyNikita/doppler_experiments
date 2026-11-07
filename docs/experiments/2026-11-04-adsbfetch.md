@@ -5,12 +5,16 @@ question: Is the user's adsbfetch CLI (free tar1090 mirrors) a better flight-dat
 outcome: Not as a replacement: denser tracks at CPA (gap ~10 s against ~20 s, 2–3× points), Oyster Bay unchanged, but the eagle cam flips to a wrong pair 14 km off on the mirrors' trajectories. 13 bugs found, 11 fixed
 -->
 
-**Question.** The user's `adsbfetch` CLI (/Users/nsokolsky/projects2/adsb_data_fetcher) reads tar1090 globe history from four networks: adsbx, which needs a session cookie the user supplies by hand, and three free mirrors, adsbfi, airplanes.live and adsb.lol. Three questions:
+> **Documentation privacy correction, 2026-11-04.** Personal provenance and internal attribution
+> are neutralized; numerical outcomes and artifact identifiers are retained. The original is privately
+> hash-preserved at source revision `17758a5`, SHA-256 `38209ce9b590b04b946a04e219fcca950375437415100c47e65619ad04346850`.
+
+**Question.** The user's `adsbfetch` CLI (the separate adsb_data_fetcher checkout) reads tar1090 globe history from four networks: adsbx, which needs a session cookie the user supplies by hand, and three free mirrors, adsbfi, airplanes.live and adsb.lol. Three questions:
 1. Does it work?
 2. Is its data better than our adsb.lol day-tar cuts where we need it?
 3. Does it change search results?
 
-**Criterion**, fixed by the PM before the runs. The source is worth adopting if:
+**Criterion**, fixed by review before the runs. The source is worth adopting if:
 - on the true flights, the mirror union has at least as many points within ±60 s of CPA as our cut, and no larger gap there;
 - and the saved-fit results are the same or better.
 

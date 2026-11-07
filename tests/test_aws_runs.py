@@ -264,10 +264,10 @@ def test_memory_in_use_is_total_less_available(tmp_path, monkeypatch):
 
 def test_private_data_never_reaches_the_fleet_or_the_bucket(tmp_path, monkeypatch):
     monkeypatch.setattr(runs, "DATA_ROOT", tmp_path)
-    for p in ("private/seattle/site.json", "raw/seattle-home/2026-11-04.flac", "incoming/seattle-home/a.wav",
-              "derived/traces/20261104-ha-pilot/area.jsonl", "derived/traces/20261104-ha-pilot-2/area.jsonl",
-              "derived/traces/20261105-pilot/x", "derived/traces/20261104-coexist", "derived/traces/day1.launch.log",
-              "derived/foo/private/x.npz", "runs/2026-11-05-home/private/a.json"):
+    for p in ("private/seattle/site.json", "raw/seattle-home/fixture.flac", "incoming/seattle-home/a.wav",
+              "derived/traces/20260101-ha-pilot/area.jsonl", "derived/traces/20260101-ha-pilot-2/area.jsonl",
+              "derived/traces/20260102-pilot/x", "derived/traces/20260101-coexist", "derived/traces/day1.launch.log",
+              "derived/foo/private/x.npz", "runs/fixture/private/a.json"):
         assert runs.is_private(p), p
         with pytest.raises(SystemExit, match="private data"):
             runs.refuse_private([p], "--input")
@@ -300,17 +300,17 @@ def test_seed_refuses_while_a_recorder_session_sits_in_derived_traces(tmp_path, 
     monkeypatch.setattr(runs, "DATA_ROOT", tmp_path)
     monkeypatch.setattr(runs, "outputs", lambda region=None: pytest.fail("seed went on to upload"))
     traces = tmp_path / "derived" / "traces"
-    for name in ("2026-11-01", "20261104-ha-pilot-2", "20261105-pilot", "20261104-ha-latency", "20261104-selftest-3"):
+    for name in ("2026-11-01", "20260101-ha-pilot-2", "20260102-pilot", "20260101-ha-latency", "20260101-selftest-3"):
         (traces / name).mkdir(parents=True)
     a = runs.argparse.Namespace(dry_run=True, run=[])
-    with pytest.raises(SystemExit, match="recorder sessions .*20261104-ha-latency, 20261104-ha-pilot-2, 20261104-selftest-3, 20261105-pilot"):
+    with pytest.raises(SystemExit, match="recorder sessions .*20260101-ha-latency, 20260101-ha-pilot-2, 20260101-selftest-3, 20260102-pilot"):
         runs.seed(a)
     # each named on the allow list: seed goes on (here, to the stubbed bucket lookup)
     (tmp_path / "private").mkdir()
-    (tmp_path / "private" / "seed-allow.txt").write_text("20261104-ha-pilot-2\n20261105-pilot\n20261104-ha-latency\n20261104-selftest-3\n")
+    (tmp_path / "private" / "seed-allow.txt").write_text("20260101-ha-pilot-2\n20260102-pilot\n20260101-ha-latency\n20260101-selftest-3\n")
     with pytest.raises(pytest.fail.Exception, match="went on"):
         runs.seed(a)
-    assert not runs.RECORDER_SESSION.match("2026-11-04") and runs.RECORDER_SESSION.match("20261104-coexist")
+    assert not runs.RECORDER_SESSION.match("2026-11-04") and runs.RECORDER_SESSION.match("20260101-coexist")
 
 
 def test_an_input_is_read_as_a_file_a_folder_or_missing():
@@ -333,35 +333,36 @@ def test_an_input_is_read_as_a_file_a_folder_or_missing():
 
 
 def test_the_owner_clears_private_files_one_by_one(tmp_path, monkeypatch):
+    """Synthetic manifest: case approval never substitutes for each exact file's approval."""
     import json
     monkeypatch.setattr(runs, "DATA_ROOT", tmp_path)
-    pilot = tmp_path / "private" / "traces" / "20261104-ha-pilot-2"
-    pilot.mkdir(parents=True)
-    (pilot / "area.npz").write_text("x")
-    (pilot / "area.log").write_text("x")
+    session = tmp_path / "private" / "traces" / "20260101-ha-pilot-2"
+    session.mkdir(parents=True)
+    (session / "area.npz").write_text("x")
+    (session / "area.log").write_text("x")
     (tmp_path / "bench").mkdir()
     (tmp_path / "bench" / "cases.json").write_text(json.dumps({"cases": [
-        {"id": "seattle-home-20261104-ha-pilot-2", "private": True, "site": "seattle-home",
-         "audio": {"path": "private/audio/ha-pilot-2.flac"}}]}))
+        {"id": "private-fixture", "private": True, "site": "fixture-site",
+         "audio": {"path": "private/audio/fixture.flac"}}]}))
     monkeypatch.setattr(runs, "REPO", tmp_path)
     # nothing cleared: every private file and case is refused, as before
     with pytest.raises(SystemExit, match="fleet-allow"):
-        runs.case_inputs(["seattle-home-20261104-ha-pilot-2"])
+        runs.case_inputs(["private-fixture"])
     with pytest.raises(SystemExit, match="private data"):
-        runs.refuse_private(["private/traces/20261104-ha-pilot-2/area.npz"], "--input")
+        runs.refuse_private(["private/traces/20260101-ha-pilot-2/area.npz"], "--input")
     (tmp_path / "private" / "fleet-allow.txt").write_text(
-        "# each approved by name by the owner\nseattle-home-20261104-ha-pilot-2\n"
-        "private/traces/20261104-ha-pilot-2/area.npz\nprivate/traces/20261104-ha-pilot-2/\n")
+        "# each approved by name by the owner\nprivate-fixture\n"
+        "private/traces/20260101-ha-pilot-2/area.npz\nprivate/traces/20260101-ha-pilot-2/\n")
     # the case id permits the launch; its files still need their own lines
-    assert runs.case_inputs(["seattle-home-20261104-ha-pilot-2"]) == ["private/audio/ha-pilot-2.flac"]
+    assert runs.case_inputs(["private-fixture"]) == ["private/audio/fixture.flac"]
     with pytest.raises(SystemExit, match="private data"):
-        runs.refuse_private(["private/audio/ha-pilot-2.flac"], "--input")
+        runs.refuse_private(["private/audio/fixture.flac"], "--input")
     # exactly the listed file passes; its unlisted sibling doesn't, and a listed folder never does
-    runs.refuse_private(["private/traces/20261104-ha-pilot-2/area.npz"], "--input")
+    runs.refuse_private(["private/traces/20260101-ha-pilot-2/area.npz"], "--input")
     with pytest.raises(SystemExit, match="private data"):
-        runs.refuse_private(["private/traces/20261104-ha-pilot-2/area.log"], "--input")
+        runs.refuse_private(["private/traces/20260101-ha-pilot-2/area.log"], "--input")
     with pytest.raises(SystemExit, match="clears each file by name"):
-        runs.refuse_private(["private/traces/20261104-ha-pilot-2"], "--input")
+        runs.refuse_private(["private/traces/20260101-ha-pilot-2"], "--input")
 
 
 def test_check_plans_capacity_region_by_region():
@@ -377,10 +378,10 @@ def test_check_names_each_input_missing_where_the_job_would_get_it(tmp_path, mon
     here = {"runs/2026-11-04-livermore-audit"}.__contains__
     got = runs.input_problems(["derived/oyster_bay/rec.npz", "derived/swfl", "derived/missing.npz",
                                "runs/2026-11-04-livermore-audit", "runs/2026-11-04-gone",
-                               "private/traces/20261104-ha-pilot-2/area.npz"], in_bucket, here)
+                               "private/traces/20260101-ha-pilot-2/area.npz"], in_bucket, here)
     assert got == ["derived/missing.npz: not in the bucket's data/ (seed it: runs seed)",
                    f"runs/2026-11-04-gone: not in {tmp_path} (it ships from here)",
-                   f"private/traces/20261104-ha-pilot-2/area.npz: not in {tmp_path} (it ships from here)"]
+                   f"private/traces/20260101-ha-pilot-2/area.npz: not in {tmp_path} (it ships from here)"]
 
 
 def test_a_rehearsal_is_ok_to_its_cutoff_and_fails_on_an_error():

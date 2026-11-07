@@ -5,6 +5,10 @@ question: Can the pipeline take a measured temperature without changing anything
 outcome: Yes: `--temperature` on five commands and a null-by-default `weather` block per case; with no temperature the pipeline gets no c, so every default path is unchanged
 -->
 
+> **Documentation privacy correction, 2026-11-04.** Internal attribution is neutralized;
+> numerical outcomes and artifact identifiers remain. The original is privately hash-preserved at
+> source revision `17758a5`, SHA-256 `9d156a8d9d9d0e1c7fec6af8942cb652bf28b7e8509910ddeb80cb63e983c5b8`.
+
 ## Question
 
 PLAN Phase 2 item 2's engineering outcome: the pipeline fixes the speed of sound at its 15 °C value in every caller,
@@ -47,7 +51,7 @@ Tier 0, `tests/test_sound_speed.py` (25 tests):
 `tools/check.sh` is green at 785d360: 235 passed, 4 skipped.
 
 No case sets a temperature, so no benchmark result can change. An end-to-end warm Tier 1 comparison wasn't possible:
-dev's own changes to `tracks.py` and `audio.py` (A's fit_event messages, C's zero-padded STFT) since the last warm run
+dev's own changes to `tracks.py` and `audio.py` (fit_event messages and zero-padded STFT) since the last warm run
 had already changed the detection cache's key, so the run would have been a cold one with a changed detector; it was
 stopped rather than tie up the shared machine for an hour. Its partial folders (`runs/2026-11-04-bench-9f094a1-t1/`,
 `-785d360-t1/`, `-785d360-t1-2/`) hold nothing to use.
@@ -57,7 +61,7 @@ stopped rather than tie up the shared machine for an hour. Its partial folders (
 `src/dopplertrack/atmosphere.py`, `src/dopplertrack/cli.py`, `bench/runner.py`, `bench/tier1.py`, `bench/cases.py`,
 `bench/cases.json`, `tests/test_sound_speed.py`.
 
-## Per-flight effective sound speed (follow-up, SDE-2)
+## Per-flight effective sound speed (follow-up, effective-speed study)
 
 One aircraft height per case can't serve flights at 1.1 km and 5.5 km in the same recording, and a c error passes in
 full into speed and range. So, whenever a ground temperature is given, every propagation through the air now uses

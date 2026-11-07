@@ -1,4 +1,4 @@
-"""A physical test of the eagle cam's two best candidates (PM, after stage B's runs; development data only).
+"""A physical test of the eagle cam's two best candidates (after stage B's runs; development data only).
 
 Inside the eagle cam's true-pair search (stage A, runs/2026-11-04-comparable-score/, eagle-cam-clip-18000s--d2d5), the
 two best candidates score 8.342 and 8.323 in Z, sit 14.6 km apart and imply recording clocks 13 minutes apart. Each is

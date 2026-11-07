@@ -2,8 +2,15 @@
 
 <!-- index
 question: Does a calibrated detect statistic (S₁, then the reversed-window null S₂) or a wider band hold 1 false alarm per hour while keeping recall?
-outcome: In progress: S₁ stops at the synthetic gate (its 1/h threshold is 9–11, not ~2); S₀ with 60–900 Hz passes it (4/6 high passes, recall unchanged); S₂, the counted retune, was spot-interrupted before its noise units finished; Tier 1 not run
+outcome: S1 failed the synthetic gate; wider S0 passed synthetic only; S2 is interrupted with partial files, no complete gate or Tier 1, and rescore-pool equivalence unverified
 -->
+
+> **Research reset status, 2026-11-04.** S2 is stopped and partial, not running. Local S2B0 contains
+> noise.json and four pass files; S2B1/B2 contain no completed unit files. No complete S2 gate or real Tier1
+> result exists locally. The process-pool rescore edit was stopped before its equivalence check, so it is
+> unverified. S1's synthetic failure stands. The narrow-band S0 Tier1 failure below does not by itself
+> establish failure of every wider-band S0 setting; those real-data comparisons were not completed. See [the
+> audit](2026-11-04-research-reset.md).
 
 ## Question
 

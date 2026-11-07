@@ -15,7 +15,7 @@ usage, from the repo root:
 
 NULL_SET picks the recordings, in every mode: saved-fit (default; the saved-fit arm, plan verdict_null_days.json),
 saved-fit-ext (the same groups' next 50 days, skipping those already cut; plan verdict_null_days-saved-fit-ext.json) or
-essex (SDE-D's jets-only negative xenocanto-xc990819, plan verdict_null_days-essex.json)."""
+essex (the model-error study's jets-only negative xenocanto-xc990819, plan verdict_null_days-essex.json)."""
 import argparse
 import datetime
 import json
@@ -42,7 +42,7 @@ TYPES = "raw/aux/opensky/doc8643AircraftTypes.csv"       # the aircraft-type tab
 SETS = {"saved-fit": {"2026-09-08": ["oyster-bay", "oyster-bay-moved-wsw150", "oyster-bay-moved-north150"],
                       "2024-12-28": ["eagle-cam-clip-18000s"]},
         "essex": {"2025-04-20": ["xenocanto-xc990819"]}}
-SETS["saved-fit-ext"] = SETS["saved-fit"]      # 50 more days per group, from the days the first 50 left (PM, 2026-11-04)
+SETS["saved-fit-ext"] = SETS["saved-fit"]      # 50 more days per group, from the days the first 50 left (review, 2026-11-04)
 SET = os.environ.get("NULL_SET", "saved-fit")
 GROUPS = SETS[SET]
 PLAN = Path(__file__).with_name("verdict_null_days.json" if SET == "saved-fit" else f"verdict_null_days-{SET}.json")

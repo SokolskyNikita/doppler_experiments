@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SDE-D's fleet jobs (cloud_jobs_sde_d.md), each sharded over its own boxes, launched at once, and the merges after.
+# the model-error study's fleet jobs (cloud_jobs_sde_d.md), each sharded over its own boxes, launched at once, and the merges after.
 # Needs tools/aws/runs on this branch.
 #
 #   launch_sde_d.sh launch                   both jobs: the turn model's bootstrap and the Alaska rerun at three sound

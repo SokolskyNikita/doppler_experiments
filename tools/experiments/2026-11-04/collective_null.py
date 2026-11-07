@@ -1,8 +1,8 @@
-"""The other-day null for SDE-D's collective find (docs/proposals/2026-11-04-collective-find.md), judged with the
+"""The other-day null for the model-error study's collective find (docs/proposals/2026-11-04-collective-find.md), judged with the
 verdict null's machinery (docs/experiments/2026-11-04-verdict-null.md). Written before any draw was read.
 
 Inputs:
-- SDE-D's draw units, "<case>--null--<day>/null_draws.npz", in the run folders given. Each holds day, max_S (the
+- the model-error study's draw units, "<case>--null--<day>/null_draws.npz", in the run folders given. Each holds day, max_S (the
   map's maximum collective Z over the box and clocks), second_S (the best distinct second mode), lat, lon, n_matched
   and clock_audio_minus_utc_s.
 - OWN.json: {case: {"max_S", "second_S", "lat", "lon", "clock_audio_minus_utc_s"}}, from the own-day runs at the
@@ -18,10 +18,10 @@ Per case:
   reveal.json gives each case's expected outcome and, for a located positive, the distance from the reference.
 
 oyster-bay-sources-removed takes oyster-bay's draws (ALIASES): it differs from oyster-bay only in its own day's traces
-(the true pair removed), so on another day its search is the same computation (SDE-D, 2026-11-04).
+(the true pair removed), so on another day its search is the same computation (the model-error study, 2026-11-04).
 
 usage: collective_null.py OUT_RUN OWN.json OWN_COMMIT DRAWS_COMMIT DIR [DIR ...]
-(the commits are recorded; SDE-D showed 40454ae and 661c10f run the same search)"""
+(the commits are recorded; the model-error study showed 40454ae and 661c10f run the same search)"""
 import hashlib
 import importlib.util
 import json

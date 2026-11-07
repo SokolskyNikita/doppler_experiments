@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SDE-B's five benchmark jobs on the AWS fleet, all at once, one box per case or Tier 1 unit
+# the benchmark study's five benchmark jobs on the AWS fleet, all at once, one box per case or Tier 1 unit
 # (tools/experiments/2026-11-04/cloud_jobs.md). Run from the repo root with `runs` on dev:
 #   tools/experiments/2026-11-04/sde_b_cloud.sh launch          seed the new derived files, start every job
 #   tools/experiments/2026-11-04/sde_b_cloud.sh launch-locate   jobs 1 and 2 only (with LOC=<new prefix> to rerun them)

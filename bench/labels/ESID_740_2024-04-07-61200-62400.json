@@ -6,7 +6,7 @@
   "sha256": "0d7bba2ef829e8fc30ed1db45def9deb961ad6e773066b655742450e1b9ab3bc",
   "t0_utc": "2024-04-07T00:00:00Z",
   "case": "eclipse-esid740",
-  "case_note": "recording seconds here count from 2024-04-07T00:00:00Z; the case timeline starts at its first file, 00:00:46Z, so case seconds = these seconds - 46 (case ids from SDE-B's bench/cases.json at f5ccdfe, not yet on dev)"
+  "case_note": "recording seconds here count from 2024-04-07T00:00:00Z; the case timeline starts at its first file, 00:00:46Z, so case seconds = these seconds - 46 (case ids from the benchmark study's bench/cases.json at f5ccdfe, not yet on dev)"
  },
  "span": [
   61200,
@@ -30,7 +30,7 @@
     ]
    ],
    "harmonics": 2,
-   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "labeller": "Claude-assisted automated label pass, from the contact sheets",
    "blind": true,
    "date": "2026-11-04",
    "notes": "slow, smooth tones drifting down then up; distant source or engine"
@@ -42,7 +42,7 @@
    "end": 61380,
    "lines": [],
    "harmonics": 0,
-   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "labeller": "Claude-assisted automated label pass, from the contact sheets",
    "blind": true,
    "date": "2026-11-04",
    "notes": ""
@@ -67,7 +67,7 @@
     ]
    ],
    "harmonics": 2,
-   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "labeller": "Claude-assisted automated label pass, from the contact sheets",
    "blind": true,
    "date": "2026-11-04",
    "notes": "falls then rises in a V near 213 s with several lines; a ground vehicle more likely than a flyover"
@@ -79,7 +79,7 @@
    "end": 61580,
    "lines": [],
    "harmonics": 0,
-   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "labeller": "Claude-assisted automated label pass, from the contact sheets",
    "blind": true,
    "date": "2026-11-04",
    "notes": ""
@@ -100,7 +100,7 @@
     ]
    ],
    "harmonics": 2,
-   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "labeller": "Claude-assisted automated label pass, from the contact sheets",
    "blind": true,
    "date": "2026-11-04",
    "notes": "rising 100 to 130 Hz at 385-395 s, then a nearly flat line"
@@ -112,7 +112,7 @@
    "end": 61955,
    "lines": [],
    "harmonics": 0,
-   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "labeller": "Claude-assisted automated label pass, from the contact sheets",
    "blind": true,
    "date": "2026-11-04",
    "notes": ""
@@ -133,7 +133,7 @@
     ]
    ],
    "harmonics": 2,
-   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "labeller": "Claude-assisted automated label pass, from the contact sheets",
    "blind": true,
    "date": "2026-11-04",
    "notes": "falls then rises; flat lines at 100 and 130 Hz"
@@ -145,7 +145,7 @@
    "end": 62158,
    "lines": [],
    "harmonics": 0,
-   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "labeller": "Claude-assisted automated label pass, from the contact sheets",
    "blind": true,
    "date": "2026-11-04",
    "notes": ""
@@ -166,7 +166,7 @@
     ]
    ],
    "harmonics": 2,
-   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "labeller": "Claude-assisted automated label pass, from the contact sheets",
    "blind": true,
    "date": "2026-11-04",
    "notes": "loud steep fall 250 to 80 Hz at 960-972 s, then low falling lines 1030-1075 s"
@@ -178,7 +178,7 @@
    "end": 62285,
    "lines": [],
    "harmonics": 0,
-   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "labeller": "Claude-assisted automated label pass, from the contact sheets",
    "blind": true,
    "date": "2026-11-04",
    "notes": ""
@@ -199,7 +199,7 @@
     ]
    ],
    "harmonics": 2,
-   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "labeller": "Claude-assisted automated label pass, from the contact sheets",
    "blind": true,
    "date": "2026-11-04",
    "notes": "falling lines steepest near 1095-1100 s",
@@ -216,7 +216,7 @@
    "end": 62400,
    "lines": [],
    "harmonics": 0,
-   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "labeller": "Claude-assisted automated label pass, from the contact sheets",
    "blind": true,
    "date": "2026-11-04",
    "notes": ""
@@ -226,7 +226,7 @@
   {
    "window": "e740-e01",
    "flight": "unmatched",
-   "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
+   "labeller": "Claude-assisted automated label pass, from the overlay sheets and close-ups",
    "blind": false,
    "date": "2026-11-04",
    "notes": "no pass within 12 km between 17:00 and 17:20 UTC",
@@ -235,7 +235,7 @@
   {
    "window": "e740-e02",
    "flight": "unmatched",
-   "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
+   "labeller": "Claude-assisted automated label pass, from the overlay sheets and close-ups",
    "blind": false,
    "date": "2026-11-04",
    "notes": "no pass within 12 km between 17:00 and 17:20 UTC",
@@ -244,7 +244,7 @@
   {
    "window": "e740-e03",
    "flight": "unmatched",
-   "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
+   "labeller": "Claude-assisted automated label pass, from the overlay sheets and close-ups",
    "blind": false,
    "date": "2026-11-04",
    "notes": "no pass within 12 km between 17:00 and 17:20 UTC",
@@ -253,7 +253,7 @@
   {
    "window": "e740-e04",
    "flight": "unmatched",
-   "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
+   "labeller": "Claude-assisted automated label pass, from the overlay sheets and close-ups",
    "blind": false,
    "date": "2026-11-04",
    "notes": "no pass within 12 km between 17:00 and 17:20 UTC",
@@ -262,7 +262,7 @@
   {
    "window": "e740-e05",
    "flight": "unmatched",
-   "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
+   "labeller": "Claude-assisted automated label pass, from the overlay sheets and close-ups",
    "blind": false,
    "date": "2026-11-04",
    "notes": "no pass within 12 km between 17:00 and 17:20 UTC",
@@ -271,7 +271,7 @@
   {
    "window": "e740-e06",
    "flight": "unmatched",
-   "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
+   "labeller": "Claude-assisted automated label pass, from the overlay sheets and close-ups",
    "blind": false,
    "date": "2026-11-04",
    "notes": "no pass within 12 km between 17:00 and 17:20 UTC",

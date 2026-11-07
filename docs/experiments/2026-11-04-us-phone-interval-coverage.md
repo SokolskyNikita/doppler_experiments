@@ -2,7 +2,7 @@
 
 <!-- index
 question: What fraction of nonoverlapping recording windows intersect at least one opportunity to hear a tracked fixed-wing propeller plane?
-outcome: About 2.0% of five-minute phone-available windows and 9.8% of one-hour windows had a pass. The one-hour daytime and overnight rates were 14.2% and 1.27%.
+outcome: About 2.0% of five-minute phone-available windows and 9.8% of one-hour windows intersected modeled opportunity. The one-hour daytime and overnight rates were 14.2% and 1.27%.
 -->
 
 ## What counts as a hit

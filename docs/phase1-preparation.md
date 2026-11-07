@@ -1,5 +1,7 @@
 # Before Phase 1
 
+> Historical preparation specification. The worker interface is implemented; current code and checks are mapped in [architecture](architecture.md). This file is not a pending work order.
+
 Phase 1 will change how workers build the closest point of approach (CPA) table and scan detector
 windows. Two changes are useful beforehand. Give the detector worker named inputs and outputs so
 an agent can see what crosses the process boundary. Give the agent one offline check command and

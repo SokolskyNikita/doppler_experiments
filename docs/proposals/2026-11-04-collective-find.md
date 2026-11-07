@@ -1,5 +1,15 @@
 # The collective find: every detected window against every flight's own curve (proposal)
 
+> **Documentation privacy correction, 2026-11-04.** Personal provenance and internal attribution
+> are neutralized; numerical outcomes and artifact identifiers are retained. The original is privately
+> hash-preserved at source revision `17758a5`, SHA-256 `13917fae0743530da1f1665a1efab897c468c48360c35c2592c3b6640812d0d0`.
+
+> **Research reset status, 2026-11-04.** The original accuracy and runtime criteria failed on the completed
+> top-five own-day run. Later v2/v3/v4 are successive designs, not a pass of this proposal or its one
+> clock-width retune. v3 has only top-cell fine summaries; v4 has no completed result. No matching collective
+> verdict null has passed. The original failed criteria remain failed; see [the
+> audit](../experiments/2026-11-04-research-reset.md).
+
 PLAN Phase 3, `locate`'s step B. This is a design, written before any code or run.
 
 **decision:** whether `locate`'s step B becomes the collective find described here. It would retire the per-event straight-pass fits as the events' representation, along with item 7's pair rules (`top2`, `comparable`) and stage B's hypotheses.
@@ -62,7 +72,7 @@ The silence filter is out of scope here and stays as it is.
 
 ## 4. Cost, and what is reused
 
-> **Correction (before the build).** The bound below is wrong: today's 197,177 and 84,441 time-joined triples are counted after the speed and distance gates (v ±35 %, d ×0.4–2.5), which leave 16.35 M of Oyster Bay's 86.2 M CPA rows per event, and the design drops those gates. At 200 m the clock vote keeps on the order of 10⁸–10⁹ window pairs. The build therefore takes the PM's coarse-to-fine lever as a design step: a 2 km grid scored as the maximum over each cell's span (shift ±14 s, f0 ±12 %), then 200 m inside the cells at ≥ 0.7 of the coarse maximum ([collective-find record](../experiments/2026-11-04-collective-find.md)).
+> **Correction (before the build).** The bound below is wrong: today's 197,177 and 84,441 time-joined triples are counted after the speed and distance gates (v ±35 %, d ×0.4–2.5), which leave 16.35 M of Oyster Bay's 86.2 M CPA rows per event, and the design drops those gates. At 200 m the clock vote keeps on the order of 10⁸–10⁹ window pairs. The build therefore takes the review’s coarse-to-fine lever as a design step: a 2 km grid scored as the maximum over each cell's span (shift ±14 s, f0 ±12 %), then 200 m inside the cells at ≥ 0.7 of the coarse maximum ([collective-find record](../experiments/2026-11-04-collective-find.md)).
 
 Measured today on the saved-fit Tier 2 cases:
 - **Grid points:** 378,500 (Oyster Bay) and 430,882 (the eagle cam) at 200 m.
@@ -90,19 +100,19 @@ Measured today on the saved-fit Tier 2 cases:
 On the development cases, `locate` with step B as above, k = 10, from raw audio (`locate` profile):
 1. **Oyster Bay, its hp150 copy, the eagle cam clip and eagle-cam-midnight:** the collective map's maximum is within 2 km of the truth, and its matched set (windows with z > 0 at the winning point and clock) includes both true flights.
 2. **eagle-cam-midnight:** the winning clock puts the recording on the right UTC day. eagle-cam-midnight-days0 still ends before the search, as it does now.
-3. **The negatives** (oyster-bay-moved-wsw150, oyster-bay-moved-north150, oyster-bay-sources-removed, xenocanto-xc990819): every maximum stays below A's verdict null γ, the 1 % point of the null of the maximum ([verdict-null](2026-11-04-verdict-null.md)). That null is redrawn for this statistic, the maximum of Z over the box from other days' traffic with the same k and grid, since the pair rule's γ doesn't apply to Z.
+3. **The negatives** (oyster-bay-moved-wsw150, oyster-bay-moved-north150, oyster-bay-sources-removed, xenocanto-xc990819): every maximum stays below the verdict null γ, the 1 % point of the null of the maximum ([verdict-null](2026-11-04-verdict-null.md)). That null is redrawn for this statistic, the maximum of Z over the box from other days' traffic with the same k and grid, since the pair rule's γ doesn't apply to Z.
 4. **Runtime:** each positive's search fits Tier 2's budget, 2–3 min per case on a 4xlarge, with its CPA table warm.
 
 No tuning before the run. One counted retune is allowed, of the clock vote's cluster width only.
 
 ## 6. Decision line
 
-- **If 1–4 hold,** `locate`'s step B becomes the collective find. The per-event straight-pass fits stop being the events' representation: `fit_event` stays as a tool and the saved-fit profile as a benchmark of the old path. Item 7's pair rules and stage B's hypotheses are retired, and the verdict is A's null of Z's maximum.
+- **If 1–4 hold,** `locate`'s step B becomes the collective find. The per-event straight-pass fits stop being the events' representation: `fit_event` stays as a tool and the saved-fit profile as a benchmark of the old path. Item 7's pair rules and stage B's hypotheses are retired, and the verdict is the null of Z's maximum.
 - **If 1 fails on the eagle cam** while Oyster Bay passes, the weak-window question is answered against the design. Its next test is the matched set's per-window z at the true point.
 - **If 4 fails,** the design stands and its cost is item 5's (parallel CPA build and scoring) to solve.
 - **If 3 fails,** the non-coherent sum with a floor finds structure in other days' traffic that the pair rule doesn't, and the floor needs the null's per-window median subtracted after the max, not before.
 
 ## Implementation, after this is read
 
-- A `pair_rule = "collective"` path in `locate`, with the clock vote as a new stage in `pipeline`, and its units as shards.py jobs on 4xlarge boxes: one case per unit, plus the null's (case, day) units as A's proposal sets them out.
+- A `pair_rule = "collective"` path in `locate`, with the clock vote as a new stage in `pipeline`, and its units as shards.py jobs on 4xlarge boxes: one case per unit, plus the null's (case, day) units as the verdict proposal sets them out.
 - The criteria are judged on the merged run. The record goes to `docs/experiments/` with the null's γ beside each case.

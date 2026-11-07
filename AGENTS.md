@@ -33,15 +33,12 @@ and read just that range (M2 alone is about 65 KB). A subagent reads only the se
 
 ## Tests
 
-- `tools/check.sh`: every offline check, failing on the first problem. It runs ruff's pyflakes rules on
-  `src/` and `tests/`, mypy on `tracks.py`, the pytest suite below with the opt-in recording excluded, and
-  the installed-wheel smoke check (`tests/install_smoke.py`) from a fresh venv outside the checkout. It
-  prints the pytest and total wall times.
-- To check one edit before the full run:
-  - detector: `uv run pytest -q tests/test_phase0_cli.py`, or add
-    `-k "merge_breaks or worker_pool"` for just the tie and process-pool tests;
+- Run targeted tests locally while editing. For example:
+  - detector/CLI: `uv run pytest -q tests/test_phase0_cli.py`;
   - CPA cache: `uv run pytest -q tests/test_cache.py`.
-- `uv run pytest -q`: about a minute, no data or network needed. CI runs the same on Ubuntu.
+- Run the full `tools/check.sh` on the AWS dev box with `tools/aws/runs dev run -- tools/check.sh`; it covers
+  lint, typing, the offline suite, and the installed-wheel smoke check. Follow the fleet check and rehearsal
+  rules below before any real job launch.
 - Real data, opt-in, about 2 min:
   `DOPPLERTRACK_OYSTER_BAY="$DOPPLERTRACK_DATA/derived/oyster_bay" uv run pytest -q tests/test_oyster_bay.py`.
   It downloads terrain tiles the first time, so it needs the network on a cold cache.
@@ -75,9 +72,10 @@ and read just that range (M2 alone is about 65 KB). A subagent reads only the se
 
 - `origin` is the independent repo (SokolskyNikita/doppler_experiments), `upstream` is mjshiggins. Pushes use the SokolskyNikita
   account through a repo-local credential helper; leave it alone.
-- `main` preserves the historical upstream baseline; never commit to it. `dev` is our development line,
-  and all work branches off `dev`. Evaluate upstream changes as explicit method imports; do not routinely
-  merge upstream into `dev`. Never rebase or force-push `dev`.
+- `main` is the independent repository's default and development branch; create work branches from `main`.
+  The former upstream baseline is preserved under the tag
+  `archive/upstream-main-before-independence`. Evaluate upstream changes as explicit method imports; do not
+  routinely merge upstream into `main`. Never rebase or force-push `main`.
 - `.claude/` is ignored and never committed: it holds the app's worktrees, this checkout's settings and the
   PM's landing helper, none of which belong in the fork. History was rewritten on 2026-11-05 to drop it and the
   handoff; every branch SHA from before then changed.
@@ -92,11 +90,11 @@ and read just that range (M2 alone is about 65 KB). A subagent reads only the se
 
 ## Parallel work
 
-- Start each new session in a dedicated worktree and topic branch based on `dev` before editing or
+- Start each new session in a dedicated worktree and topic branch based on `main` before editing or
   running jobs; create them without asking. Reuse the session's worktree if one is already assigned.
 - One agent per worktree and branch. The main checkout is the user's: don't switch its branch or commit there
   unless asked.
-- New Claude worktrees start from the HEAD of the checkout they're created from (normally `dev`, set in
+- New Claude worktrees start from the HEAD of the checkout they're created from (normally `main`, set in
   `.claude/settings.json`), and uncommitted changes don't follow, so commit what a new session needs first.
 - Worktrees isolate source edits, not the shared data and caches: never write a cache file or run output in
   place where another session could read it half-written.

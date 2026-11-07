@@ -7,7 +7,7 @@
   "t0_utc": "2026-09-08T20:17:30.34Z",
   "case": "oyster-bay",
   "t0_note": "from the known-point fit's clock (runs/2026-11-03-issue-1); used for layer 2 only",
-  "case_note": "case audio seconds are these recording seconds (offset 0 s); the degraded and moved-box cases share this audio, but the labels belong to oyster-bay (case ids from SDE-B's bench/cases.json at f5ccdfe, not yet on dev)"
+  "case_note": "case audio seconds are these recording seconds (offset 0 s); the degraded and moved-box cases share this audio, but the labels belong to oyster-bay (case ids from the benchmark study's bench/cases.json at f5ccdfe, not yet on dev)"
  },
  "span": [
   0,
@@ -31,7 +31,7 @@
     ]
    ],
    "harmonics": 2,
-   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "labeller": "Claude-assisted automated label pass, from the contact sheets",
    "blind": true,
    "date": "2026-11-04",
    "notes": "starts with the recording; faint lines, no curve shape"
@@ -43,7 +43,7 @@
    "end": 55,
    "lines": [],
    "harmonics": 0,
-   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "labeller": "Claude-assisted automated label pass, from the contact sheets",
    "blind": true,
    "date": "2026-11-04",
    "notes": ""
@@ -72,7 +72,7 @@
     ]
    ],
    "harmonics": 2,
-   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "labeller": "Claude-assisted automated label pass, from the contact sheets",
    "blind": true,
    "date": "2026-11-04",
    "notes": "rising curves that flatten, not Doppler-shaped: an accelerating engine (boat?) more likely than a flyover. Bird or horn blobs at 320-440 Hz, 42-58 s"
@@ -93,7 +93,7 @@
     ]
    ],
    "harmonics": 1,
-   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "labeller": "Claude-assisted automated label pass, from the contact sheets",
    "blind": true,
    "date": "2026-11-04",
    "notes": "long falling line 130 to 65 Hz, flat after 185 s; the 345-255 Hz line falls over 120-165 s and may be another source",
@@ -119,7 +119,7 @@
     ]
    ],
    "harmonics": 2,
-   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "labeller": "Claude-assisted automated label pass, from the contact sheets",
    "blind": true,
    "date": "2026-11-04",
    "notes": "rising again, like ob-e02"
@@ -131,7 +131,7 @@
    "end": 245,
    "lines": [],
    "harmonics": 0,
-   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "labeller": "Claude-assisted automated label pass, from the contact sheets",
    "blind": true,
    "date": "2026-11-04",
    "notes": ""
@@ -152,7 +152,7 @@
     ]
    ],
    "harmonics": 2,
-   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "labeller": "Claude-assisted automated label pass, from the contact sheets",
    "blind": true,
    "date": "2026-11-04",
    "notes": "several parallel falling lines",
@@ -169,7 +169,7 @@
    "end": 330,
    "lines": [],
    "harmonics": 0,
-   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "labeller": "Claude-assisted automated label pass, from the contact sheets",
    "blind": true,
    "date": "2026-11-04",
    "notes": ""
@@ -186,7 +186,7 @@
     ]
    ],
    "harmonics": 1,
-   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "labeller": "Claude-assisted automated label pass, from the contact sheets",
    "blind": true,
    "date": "2026-11-04",
    "notes": "steep falling streaks at the strip edge"
@@ -198,7 +198,7 @@
    "end": 395,
    "lines": [],
    "harmonics": 0,
-   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "labeller": "Claude-assisted automated label pass, from the contact sheets",
    "blind": true,
    "date": "2026-11-04",
    "notes": ""
@@ -215,7 +215,7 @@
     ]
    ],
    "harmonics": 1,
-   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "labeller": "Claude-assisted automated label pass, from the contact sheets",
    "blind": true,
    "date": "2026-11-04",
    "notes": "parallel falling streaks, low contrast"
@@ -227,7 +227,7 @@
    "end": 476,
    "lines": [],
    "harmonics": 0,
-   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "labeller": "Claude-assisted automated label pass, from the contact sheets",
    "blind": true,
    "date": "2026-11-04",
    "notes": ""
@@ -252,7 +252,7 @@
     ]
    ],
    "harmonics": 1,
-   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "labeller": "Claude-assisted automated label pass, from the contact sheets",
    "blind": true,
    "date": "2026-11-04",
    "notes": "strong wobbling tone falls 235 to 172 Hz over 480-497 s, then flat; broadband burst at 476-480 s",
@@ -269,7 +269,7 @@
    "end": 603,
    "lines": [],
    "harmonics": 0,
-   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "labeller": "Claude-assisted automated label pass, from the contact sheets",
    "blind": true,
    "date": "2026-11-04",
    "notes": ""
@@ -281,7 +281,7 @@
    "end": 614,
    "lines": [],
    "harmonics": 0,
-   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "labeller": "Claude-assisted automated label pass, from the contact sheets",
    "blind": true,
    "date": "2026-11-04",
    "notes": "loud broadband blob 180-230 Hz; can't tell what is under it"
@@ -293,7 +293,7 @@
    "end": 632,
    "lines": [],
    "harmonics": 0,
-   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "labeller": "Claude-assisted automated label pass, from the contact sheets",
    "blind": true,
    "date": "2026-11-04",
    "notes": ""
@@ -314,7 +314,7 @@
     ]
    ],
    "harmonics": 2,
-   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "labeller": "Claude-assisted automated label pass, from the contact sheets",
    "blind": true,
    "date": "2026-11-04",
    "notes": "many parallel falling lines, steepest about 655-670 s",
@@ -331,7 +331,7 @@
    "end": 785,
    "lines": [],
    "harmonics": 0,
-   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "labeller": "Claude-assisted automated label pass, from the contact sheets",
    "blind": true,
    "date": "2026-11-04",
    "notes": ""
@@ -352,7 +352,7 @@
     ]
    ],
    "harmonics": 2,
-   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "labeller": "Claude-assisted automated label pass, from the contact sheets",
    "blind": true,
    "date": "2026-11-04",
    "notes": "falls then rises around 800 s"
@@ -364,7 +364,7 @@
    "end": 1135,
    "lines": [],
    "harmonics": 0,
-   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "labeller": "Claude-assisted automated label pass, from the contact sheets",
    "blind": true,
    "date": "2026-11-04",
    "notes": ""
@@ -381,7 +381,7 @@
     ]
    ],
    "harmonics": 1,
-   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "labeller": "Claude-assisted automated label pass, from the contact sheets",
    "blind": true,
    "date": "2026-11-04",
    "notes": "steep falling streaks at 250-330 Hz; blobs at 300-440 Hz near 1050-1070 and 1180-1195 s look like birds"
@@ -393,7 +393,7 @@
    "end": 1200,
    "lines": [],
    "harmonics": 0,
-   "labeller": "Claude (SDE-D session), from the contact sheets",
+   "labeller": "Claude-assisted automated label pass, from the contact sheets",
    "blind": true,
    "date": "2026-11-04",
    "notes": ""
@@ -403,7 +403,7 @@
   {
    "window": "ob-e01",
    "flight": "unmatched",
-   "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
+   "labeller": "Claude-assisted automated label pass, from the overlay sheets and close-ups",
    "blind": false,
    "date": "2026-11-04",
    "notes": "no pass within 40 s",
@@ -412,7 +412,7 @@
   {
    "window": "ob-e02",
    "flight": "unmatched",
-   "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
+   "labeller": "Claude-assisted automated label pass, from the overlay sheets and close-ups",
    "blind": false,
    "date": "2026-11-04",
    "notes": "N360NY (7.3 km, heard 131 s) predicts a fall over the window; the lines rise",
@@ -427,7 +427,7 @@
     "slant_m": 7252
    },
    "confidence": "probable",
-   "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
+   "labeller": "Claude-assisted automated label pass, from the overlay sheets and close-ups",
    "blind": false,
    "date": "2026-11-04",
    "notes": "at f0 293 Hz the modelled curve follows the 345 to 255 Hz line over 120-155 s; the steep 130 to 65 Hz line falls further than the model's 1.75 ratio",
@@ -436,7 +436,7 @@
   {
    "window": "ob-e04",
    "flight": "unmatched",
-   "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
+   "labeller": "Claude-assisted automated label pass, from the overlay sheets and close-ups",
    "blind": false,
    "date": "2026-11-04",
    "notes": "rising lines; N360NY's curve is flat by then",
@@ -445,7 +445,7 @@
   {
    "window": "ob-e05",
    "flight": "unmatched",
-   "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
+   "labeller": "Claude-assisted automated label pass, from the overlay sheets and close-ups",
    "blind": false,
    "date": "2026-11-04",
    "notes": "no pass within 40 s",
@@ -454,7 +454,7 @@
   {
    "window": "ob-e06",
    "flight": "unmatched",
-   "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
+   "labeller": "Claude-assisted automated label pass, from the overlay sheets and close-ups",
    "blind": false,
    "date": "2026-11-04",
    "notes": "no pass within 40 s",
@@ -463,7 +463,7 @@
   {
    "window": "ob-e07",
    "flight": "unmatched",
-   "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
+   "labeller": "Claude-assisted automated label pass, from the overlay sheets and close-ups",
    "blind": false,
    "date": "2026-11-04",
    "notes": "no pass within 40 s",
@@ -472,7 +472,7 @@
   {
    "window": "ob-e08",
    "flight": "unmatched",
-   "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
+   "labeller": "Claude-assisted automated label pass, from the overlay sheets and close-ups",
    "blind": false,
    "date": "2026-11-04",
    "notes": "no pass within 40 s; a strong event",
@@ -481,7 +481,7 @@
   {
    "window": "ob-e10",
    "flight": "unmatched",
-   "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
+   "labeller": "Claude-assisted automated label pass, from the overlay sheets and close-ups",
    "blind": false,
    "date": "2026-11-04",
    "notes": "only N2152Z, 11.8 km, heard 603 s, whose curve is flat over the window; the lines fall 43 %",
@@ -490,7 +490,7 @@
   {
    "window": "ob-e11",
    "flight": "unmatched",
-   "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
+   "labeller": "Claude-assisted automated label pass, from the overlay sheets and close-ups",
    "blind": false,
    "date": "2026-11-04",
    "notes": "C-GZQU (8.8 km, heard 814 s) could fit a falling streak near 800-820 s, but not the rising lines; N501EX (8.4 km, heard 782 s) is flat; left unmatched",
@@ -499,7 +499,7 @@
   {
    "window": "ob-e12",
    "flight": "unmatched",
-   "labeller": "Claude (SDE-D session), from the overlay sheets and close-ups",
+   "labeller": "Claude-assisted automated label pass, from the overlay sheets and close-ups",
    "blind": false,
    "date": "2026-11-04",
    "notes": "N829RP (4.1 km, heard 1117 s) shows no visible curve; the streaks at 1160-1170 s don't follow it",

@@ -1,8 +1,18 @@
 # Coherent alignment duration, second round (proposal)
 
+> **Documentation privacy correction, 2026-11-04.** Personal provenance and internal attribution
+> are neutralized; numerical outcomes and artifact identifiers are retained. The original is privately
+> hash-preserved at source revision `17758a5`, SHA-256 `bfe87514e6e7b8cd26a1637af20fbf062748ba02633dc2a2e211d3b859a6b8ad`.
+
+> **Research reset status, 2026-11-04.** Unrun successor design. The first round's two failed gates remain
+> failed. Its operating-point simulation and expanded levels do not yet have results, and segment-level
+> empirical thresholds still need group/tail validation before a blind locator claim. A gain with the true
+> flight/clock supplied cannot establish wrong-flight discrimination; see [the
+> audit](../experiments/2026-11-04-research-reset.md).
+
 A successor to [the first round](2026-11-04-coherent-duration.md), which ended undecided
 ([record](../experiments/2026-11-04-coherent-duration.md)). This is a design, written before any run. It runs after
-SDE-D's collective-find verdict is in.
+the geometry study’s collective-find verdict is in.
 
 **decision:** as before. Does a 6 s or 18 s coherent scorer earn a test on the locator's shortlist, in the collective
 find's weak-window case (the eagle cam's event 2, at 6 dB on half its frames)? Otherwise the shortlist keeps today's
@@ -29,9 +39,9 @@ search) and P_D = 0.8 put the blocks outside that regime.
    - Gate 1 passes when the measured synthetic gaps on development background are within ±1 dB of that prediction.
    - The Monte Carlo is written and hashed before the synthetic gate runs.
 2. **The level grid** runs from +12 to −20 dB in steps of 0.5 dB, so that every real clip reaches 80 %.
-3. **Gate 2's target** is unchanged: the median paired C9 − C1 on the eight real clips is within ±1 dB of Codex's.
+3. **Gate 2's target** is unchanged: the median paired C9 − C1 on the eight real clips is within ±1 dB of the earlier replay study’s.
    That target was fixed before any of our results; this round doesn't move it after seeing −2.0 dB.
-   - If gate 2 fails again while gate 1 passes, the record reads it as a real difference from Codex's measurement on
+   - If gate 2 fails again while gate 1 passes, the record reads it as a real difference from the earlier replay study’s measurement on
      its other background and detector, and stops.
    - It is not retuned.
 

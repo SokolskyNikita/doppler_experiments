@@ -5,6 +5,10 @@ question: Which station temperature belongs in each bench case's `weather` block
 outcome: The nearest ASOS within 1 h of the recording's midpoint, 4.9–24.3 km away; as one c per case it costs both positive seed cases their true pair (Oyster Bay rank 1 to 3, the eagle cam 1 to 6), because the aircraft fly 1–6 km up, and even through the per-flight path, which keeps Oyster Bay at rank 1, the eagle cam's true pair ranks 2nd, and refitting at the station temperature shows why: the event fits sit on a flat v–d ridge with dozens of near-equal optima, so a 1.9 % change of c moves them 14–45 % between basins; the temperature stays off by default until the event fit is well-conditioned (item 4)
 -->
 
+> **Documentation privacy correction, 2026-11-04.** Personal provenance and internal attribution
+> are neutralized; numerical outcomes and artifact identifiers are retained. The original is privately
+> hash-preserved at source revision `17758a5`, SHA-256 `a5b04cea0257f0942851a2b0dcaa94c6638f8d1579b305edad87b9c3fba2f346`.
+
 **Question.** Which air temperature belongs in each bench case's `weather` block ([sound-speed](2026-11-04-sound-speed.md)), and how well does one reading stand for its recording?
 
 **Method.**
@@ -15,7 +19,7 @@ outcome: The nearest ASOS within 1 h of the recording's midpoint, 4.9–24.3 km 
   - Oyster Bay's a1dfeb and ace391: 5.5 and 1.1 km;
   - the eagle cam's a2baea and a336e4: 2.5 and 5.7 km.
 - **Versions:** a change to a case is a new version of it (`bench/cases.json`'s note). Each case's latest version is left as it was, and the next version carries the weather.
-  - On dev the weather is version 2 of every case: B merged this record's first commit (0e95a3a) and put its locate changes on top as version 3, then a version 4 (`_cut2` CPA tables) for some. B's cases.json is taken as is, and this branch's own interim renumbering, with weather as v3, was dropped.
+  - On dev the weather is version 2 of every case: The integration merged this record’s first commit (0e95a3a) and put its locate changes on top as version 3, then a version 4 (`_cut2` CPA tables) for some. The integrated cases.json is taken as is, and this branch's own interim renumbering, with weather as v3, was dropped.
   - The runner takes the latest version, so every run now uses the measured temperature.
   - Earlier versions stay runnable by id and version, and by the a16b700 CLI, which refuses a temperature.
   - Each new version with a CPA cache gets its own file, `<name>_<T>C.npz`, because the sound speed is part of the table's fingerprint.
@@ -44,11 +48,11 @@ The Oyster Bay variants take Oyster Bay's reading: their audio is Oyster Bay's, 
 - **Every case now has a measured temperature,** from a station 4.9–24.3 km away and within 14 min of the recording's midpoint.
 - **The short recordings are well served.** Within Oyster Bay's, the eagle cam's and the Essex recordings the station's reports vary by at most 1 °C, under 0.2 % in c.
 - **The day-long Eclipse recordings aren't.** One reading at the midpoint stands for 24 h over which the station's temperature swung 9–15 °C. That is up to ±1.3 % in c, the same as ±1.3 % in speed and range (the fit passes c through unattenuated; [model-error](2026-11-04-model-error.md), stage 3). A per-event temperature would fix this, but the schema holds one value per case. That is a follow-up for the schema, not something to work around here.
-- **Ground temperature only, per case.** `aircraft_height_m` stays null, since A's per-flight correction from each flight's own altitude supersedes it. Inversions are invisible to a station.
+- **Ground temperature only, per case.** `aircraft_height_m` stays null, since the per-flight correction from each flight's own altitude supersedes it. Inversions are invisible to a station.
 
 **The temperature's effect on the seed results** (saved-fit Tier 2, the five seed cases, two workers, warm caches).
 
-*First pass, before A's per-flight sound speed:* runs/2026-11-04-bench-a9613d9-saved-fit-t2-2 (case version 1) against runs/2026-11-04-bench-fd7f3b1-saved-fit-t2 (version 2). At this code the runner applied the case's ground temperature as one c for every flight.
+*First pass, before the per-flight sound speed:* runs/2026-11-04-bench-a9613d9-saved-fit-t2-2 (case version 1) against runs/2026-11-04-bench-fd7f3b1-saved-fit-t2 (version 2). At this code the runner applied the case's ground temperature as one c for every flight.
 
 | Case | Version 1 (15 °C) | Version 2 (ground temperature) |
 |---|---|---|
@@ -66,15 +70,15 @@ Scored triples change by under 0.1 %: Oyster Bay 40,889 to 40,861, the eagle cam
 - **That is the case for the per-flight correction.** One c per recording can't serve flights at 1 and 5 km.
 
 *Second pass, at the landing code* (dev 1166c88 against this branch, fa29d4a): runs/2026-11-04-bench-1166c88-saved-fit-t2 against runs/2026-11-04-bench-fa29d4a-saved-fit-t2. Every number is identical to the first pass, to the last digit.
-- **Why.** A's per-flight sound speed is `pipeline.run_search(temperature_c=...)`. It keeps the fits' c and propagates each emission point at its mid-height temperature.
+- **Why.** the per-flight sound speed is `pipeline.run_search(temperature_c=...)`. It keeps the fits' c and propagates each emission point at its mid-height temperature.
 - **The runner never uses it.** `bench.runner.sound_speed` still turns the case's temperature into one `c=speed_of_sound(T)` and passes that to search and refine. With saved fits made at 15 °C it also changes c on only one side of the comparison.
 - **So the case temperatures can't land as the runner's default until the runner passes `temperature_c` instead of `c`.** Until then, every positive seed case loses its true pair.
 - **A direct check of the per-flight path was stopped before it scored.** It used `--search-param temperature_c=T` on the no-weather versions, but those share their CPA cache files with everyone's default runs, and `temperature_c` changes the table's fingerprint (`runs/2026-11-04-bench-1166c88-saved-fit-t2-perflight-*`, marked STOPPED). It needs its own cache names, which the versions here already carry, once the runner passes `temperature_c`.
 
-*Third pass, at the per-flight runner* (dev df0e202, B's 60bf173: the fits keep their 15 °C c and each flight propagates at its own mid-height temperature).
+*Third pass, at the per-flight runner* (dev df0e202, runner change 60bf173: the fits keep their 15 °C c and each flight propagates at its own mid-height temperature).
 - **Runs.** runs/2026-11-04-bench-df0e202-saved-fit-t2-noweather (each case's latest version with its weather nulled and its CPA cache renamed without the temperature, so that run is marked dirty) against runs/2026-11-04-bench-df0e202-saved-fit-t2-weather (the case as on dev).
 - **Stopped part way.** Both runs were stopped under the user's rule that no compute runs on the Mac, after four of the five cases. hp150 and north150 are missing, and neither can change the outcome below.
-- **The criterion,** fixed by the PM before the run: the weather versions keep both positives at rank 1 with the true pair, and the negatives stay negative.
+- **The criterion,** fixed by review before the run: the weather versions keep both positives at rank 1 with the true pair, and the negatives stay negative.
 
 | Case | Without weather | With weather, per flight |
 |---|---|---|
@@ -85,7 +89,7 @@ Scored triples change by under 0.1 %: Oyster Bay 40,889 to 40,861, the eagle cam
 **Outcome: the criterion fails, so the station temperature doesn't become the runner's default.**
 - **What the per-flight path did.** It recovers most of what one ground-temperature c lost: Oyster Bay goes back to rank 1, and the eagle cam's true pair from rank 6 to rank 2. It doesn't recover the seeds.
 - **The 15 °C default still gives the better seed results.** That isn't evidence the default is right. The committed saved fits were made at 15 °C, so the fits and the search share that c only in the default run.
-- **The next question,** fixed by the PM: are the 15 °C saved fits the mismatch? Refit one case's events at the station temperature, then search them at the per-flight speed.
+- **The next question,** fixed by review: are the 15 °C saved fits the mismatch? Refit one case's events at the station temperature, then search them at the per-flight speed.
 **Are the 15 °C saved fits the mismatch? The refit test** (`runs/2026-11-04-merge-refit-savedfit/`, merged from `runs/2026-11-04-refit-savedfit-s{1..8}of8`; fleet, commit 0734635; `tools/experiments/2026-11-04/refit_savedfit.py`).
 - **Setup.** Each positive case's two events were refitted with `fit_event` as the committed fits were made, at 15 °C (the procedure's check) and at the case's ground temperature, then searched. The committed fits were run with the weather off and on as controls.
 - **The criterion,** fixed before the run: with the ground-temperature refits searched through the per-flight path, the eagle cam's true pair returns to rank 1, and Oyster Bay's margin comes back to within 1 point of 4.9 %.
@@ -104,7 +108,7 @@ Scored triples change by under 0.1 %: Oyster Bay 40,889 to 40,861, the eagle cam
 - **Oyster Bay.** The refit procedure reproduces the committed fits (f0, v, d and t_cpa to the second decimal), so the comparison is fair.
   - Refitted at the ground temperature and searched per flight, the true pair keeps rank 1 with a margin of 8.7 %: above both the default's 4.9 % and the committed fits' 2.0 % with the weather on. Refined error is 84 m against the default's 43 m.
   - Event 2's refit moves more than c alone would: v 141 to 121 m/s, d 5.9 to 4.3 km. The contrast optimum shifts with c.
-  - **Criterion met on margin, as intended.** The PM's intent was recovery: a margin back to at least 3.9 %. 8.7 % at rank 1 meets that. The cost is the refined error, 84 m against the default's 43 m. This supports the 15 °C fits being the mismatch for Oyster Bay.
+  - **Criterion met on margin, as intended.** The review's intent was recovery: a margin back to at least 3.9 %. 8.7 % at rank 1 meets that. The cost is the refined error, 84 m against the default's 43 m. This supports the 15 °C fits being the mismatch for Oyster Bay.
   - **The size of event 2's move is the open point.** A 1.9 % change in c should move v and d by 1.9 % (d ln v / d ln c = 1, model-error stage 3). They moved 14 % and 28 %. So the fit has probably landed in another basin of its objective, and the profile that tests this follows.
 - **The eagle cam can't be judged, and that is a provenance problem for the benchmark: the case's saved fits can't be reproduced from the case's own inputs.** Its check fails: refitting the committed fits at 15 °C, by `detect`'s refine step on the clip's spectrogram, doesn't reproduce them.
   - Event 2's CPA moves 2.8 s and its distance from 3.1 to 3.3 km, and the true pair falls from rank 1 to rank 392.
@@ -154,7 +158,7 @@ Scored triples change by under 0.1 %: Oyster Bay 40,889 to 40,861, the eagle cam
 
 **Outcome.**
 - **The least-squares fit does what it should with c.** It has one basin and moves exactly with c, unlike brightness.
-- **On these recordings `ridge()` doesn't follow the aircraft's line.** Its tracks give fits 2–60 times too close. So the event fit can move to least squares only on a tracker that holds the line. That is the case the PM named: the ridge tracker is the suspect, and the switch waits for C's tracker.
+- **On these recordings `ridge()` doesn't follow the aircraft's line.** Its tracks give fits 2–60 times too close. So the event fit can move to least squares only on a tracker that holds the line. That is the case review named: the ridge tracker is the suspect, and the switch waits for a reliable tracker.
 - **The temperature stays off by default.**
 
 - **"Weather on" is now a run switch, not a case version.** Each case keeps its station reading as data. The runner uses it only when a run sets `use_case_weather`: `bench run --weather`. That run's overrides, run.json and folder tag record the switch.

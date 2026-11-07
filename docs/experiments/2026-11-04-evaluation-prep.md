@@ -2,8 +2,12 @@
 
 <!-- index
 question: Can the evaluation cases be made ready to run, before any search and without reading a label, so a design that passes development is judged on them the same hour?
-outcome: Yes for the three Eclipse sites: spectrograms, flight data, weather and 1 km CPA tables in about 0.2 box-hours; Seattle's sites wait on their data and the private-case design
+outcome: Yes for the three Eclipse sites: spectrograms, flight data, weather and 1 km CPA tables in about 0.2 box-hours; private cases wait on their data and the private-case design
 -->
+
+> **Documentation privacy correction, 2026-11-04.** Personal provenance and internal attribution
+> are neutralized; numerical outcomes and artifact identifiers are retained. The original is privately
+> hash-preserved at source revision `17758a5`, SHA-256 `34fdbe98cd0c32a0daadf4f87f4c0cb76b314b05f40ad4cfa15059578413f4c8`.
 
 ## Question
 
@@ -38,7 +42,7 @@ profiles `locate` and `raw-audio`. All three stay blocked: evaluation cases run 
 
 **The CPA tables are not stored.** `runs` doesn't bring `cpa/` back from a box, by design, since a table rebuilds on
 any box in seconds; these took 7–8 s at 1 km. So the tables were built and timed, and a run on the fleet rebuilds each
-in about 8 s. That is the design (PM, 2026-11-04): nothing is carried home.
+in about 8 s. That is the design (review, 2026-11-04): nothing is carried home.
 
 ## Cost
 
@@ -49,8 +53,7 @@ their 64 GB, so a 4xlarge would have done; the table jobs at 1.8–2.0 GB of 32 
 ## Outcome
 
 The three Eclipse evaluation cases are ready: a passing design runs on them as soon as the milestone opens, with only
-the CPA table's 8 s to rebuild. Seattle's two sites aren't prepared: their data arrived as the owner's private
-recordings, which wait on the private-case design (`docs/proposals/2026-11-04-private-cases.md`) and the fleet guard.
+the CPA table's 8 s to rebuild. Private recording cases were not prepared; they waited on the private-case design (`docs/proposals/2026-11-04-private-cases.md`) and the fleet guard.
 
 ## Files
 

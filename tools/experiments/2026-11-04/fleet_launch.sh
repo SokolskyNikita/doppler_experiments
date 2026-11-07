@@ -1,5 +1,5 @@
 #!/bin/sh
-# SDE-C's six fleet boxes, all at once (cloud_jobs.md): the whitening arms (Tier 2 and Tier 1 for each of time and
+# the detector study's six fleet boxes, all at once (cloud_jobs.md): the whitening arms (Tier 2 and Tier 1 for each of time and
 # frequency) and the tracker's whole job under each whitening, so whichever whitening wins, its tracker result
 # exists. Run from a clean checkout; RUNS is the runs wrapper (default tools/aws/runs). Collect with
 # fleet_merge.py once they are done.

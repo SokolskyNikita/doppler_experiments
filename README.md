@@ -226,8 +226,9 @@ empty detection. GitHub CI expansion is deferred.
 | `tools/`, `bench/` | data handling, experiment scripts, the manifest of raw inputs |
 | [AGENTS.md](AGENTS.md) | working rules: where data lives, branches, how experiments get recorded |
 
-`dev` is the independent project's default development branch. `main` preserves the historical upstream
-baseline; new work branches off `dev`. Upstream changes are evaluated explicitly rather than routinely merged.
+`main` is the independent project's default and development branch. The former upstream baseline is preserved under the tag `archive/upstream-main-before-independence`; new work branches off `main`.
+Upstream changes are evaluated explicitly rather than routinely merged. See [the package layout](docs/layout.md#running-methods)
+for the current layers and method CLI examples.
 
 All inputs are free: adsb.lol's daily ADS-B archives, the OpenSky mirror of ICAO Doc 8643 for engine types
 and AWS Terrain Tiles for elevation.

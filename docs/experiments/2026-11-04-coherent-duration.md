@@ -5,6 +5,18 @@ question: Does aligning waveform cycles over 6 s or 18 s, rather than nine 2 s b
 outcome: Not decided: both gates failed again after the one retune (C9 over C1 6.0 dB synthetic against 4.8+-1; C9 over C1 2.0 dB on real clips against +-1), so the blind test never ran; C9 led C1 throughout and today's curve score trailed
 -->
 
+> **Documentation privacy correction, 2026-11-04.** Personal provenance and internal attribution
+> are neutralized; numerical outcomes and artifact identifiers are retained. The original is privately
+> hash-preserved at source revision `17758a5`, SHA-256 `7c890a8d7b5be682c03ab1fef550ebd3f288b1411ef8b5dedbb7b5044379f3e2`.
+
+> **Research reset correction, 2026-11-04.** Both gates remain failed after the counted retune; the blind19
+> test was not run. Alternating background segments are within-recording calibration/evaluation, not
+> independent recording groups. The .995 `higher` quantile of419 values is the third-highest, correcting
+> “second-highest” below. It has only two observations above it and does not certify a1/h field rate. The −2dB
+> real summary is conditional on five uncensored pairs. Rejection of this Gumbel fit does not establish that
+> an empirical tail from this small dependent sample is calibrated; see [the
+> audit](2026-11-04-research-reset.md).
+
 ## Question and criterion
 
 As set in [the proposal](../proposals/2026-11-04-coherent-duration.md), fixed before any run.
@@ -18,7 +30,7 @@ As set in [the proposal](../proposals/2026-11-04-coherent-duration.md), fixed be
 - **Two gates, each pass or fail, before the settings freeze:**
   - Gate 1, synthetic: C9's gain is within 1 dB of theory, +4.8 dB over C1 and +3.0 dB over C3.
   - Gate 2, the eight real clips with the true flight and clock supplied: the median paired C9 − C1 is within
-    ±1 dB, as Codex's [integration record](2026-11-04-doppler-integration-coverage.md) found.
+    ±1 dB, as the earlier replay study’s [integration record](2026-11-04-doppler-integration-coverage.md) found.
 
 ## The gates
 
@@ -38,7 +50,7 @@ As set in [the proposal](../proposals/2026-11-04-coherent-duration.md), fixed be
 - **Gate 1, per pass.** L80(C1) − L80(C9) is 3, 4, 8, 7, 6, 6, 6 and 3 dB; the first leg misses by 0.2 dB on a 1 dB
   level grid. C9 is ahead on every pass, and T trails C1 by a median of about 5 dB.
 - **Gate 2, per pass.** L80(C9) − L80(C1) is 0, 0, −4, −3, −1, −2, +1 and −4 dB, so C9 wins 5, ties 2 and loses 1.
-  Codex had 3 wins, 2 ties and 3 losses, on the Seattle background with its own detector.
+  The earlier replay study had 3 wins, 2 ties and 3 losses, on the reference background with its own detector.
 - **The thresholds fit poorly.** The Gumbel fits' KS statistics are 0.11–0.35 on n = 200, against a 5 % point of
   about 0.10. The background maxima have heavier tails than a Gumbel, from jets and birds in the Essex and AeroSonicDB
   audio. So each γ is an extrapolation that can't be trusted to a dB, and both gates' margins are smaller than that.
@@ -49,7 +61,7 @@ As set in [the proposal](../proposals/2026-11-04-coherent-duration.md), fixed be
 - On this background audio it doesn't: KS 0.11–0.35 at n = 200.
 - So a null drawn from background audio needs an empirical tail, not a fitted extreme-value law.
 
-## The one counted retune (PM, 2026-11-04), written before its rerun
+## The one counted retune (review, 2026-11-04), written before its rerun
 
 Gate 1's miss is not accepted as rounding: a gate loosened after the result is no gate. The retune changes two
 things, and nothing else.
@@ -97,7 +109,7 @@ A dash means 80 % wasn't reached even at the grid's top, +6 dB.
   §7.3's energy detector gains 5 log₁₀ N against the matched filter's 10 log₁₀ N. Kay states it valid only when the
   per-block SNR is much less than 1. At the per-block SNRs a strict threshold (P = 1/200 per window, after a search
   over pitch bins) and P_D = 0.8 need, that condition fails, and the law needn't hold.
-  - The steady 6 dB here, and Codex's 5 dB on its own synthetic, are consistent with that.
+  - The steady 6 dB here, and the earlier replay study’s 5 dB on its own synthetic, are consistent with that.
   - This doesn't pass the gate, which was fixed before the run. It is the reason a successor would derive gate 1's
     target at the operating point, not from the weak-signal law.
 

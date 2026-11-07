@@ -2,8 +2,19 @@
 
 <!-- index
 question: Does ridge()'s per-frame frequency error on synthesised passes correlate across frames as Harris's c or c² predicts, so that the provisional 63–74 m slant-range bound stands?
-outcome: Not met in either run; the bound is now 20–50 m, not 63–74 m. σ measured at each Livermore pass's own SNR is a median 0.137 % of f0, not 0.45 %; the correlation lies between c² and the raw tapered estimate, since ridge()'s error is mostly a slow bias no detrend settles. Provisional comes off
+outcome: Both agreement gates fail; SNR transfer and uncertain covariance give a conditional ideal-model 20–50 m sensitivity range, not validated accuracy or coverage
 -->
+
+> **Documentation privacy correction, 2026-11-04.** Personal provenance and internal attribution
+> are neutralized; numerical outcomes and artifact identifiers are retained. The original is privately
+> hash-preserved at source revision `17758a5`, SHA-256 `b320a3b8cb56af9feec2c0c88b2471492fce0aaa034430b4d44016dd71904702`.
+
+> **Research reset qualification, 2026-11-04.** Both pre-registered covariance/bound agreement gates fail.
+> The adopted 20–50 m range is an ideal-model sensitivity calculation using SNR transfer and alternative
+> covariance assumptions, with six primary passes clamped outside synthetic SNR support. It is not measured
+> real-pass accuracy, a validated bound on bias, or a confidence-region coverage result. Removing the
+> historical “provisional” label did not resolve the slow-bias/covariance uncertainty; see [the
+> audit](2026-11-04-research-reset.md).
 
 ## Question
 
@@ -125,7 +136,7 @@ The pre-registered rule named 50 m as the replacement. What is measured supports
 - **The correlation is not robust.** The same σ with Harris's c² gives about 19 m (63 × 0.137 / 0.45, since the
   bound is linear in σ). The measured, tapered raw ρ gives 50 m.
 
-**What PLAN quotes** (decided with the PM): a single-pass slant-range bound of **20–50 m** on the 29 primary passes.
+**What PLAN quotes** (decided with review): a single-pass slant-range bound of **20–50 m** on the 29 primary passes.
 σ is measured at each pass's own SNR, and the correlation is bounded between Harris's c² and the raw tapered
 estimate, because no detrend settles the slow bias. "Provisional" comes off with that wording. The number that
 mattered is now measured rather than assumed: information is 5–10× less the limit than model error (229 m, the

@@ -1,9 +1,13 @@
 # How often is an aircraft within acoustic range of a U.S. residence?
 
 <!-- index
-question: At a random local instant, how often is a tracked aircraft within the Seattle pilot’s modeled range of a U.S. resident at home?
+question: At a random local instant, how often is a tracked aircraft within the reference recording’s modeled range of a U.S. resident at home?
 outcome: Across 12 sampled days in 2025, fixed-wing propeller coverage averaged 0.30% from 6 a.m. to 10 p.m. and 0.031% overnight. The assumed indoor loss dominates those estimates.
 -->
+
+> **Documentation privacy correction, 2026-11-04.** Personal provenance and internal attribution
+> are neutralized; numerical outcomes and artifact identifiers are retained. The original is privately
+> hash-preserved at source revision `17758a5`, SHA-256 `bdfd6bae17488aba059907169e7b48fbd8b773e94a08a146530b9928b9e3121e`.
 
 ## Estimate from 12 monthly samples
 
@@ -17,14 +21,14 @@ We placed the 2020 population of the 50 states and DC at its residential Census 
 
 The first row is the relevant fleet for the current propeller-tone method. It corresponds to 2.83 minutes during the 16 daytime hours and 8.9 seconds during the eight nighttime hours, averaged over all residents and sampled days. Presence at an instant is one opportunity for a signal. To locate the recorder, the pipeline needs usable Doppler curves from multiple suitable passes in the same recording.
 
-The [Doppler integration follow-up](2026-11-04-doppler-integration-coverage.md) reruns the union for below-background thresholds and tests tones injected into the original Seattle recording.
+The [Doppler integration follow-up](2026-11-04-doppler-integration-coverage.md) reruns the union for below-background thresholds and tests tones injected into the original reference recording.
 
 ## Traffic, population and range model
 
 - The primary sample uses the ADS-B Exchange global hourly snapshots from the first UTC date of each month of 2025, 288 instants. The source offers those dates for evaluation. The North America filter retains 1,316,558 airborne rows across the 288 instants, including points outside the U.S. that could cover a U.S. resident. The calculation rejects explicitly grounded aircraft, absent altitudes and positions more than 15 seconds old. There are 14,520 rows without a type designator. Restricting the headline to classified aircraft avoids assigning those a sound level. Assigning every unknown-class aircraft a 1 km radius instead moves the broadest row to 1.501% by day and 0.376% by night. The dates are a convenience sample across seasons. January 1 and September 1 were U.S. holidays. The day-specific fixed-wing prop estimates span 0.136–0.391% by day and 0.0158–0.0531% overnight. [ADS-B Exchange evaluation snapshots](https://www.adsbexchange.com/data-products/sample-data/)
 - The Census file contains 239,780 block groups in the states and DC, totaling 331,449,281 people. We discard zero-population rows. Each remaining point represents its block group’s population-weighted mean location. This approximates spatial density at the short ranges of interest, particularly in large rural or coastal groups. The GMT 30-arcsecond terrain grid gives residential ground height. At each point, EGM96 geoid separation reconciles ADS-B geometric heights with terrain elevations above mean sea level. Pressure altitude is used as reported when geometric height is unavailable. Terrain elevations below zero are clamped to zero to handle offshore centroids. The model does not account for intervening ridges or individual buildings. [Census population centers and methods](https://www.census.gov/geographies/reference-files/time-series/geo/centers-population.html) · [GMT Earth relief](https://oceania.generic-mapping-tools.org/server/earth/earth_relief/earth_relief_server.txt) · [EGM96 grid](https://download.osgeo.org/proj/vdatum/egm96_15/egm96_15.gtx)
 - Each population center has an IANA time zone. The local-time calculation handles DST, including Arizona, and assigns three offshore or cross-border weighted centroids to the corresponding U.S. zone. Each hourly snapshot represents the centered hour. An interval crossing 06:00 or 22:00 contributes proportionately to both periods. This prevents a one-second archive timestamp offset from assigning an entire hour to the other period. [Timezone Boundary Builder](https://github.com/evansiroky/timezone-boundary-builder)
-- Fixed-wing radii come from the [Seattle low-frequency calculation](2026-11-04-us-movement-pickup.md). Approach and departure use each model’s median across published power settings. An aircraft descending or climbing over 2 m/s uses the corresponding radius. For level flight or absent vertical rate, the geometric mean of the two radii is a modeling choice. Known ICAO designators use a matching model when available. Other classified aircraft use the median of the available reference models for their propulsion, size and engine-count category. Aircraft types modeled only by a proxy, particularly military aircraft, can deviate from those assumptions. Rotorcraft use the prior level-flight estimates. The central case assumes a 15 dB outdoor-to-phone loss and the same Seattle noise floor at all hours and homes. It makes no allowance for changes in engine power outside an airport flight profile. [ICAO type catalogue mirror](https://opensky-network.org/datasets/metadata/doc8643AircraftTypes.csv)
+- Fixed-wing radii come from the [reference low-frequency calculation](2026-11-04-us-movement-pickup.md). Approach and departure use each model’s median across published power settings. An aircraft descending or climbing over 2 m/s uses the corresponding radius. For level flight or absent vertical rate, the geometric mean of the two radii is a modeling choice. Known ICAO designators use a matching model when available. Other classified aircraft use the median of the available reference models for their propulsion, size and engine-count category. Aircraft types modeled only by a proxy, particularly military aircraft, can deviate from those assumptions. Rotorcraft use the prior level-flight estimates. The central case assumes a 15 dB outdoor-to-phone loss and the same reference noise floor at all hours and homes. It makes no allowance for changes in engine power outside an airport flight profile. [ICAO type catalogue mirror](https://opensky-network.org/datasets/metadata/doc8643AircraftTypes.csv)
 - The spatial calculation tests horizontal separation and vertical separation together. A plane at 10 km altitude cannot satisfy a 3 km slant range even when directly overhead. Pooled percentages are the total exposed population divided by the corresponding total population across equally spaced instants. Expected elapsed person-time is that fraction multiplied by the period duration. Shifting from source-emission time to acoustic-arrival time would displace boundaries by seconds and was omitted.
 
 ## Five-minute cross-check on four other dates
@@ -49,7 +53,7 @@ Each row reruns the spatial union using the model-specific radii calculated at t
 | 15 dB | 0.295% | 0.0310% |
 | 25 dB | 0.0188% | 0.00234% |
 
-If the effective background were 10 dB quieter across the relevant bands overnight, with flight activity and building transmission unchanged, the 5 dB row gives the corresponding night scenario. The Seattle pilot supplies no such paired overnight measurement. This sensitivity includes cases where a slightly greater radius brings a whole flight altitude into range. The estimate is more sensitive to these acoustic assumptions than to the sampled month.
+If the effective background were 10 dB quieter across the relevant bands overnight, with flight activity and building transmission unchanged, the 5 dB row gives the corresponding night scenario. The reference recording supplies no such paired overnight measurement. This sensitivity includes cases where a slightly greater radius brings a whole flight altitude into range. The estimate is more sensitive to these acoustic assumptions than to the sampled month.
 
 ## Flights missing from ADS-B
 

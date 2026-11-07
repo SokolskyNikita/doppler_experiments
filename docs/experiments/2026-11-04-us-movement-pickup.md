@@ -1,11 +1,15 @@
-# U.S. aircraft movements and low-frequency pickup at the Seattle phone
+# U.S. aircraft movements and low-frequency pickup at the reference microphone
 
 <!-- index
-question: How far from the Seattle pilot would U.S. aircraft types reach the measured low-frequency background?
+question: How far from the reference recording would U.S. aircraft types reach the measured low-frequency background?
 outcome: With 15 dB of indoor loss, modeled departure crossovers are about 1 km for a C172R and 3.3 km for a 737-800. Tone detection and nationwide coverage by aircraft type remain uncalibrated.
 -->
 
-These are conditional slant distances for the Seattle home pilot. The endpoint is equal aircraft and background power in **any one** of seven one-third-octave bands (100, 125, 160, 200, 250, 315 and 400 Hz). A full-band noise event and an extractable Doppler tone are different observations. No detector probability or false-alarm rate was fitted here.
+> **Documentation privacy correction, 2026-11-04.** Personal provenance and internal attribution
+> are neutralized; numerical outcomes and artifact identifiers are retained. The original is privately
+> hash-preserved at source revision `17758a5`, SHA-256 `08eebf6f860ec48e56b3a280aab5068b57d70592e60122e2358cd2d0563e05d6`.
+
+These are conditional slant distances for the reference recording. The endpoint is equal aircraft and background power in **any one** of seven one-third-octave bands (100, 125, 160, 200, 250, 315 and 400 Hz). A full-band noise event and an extractable Doppler tone are different observations. No detector probability or false-alarm rate was fitted here.
 
 ## What the movement counts cover
 
@@ -17,7 +21,7 @@ For calendar 2024, BTS T-100 Segment (All Carriers) gives 19,546,342 U.S.-airpor
 
 ## How the acoustic estimates were calculated
 
-The Seattle pilot’s original 1 kHz capture supplied the noise floor. I integrated one-sided spectral power in each band using nonoverlapping 2.048 s Hann windows and took the median over 878 windows. The listening export has about 29 dB of gain relative to the source. The levels below retain the original gain. The conversion to sound pressure assumes nominal Android unprocessed sensitivity (+130 dB) and a flat microphone response. The device requested unprocessed capture, but its absolute sensitivity and in-room response were not measured. Android permits roughly ±10 dB response variation across these frequencies for devices supporting unprocessed capture. [Android CDD, §5.11](https://source.android.com/docs/compatibility/16/android-16-cdd#5_11_capture_for_unprocessed)
+The band-limited reference capture supplied the noise floor. I integrated one-sided spectral power in each band using nonoverlapping 2.048 s Hann windows and took the median over 878 windows. The levels below retain the source gain. The conversion to sound pressure assumes nominal Android unprocessed sensitivity (+130 dB) and a flat microphone response. Absolute sensitivity and room response were not measured. Android permits roughly ±10 dB response variation across these frequencies for devices supporting unprocessed capture. [Android CDD, §5.11](https://source.android.com/docs/compatibility/16/android-16-cdd#5_11_capture_for_unprocessed)
 
 | Band center (Hz) | 100 | 125 | 160 | 200 | 250 | 315 | 400 |
 |---|---:|---:|---:|---:|---:|---:|---:|
@@ -69,4 +73,4 @@ At 5, 15 and 25 dB of loss the C172R departure medians are 2.46, 0.97 and 0.34 k
 
 ## Reproducing the fixed-wing comparison
 
-Run [movement_pickup.py](../../tools/experiments/2026-11-04/movement_pickup.py) with the original Seattle pilot directory, the EASA ANP v2.3 ZIP and a new output CSV path. It concatenates the two original pilot segments and solves each of the 144 model, flight phase and power combinations at three assumed indoor losses. The run directory is `$DOPPLERTRACK_DATA/runs/2026-11-04-us-movement-pickup/`. It contains the power-by-power results, band noise, helicopter inputs and commercial movement totals. The independent rerun agreed with every original 15 dB calculation within 0.002 km.
+Run [movement_pickup.py](../../tools/experiments/2026-11-04/movement_pickup.py) with the original reference recording directory, the EASA ANP v2.3 ZIP and a new output CSV path. It concatenates the two original pilot segments and solves each of the 144 model, flight phase and power combinations at three assumed indoor losses. The run directory is `$DOPPLERTRACK_DATA/runs/2026-11-04-us-movement-pickup/`. It contains the power-by-power results, band noise, helicopter inputs and commercial movement totals. The independent rerun agreed with every original 15 dB calculation within 0.002 km.

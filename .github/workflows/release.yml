@@ -3,14 +3,13 @@ name: Release
 # Push a tag like v0.1.0 (matching the version in pyproject.toml) to:
 #   1. build the sdist and wheel,
 #   2. create a GitHub Release with them attached,
-#   3. publish to PyPI via trusted publishing (no API token needed).
+#   Publishing to a package registry is intentionally configured separately.
 on:
   push:
     tags: ["v*"]
 
 permissions:
   contents: write     # create the GitHub Release
-  id-token: write     # PyPI trusted publishing (OIDC)
 
 jobs:
   build:
@@ -42,14 +41,3 @@ jobs:
         with:
           files: dist/*
           generate_release_notes: true
-
-  pypi:
-    needs: build
-    runs-on: ubuntu-latest
-    environment: pypi
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: dist
-          path: dist/
-      - uses: pypa/gh-action-pypi-publish@release/v1

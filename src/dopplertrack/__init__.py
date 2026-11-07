@@ -1,2 +1,1 @@
-def hello() -> str:
-    return "Hello from dopplertrack!"
+"""Independent experiments in aircraft acoustic geolocation."""

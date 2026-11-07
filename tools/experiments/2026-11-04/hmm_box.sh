@@ -1,5 +1,5 @@
 #!/bin/sh
-# One fleet box's whole tracker job for one whitening setting (cloud_jobs.md, SDE-C job 2 then 3): the
+# One fleet box's whole tracker job for one whitening setting (cloud_jobs.md, the detector study job 2 then 3): the
 # development references, the theta pairs on synthetic noise (the seven theta_cont at once, 12 workers each),
 # the pick on the synthetic weak pass, then the Livermore passes and the development events at the picked pair,
 # and the merge. The knobs are set before any real recording is tracked. Every step skips its finished units,

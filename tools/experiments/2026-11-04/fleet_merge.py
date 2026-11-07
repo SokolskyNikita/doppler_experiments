@@ -1,4 +1,4 @@
-"""Collects SDE-C's fleet jobs (fleet_launch.sh) into one new run folder and runs every merge step, then writes the
+"""Collects the detector study's fleet jobs (fleet_launch.sh) into one new run folder and runs every merge step, then writes the
 two settings side by side.
 
 The pulled job folders ($DOPPLERTRACK_DATA/runs/<job>/, from `runs pull`) are copied in without replacing a file

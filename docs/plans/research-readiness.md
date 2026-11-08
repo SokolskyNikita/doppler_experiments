@@ -46,6 +46,9 @@ for every area at once (owner's instruction, 2026-11-07).
 
 ### R1. Split every method into its own file
 
+**Done (2026-11-07).** This section keeps its pre-R1 file and function names. The ledger's old-to-new table maps
+them to the current ones.
+
 Split each file that holds more than one method. File names below are suggestions; the split is what matters.
 
 | Current file | Methods to separate |
@@ -90,35 +93,99 @@ table. Names that are part of an output (result-record and JSON keys, CLI flags,
 
 ### R2. Make both recipes configurable compositions
 
-Give `grid_pair` and `collective` one parameters dataclass each, holding every setting an experiment would want
-to change. Today these are module constants or literals, including:
+Give each recipe one frozen parameters dataclass, `GridPairParameters` in `methods/grid_pair/parameters.py` and
+`CollectiveParameters` in `methods/collective/parameters.py`. Each groups its settings into a few nested
+dataclasses, one per stage: spectrogram, detection, event source, gates, scoring, null, refinement, and planning
+for collective. The recipe reads every setting below from that object and no longer from a module constant, a
+literal or its own keyword default. Field names follow R1's naming rule. Run settings that cannot change a result
+(workers, cache paths, `progress`, `log`, output folders) stay as arguments and are not parameters.
 
-- `grid_pair`: the f0 sweep span and step; the shift grid and f0 scales of the locked score; the pair gates
-  (`tol_s`, `v_tol`, `d_tol`, silence distance); the null size and its normalizer; the fine-grid spacing and
-  half-width; `TOP_K`, the usability share and the pair rule; the detector and its grids (v, d, f0 margins,
-  refinement bounds, windows); which hypothesis source and which scorer to use; the harmonics.
-- `collective`: coarse and fine spacing; the cell margin and cap; tone span; clock binning, agreement and spread;
-  the fallback cap; the support stretch; sweep settings; view crops; the mode separation and count; which
-  whitening and which per-window score to use.
+Settings that become fields, by where they live today:
 
-Method choices (which event source, whitening, tracker, frequency estimator, score, null, assignment, pair rule,
-planner) are fields naming a function in a dict in the recipe module, with today's choice as the default. The
-event source covers today's profile differences: saved fits, detection with the top-two rule, or detection with
-`locate`'s pair rule, together with each one's trace selection and envelope. Where two methods already exist for the
-same job (the three trackers; the two brightness views; the S1 and S2 rescoring), both are selectable. The
-installed CLI, the benchmark profiles and studies build the same parameters object; after this item a profile is a
-named set of parameter values, not a separate code path.
+- **Both recipes, spectrogram** (`components/stft.py`, `spectrogram_from_blocks`): `nperseg`, `hop_s`, `fmin`,
+  `fmax`, `nfft`, `whiten`, `whiten_window_s`, `bg_hz`; the per-window `spectral_floor` (`local_whiten`).
+- **grid_pair, detection** (`detect_events`, `fit_event`): band, `window_s`, `step_s`, the v/d/f0/t0 grids and steps,
+  `n_curve`, `top`, `per_window`, `min_sep_s`, `min_score`, `refine`, the refinement bounds (`v_bounds`, `d_bounds`,
+  ±120 s), the objective; the statistic's settings (`OFF_CURVE`, `CONTRAST_DF`, `SWEEP_FLOOR`).
+- **grid_pair, event source and pair rule** (`methods/grid_pair/runner.py`, `evaluation/runner.py`): `TOP_K`,
+  `USABLE_VALID_SHARE`, the pair rule; `DAY_SLACK_S`, `GATE_PAD_S`, the clock gate's start and tolerance.
+- **grid_pair, gates and pairing** (`pair_grid_search`, `single_grid_search`): `tol_s`, `v_tol`, `d_tol`, the
+  negative-information distance (`silence_d_m`) and margin, `max_range_m`, `time_convention`, the inflection
+  gate (`sf_tol_s`, `sf_window_s`, `sf_smooth_s`, `INFLECTION_FLAT_RATIO`, `clock_anchor`), the alive window
+  (±300 s), harmonics, `temperature_c`.
+- **grid_pair, hypotheses** (`components/fitting/`): `MAX_OPTIMA`, `LS_DCHI2`, `NULL_DELTA`, `MODEL_ERROR_FACTOR`,
+  `MIN_SEP_S`, `V_BOUNDS`, `D_BOUNDS`, `TAU_REACH_S`, `COARSE_V`, `COARSE_D`, `LS_Z_SPAN_MIN`.
+- **grid_pair, scoring and null** (`custom_locked_score`, `custom_single_score`, `EventWindow`, `f0_sweep`,
+  `event_decoy_null`): the shift grid (−8 to 8 s by 0.5), the f0 scales (0.95–1.05 by 0.005), the crop pad (40 s)
+  and samples (160), `null_n`.
+- **grid_pair, refinement** (`refine`, `pick_flight`): `spacing_m`, `half_m`, the extra events' harmonics and f0
+  sweep, `alive_pad_s`.
+- **collective** (`methods/collective/search.py`, `components/planning/`, `components/assignment/`,
+  `components/scoring/`, `components/nulls/window_decoy_null.py`): `COARSE_M`, `FINE_M`, `MARGIN_SIGMA`,
+  `MAX_CELLS`, `F0_SPAN`, `CLOCK_BIN_S`, `AGREE_S`, `PASS_FALLBACK`, `SUB_S`, `LOG_DU`, the coarse and fine sweeps
+  (`coarse_sweep`, `fine_sweep`), the view crops (pad 40 s, 0.45–2.0 × f0), `MODE_SEPARATION_M`, `MAX_MODES`,
+  `NULL_N`, `max_range_m`; and R5's mode-rule settings.
 
-Finished when every listed setting is a parameter, results record the fully resolved parameters, and a test runs
-each recipe with every alternative method choice on a synthetic case.
+Plumbing constants (`SCORE_CHUNK`, `CHUNK`, `CPA_TILE_M`, `CPA_COLUMNS`, `CPA_CACHE_VERSION`, `STATISTIC`) stay
+constants. A setting found later that changes a result is added to its dataclass in the same way.
+
+**Method choices.** A choice is a field holding a name, looked up in a small dict in the recipe module. Seams go
+only where two methods exist today or where PLAN.md's next gates need one. Each dict holds today's choice as its
+default:
+- grid_pair: the event source (saved fits; detection with `top2`; detection with `comparable_pairs`), the detection
+  statistic (the fit's contrast; S1 `custom_rescore_zscore`; S2 `rescore_surrogate`), the event gate (rectangular
+  gates; profile-interval hypotheses, today's `hypotheses=True`), the score normalisation (raw; `pair_zscore`
+  against the decoy null, today's `comparable=True`), the time convention, and the clock anchor (heard CPA; the
+  Doppler inflection).
+- collective: the curve-integral view (`LogView`; `EventWindow`), and the window-pass assignment
+  (`greedy_assignment`). The dict has one entry until PLAN.md G4 adds exact matching.
+- both: the spectrogram whitening (`whiten_time`; `whiten_frequency`).
+
+Not seams in R2: the frequency trackers (`viterbi`, `hysteresis_viterbi`, `hmm_tracker`), which no recipe calls
+today. A gate that needs one wires it in as the least-squares hypotheses' track source, in place of
+`ridge_track`. Also not seams: the null, the planner and the fine-grid shape, which have one method each.
+
+**Defaults and profiles.** A dataclass default is today's library default, the keyword default of the function
+the setting comes from. A profile is a named set of overrides, and resolution runs in this order: dataclass
+default, then profile, then case (`bench/cases.json` geometry, gates and refinement), then the run's explicit
+overrides (`--search-param`, CLI flags, collective's config `parameters`). Today's profiles become:
+- `saved-fit`: the case's fits and harmonics;
+- `raw-audio`: detection with band 60–300 Hz, `top` 10, one harmonic, 240 s windows, then `top2`;
+- `locate`: `LocateConfig`'s defaults, that is `comparable_pairs`, the negative-information filter on at 6 km and
+  the clock gate on.
+
+`LocateConfig` is removed. `locate`, the installed CLI, `bench` and the collective command all build the same
+parameters object, so a profile is data, not a code path.
+
+**Records.** Every result records its fully resolved parameters, after all four layers, as one JSON object with
+the dataclass field names. grid_pair writes it under the result record's `provenance.parameters.resolved`. If
+`runtime/records.py`'s validator refuses the new key, the schema version is bumped and old records stay readable.
+Collective writes it into its output dict until R6.6 gives it a record. Existing output keys keep their spelling
+(R6 decides them); where a field's name differs from the key it fills, a comment maps the two. R2 lands before R6,
+whose study runner prints each arm's differences from these resolved parameters.
+
+**Behaviour.** With default parameters and each profile, the outputs on the synthetic fixtures equal R1's
+(`1ad8d8c`), apart from the new `resolved` block. Any difference goes in the ledger.
+
+Finished when:
+- every setting listed above is a field and the recipe code reads none of them from elsewhere;
+- results record the fully resolved parameters;
+- a test resolves each profile and checks that the resolved object matches what the code used before R2;
+- a test runs each recipe once per alternative method choice, one change from the defaults at a time, on a
+  synthetic case;
+- the CLI, `bench` and the collective command reject unknown parameter names.
 
 ### R3. Remove the compatibility layer
 
 Delete the top-level alias modules (`dopplertrack.tracks`, `.score`, `.search` and the rest), the
 `sys.modules` redirects, the `bench/` module shims (keeping `python -m bench` as the entry point),
 [refactor-module-map.json](../refactor-module-map.json) and the alias and pickle tests in `tests/test_layout.py`.
-Update the remaining internal users (for example `evaluation/tier1.py` still imports the legacy names).
-Caches that pickled `EventFit` under its old path are rebuilt rather than shimmed.
+Update the remaining internal users. After R1, `evaluation/tier1.py`, `prepare.py`, `report.py`, `private.py` and
+`cases.py` still import legacy module paths, and so do 38 files in `tests/`, `bench/` and `tools/` (dated
+experiments excepted). R1 already re-pointed the aliases at its renamed modules, so a legacy name that R1
+renamed (for example `dopplertrack.score.locked_score`) no longer resolves. Caches that pickled `EventFit` under
+its old path are rebuilt rather than shimmed. The `# old name:` and `# old module:` comments stay: they are the
+record that links the dated experiments to the current names.
 
 Finished when nothing imports a legacy name and `docs/architecture.md`, `docs/layout.md` and `AGENTS.md` link only
 canonical paths.
@@ -126,8 +193,10 @@ canonical paths.
 ### R4. Cache identity per method
 
 The detection cache key is an AST hash over a hand-maintained list of definitions in `runtime/cache.py`
-(`DETECTOR_CODE`); the spectrogram cache hashes one whole file; the CPA table has no code hash and depends on a
-manual `CPA_CACHE_VERSION` bump. After R1 these break or go stale.
+(`DETECTOR_CODE`, nine modules since R1). The spectrogram cache hashes the six modules listed by hand in
+`components/spectrogram_cache.py` (`SPECTROGRAM_MODULES`). The CPA table has no code hash and depends on a manual
+`CPA_CACHE_VERSION` bump (`components/search/cpa_storage.py`). R1 kept the two lists in step by hand. After R2,
+the keys must also cover the resolved parameters rather than keyword arguments.
 
 Key each cache by the source of the method files its producer uses, plus resolved parameters and input hashes,
 declared next to the producer. Give the CPA table the same kind of key. Keep the existing test that checks the
@@ -143,20 +212,30 @@ These change outputs and go in the ledger. Each gets a test.
 - **Collective search:** complete-unit enforcement (extra-cell merging currently accepts any `result.json`); the
   statistic identity written into every output, including launcher labels, NPZ null exports and merged summaries;
   null tooling that refuses incompatible or missing draws (it currently reads only `null_draws.npz` and skips units
-  without it). The mode rule (spatial separation, clock separation, number of modes), clocks kept per point and
+  without it). Today the merging and the null tooling exist only in the dated scripts
+  `tools/experiments/2026-11-04/collective_run.py` and `collective_null.py`, which stay as records (rule 4). The
+  fixes go into the package's collective path, which R6.1's profile and R6.6's record run on. The mode rule (spatial separation, clock separation, number of modes), clocks kept per point and
   merging modes across all cells become parameters in R2, with today's behavior as the default; choosing their
   values is PLAN.md G1.
-- **Likelihood tracker decoding:** `likelihood.runs` takes a per-frame argmax of the forward–backward posterior,
+- **HMM tracker decoding:** `forward_backward.runs`, used by `hmm_tracker.hmm_posterior_track`, takes a per-frame
+  argmax of the forward–backward posterior,
   which can return a frequency sequence that breaks the transition limits
-  ([review](../reference/course-reading-review.md)). Add Viterbi decoding with backtracking as a selectable decoder;
-  the default stays as it is, because the tracker rounds are closed research. Adopting it is PLAN.md G4.
-- **Trace parsing and file handles:** import upstream's fixes for trace rows that are dicts, a narrowed set of
-  trace-parse errors (`TRACE_PARSE_ERRORS`) and explicitly closed CLI file handles, as explicit method imports.
-- **Coverage preflight:** `_covered_days` treats separated intervals as one span; report gaps instead.
+  ([review](../reference/course-reading-review.md)). Add Viterbi decoding with backtracking as a selectable decoder,
+  a field of `HMMTrackerParams`. The default stays as it is, because the tracker rounds are closed research.
+  Adopting it is PLAN.md G4.
+- **Trace parsing and file handles:** compare ours (`data/trace_parsing.py`, whose `TRACE_ERRORS` already
+  includes `KeyError`, and `data/providers/adsblol.py`) with upstream's fixes in `upstream/main`'s `adsb.py` and
+  `fetch.py`: trace rows that are dicts, the narrowed `TRACE_PARSE_ERRORS`, and explicitly closed CLI file
+  handles. Import what ours lacks as explicit method imports.
+- **Coverage preflight:** `_covered_days` (`methods/grid_pair/runner.py`) treats separated intervals as one span;
+  report gaps instead.
 - **Null-day mapping** onto the recording date for metadata-gated runs.
 - **CPA build:** `jobs=1` and `jobs=N` produce the same table.
 - **Empty inputs:** define behavior for empty CPA or window paths and for fine grids with missing terrain.
-- **Process pools:** experiment code uses the package's spawn wrapper, not raw fork pools.
+- **Process pools:** the package already uses its spawn wrapper (`runtime/parallel.process_pool`) everywhere; the
+  raw pools are in dated scripts, which stay. Add a test that fails on a raw `ProcessPoolExecutor` or
+  `multiprocessing.Pool` outside `runtime/parallel.py` and `tools/experiments/`, so new study and benchmark code
+  keeps to the wrapper.
 - **`python -m dopplertrack`** works.
 
 ### R6. Study runner: just enough for experiments
@@ -165,7 +244,8 @@ Extend the existing benchmark (`bench run`, profiles, `--search-param` overrides
 `compare`) rather than building a second system.
 
 1. **Collective in the benchmark.** A `collective` profile that runs end to end from a case (detections to
-   windows to search), and control draws that substitute another day's traffic for the same recording.
+   windows to search) on R2's `CollectiveParameters`, and control draws that substitute another day's traffic for
+   the same recording.
 2. **Study files.** `bench study run STUDY.json` reads cases, a baseline (recipe, profile, parameters), variants
    (parameter overrides, including method choices), the control-day lists and a master seed (for null and
    normalization draws), and runs each arm as an ordinary benchmark run inside one study folder. It records each
@@ -199,9 +279,11 @@ discovery contracts, a remote or always-on controller, and a GPU backend. The de
 - Each method has small tests of its own contract (units, shapes, masks, score direction).
 - A synthetic scene with a known receiver, flights, f0 and clock runs end to end through both recipes and must
   recover the receiver. This checks the software, not performance.
-- The pass-window assignment is checked against an exhaustive reference on tiny graphs, including ties, caps and
-  shared-pass conflicts.
-- Serial and parallel runs of detection, CPA build and the collective search give the same results.
+- The pass-window assignment (`greedy_assignment`) is checked against an exhaustive reference on tiny graphs,
+  including ties, caps and shared-pass conflicts.
+- Serial and parallel runs of detection, CPA build, the decoy nulls and the collective search give the same
+  results. R1 removed the S2 rescoring's pool test, which ran a dated script; the package's own S2 path has no
+  pool.
 
 ### R8. Final AWS phase
 
@@ -222,8 +304,9 @@ ledger's summary. These numbers are PLAN.md's starting point and are not used to
 ## 4. Behavior-change ledger
 
 Every change that alters an output (R1–R5) gets one entry: what changed, why, which method or recipe, and its
-effect on the synthetic and fixture tests. Keep the ledger in the implementation's run folder under
-`$DOPPLERTRACK_DATA/runs/` while work is under way; R9's record summarizes it. An unexplained output change blocks
+effect on the synthetic and fixture tests. The ledger is `ledger.md` in
+`$DOPPLERTRACK_DATA/runs/2026-11-07-readiness-ledger/`, beside R1's naming review and term checks; every later
+item appends to it. R9's record summarizes it. An unexplained output change blocks
 the item that caused it. If a change flips the strict expected failure in `tests/test_oyster_bay.py`, record it here
 and remove the marker; it is not an accuracy result.
 

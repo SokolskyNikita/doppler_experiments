@@ -4,14 +4,16 @@ from __future__ import annotations
 
 import numpy as np
 
-from dopplertrack.components.detection.custom_curve_contrast import custom_curve_contrast, custom_sweep_weights
+from dopplertrack.components.detection.custom_curve_contrast import (CONTRAST_DF, SWEEP_FLOOR, custom_curve_contrast,
+                                                                     custom_sweep_weights)
 from dopplertrack.components.detection.doppler_curve import straight_pass_doppler_curve
 from dopplertrack.components.spectrogram import Spectrogram
 
 
 def grid_search(sp: Spectrogram, t_start, t_end, f_lo, f_hi, c, harmonics=1,
                 v_grid=None, d_grid=None, f0_step=1.0, t0_step=1.0, n_curve=120,
-                t0_range=None, f0_range=None, per_t0=False, fat_bins=5, objective="contrast"):
+                t0_range=None, f0_range=None, per_t0=False, fat_bins=5, objective="contrast",
+                contrast_df: float = CONTRAST_DF, sweep_floor: float = SWEEP_FLOOR):
     """Coarse grid-search maximisation of the score along ideal curves (default: the contrast).
     Returns (score, (f0, v, d, t0_emit)).
 
@@ -46,7 +48,7 @@ def grid_search(sp: Spectrogram, t_start, t_end, f_lo, f_hi, c, harmonics=1,
             rel = tq[None, :] - t0s[:, None]                         # (T0, N)
             rat = np.interp(rel, dto, ratio, left=np.nan, right=np.nan)  # (T0, N)
             if contrast:
-                w = custom_sweep_weights(rat, tq, axis=1)                    # (T0, N)
+                w = custom_sweep_weights(rat, tq, axis=1, sweep_floor=sweep_floor)   # (T0, N)
                 w = np.where(np.isnan(rat), 0.0, w)
             else:                                                     # samples past the curve's span count as zero
                 w = np.ones_like(rat)
@@ -55,7 +57,8 @@ def grid_search(sp: Spectrogram, t_start, t_end, f_lo, f_hi, c, harmonics=1,
             for h in range(1, harmonics + 1):
                 F = h * f0s[None, None, :] * rat[:, :, None]           # (T0, N, F0)
                 T = np.broadcast_to(tq[None, :, None], F.shape)
-                vals = custom_curve_contrast(sp, T.ravel(), F.ravel()) if contrast else sp.sample(T.ravel(), F.ravel())
+                vals = (custom_curve_contrast(sp, T.ravel(), F.ravel(), contrast_df) if contrast
+                        else sp.sample(T.ravel(), F.ravel()))
                 total += np.einsum("tn,tnf->tf", w, np.nan_to_num(vals.reshape(F.shape))) / wsum[:, None]
             total /= harmonics
             j = np.argmax(total, axis=1); sc = total[np.arange(len(t0s)), j]

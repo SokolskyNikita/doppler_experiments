@@ -11,6 +11,7 @@ import dopplertrack.components.types as components_types
 import dopplertrack.components.assignment.pick_flight as pick_flight
 from dopplertrack.components.search.clock_gate import clock_gate
 import dopplertrack.data.region_loading as region_loading
+from dopplertrack.methods.grid_pair.parameters import resolve
 
 DAY = "2026-09-08"
 DAY0 = datetime.datetime(2026, 9, 8, tzinfo=datetime.timezone.utc).timestamp()
@@ -45,7 +46,7 @@ def _detections(monkeypatch, events):
 
 def _search_returning(monkeypatch, t_heard1, empty=False):
     """run_search stubbed: one candidate whose clock maps audio second 1000 to t_heard1 (unix)."""
-    def fake(sp, ev1, ev2, traces, grid, **kw):
+    def fake(sp, ev1, ev2, traces, grid, params=None, **kw):
         rows = [] if empty else [dict(gidx=0, lat=40.02, lon=-73.97, seg1=0, seg2=1, icao1="a", icao2="b",
                                       t_heard1=t_heard1, d1=1, v1=1, d2=1, v2=1, score=10.0, s1=6.0, s2=4.0, shift=0.0),
                                  dict(gidx=0, lat=40.03, lon=-73.96, seg1=2, seg2=3, icao1="c", icao2="d",
@@ -62,8 +63,18 @@ def _search_returning(monkeypatch, t_heard1, empty=False):
                                                                                   s1=6.1, s2=4.4, shift=0.0)]))
 
 
+RUN = ("envelope", "cpa_cache", "workers")
+
+
+def _locate(spec, traces, tmp_path, **cfg):
+    """locate on the locate profile with the terrain off; cfg holds parameter overrides and run settings."""
+    run = locate.RunSettings(**{k: cfg.pop(k) for k in RUN if k in cfg})
+    return locate.locate(spec, DAY, BOX, traces, resolve("locate", overrides={"grid.dem": False, **cfg}), run,
+                         out_dir=tmp_path / "out")
+
+
 def _run(spec, traces, tmp_path, **cfg):
-    out = locate.locate(spec, DAY, BOX, traces, locate.LocateConfig(dem=False, **cfg), out_dir=tmp_path / "out")
+    out = _locate(spec, traces, tmp_path, **cfg)
     validate(out.record)
     return out.record["verdict"]
 
@@ -123,8 +134,7 @@ def test_a_clock_past_utc_midnight_with_one_day(monkeypatch, spec, tmp_path):
 def test_a_found_answer_is_ambiguous_with_its_reasons_and_both_rules_report(monkeypatch, spec, tmp_path):
     _detections(monkeypatch, [_event(1000, 5.0), _event(2000, 4.0), _event(3000, 3.0)])
     _search_returning(monkeypatch, DAY0 + 72000.0)
-    out = locate.locate(spec, DAY, BOX, [_traces(tmp_path)],
-                        locate.LocateConfig(dem=False, pair_rule="both", silence_d_m=None), out_dir=tmp_path / "out")
+    out = _locate(spec, [_traces(tmp_path)], tmp_path, report_top2=True, negative_information_distance_m=None)
     validate(out.record)
     v = out.record["verdict"]
     assert v["outcome"] == "ambiguous" and v["reason_codes"] == ["winner_only_refined", "silence_filter_off"]
@@ -139,7 +149,7 @@ def test_a_found_answer_is_ambiguous_with_its_reasons_and_both_rules_report(monk
 def test_locate_never_emits_located(monkeypatch, spec, tmp_path):
     _detections(monkeypatch, [_event(1000, 5.0), _event(2000, 4.0)])
     _search_returning(monkeypatch, DAY0 + 72000.0)
-    assert _run(spec, [_traces(tmp_path)], tmp_path, silence_d_m=6000.0)["outcome"] != "located"
+    assert _run(spec, [_traces(tmp_path)], tmp_path, negative_information_distance_m=6000.0)["outcome"] != "located"
 
 
 def test_a_ground_temperature_reaches_the_search_and_the_refinement(monkeypatch, spec, tmp_path):
@@ -149,13 +159,13 @@ def test_a_ground_temperature_reaches_the_search_and_the_refinement(monkeypatch,
 
     def spy(name, fn):
         def wrapped(*args, **kw):
-            seen[name] = kw
+            seen[name] = args[5]               # the parameters, after sp, the events (or segments) and the grid
             return fn(*args, **kw)
         return wrapped
     monkeypatch.setattr(pipeline, "pair_grid_search", spy("search", pipeline.pair_grid_search))
     monkeypatch.setattr(pipeline, "refine", spy("refine", pipeline.refine))
-    _run(spec, [_traces(tmp_path)], tmp_path, c=346.5, temperature_c=25.6)
-    assert all(seen[k]["temperature_c"] == 25.6 and seen[k]["c"] == 346.5 for k in ("search", "refine"))
+    _run(spec, [_traces(tmp_path)], tmp_path, speed_of_sound_m_s=346.5, temperature_c=25.6)
+    assert all(seen[k].air.temperature_c == 25.6 and seen[k].speed_of_sound() == 346.5 for k in ("search", "refine"))
 
 
 def test_the_cpa_table_folder_is_made_on_a_fresh_cache(monkeypatch, spec, tmp_path):
@@ -171,10 +181,11 @@ def test_the_defaults_are_comparable_with_the_silence_filter_on(monkeypatch, spe
     _search_returning(monkeypatch, DAY0 + 72000.0)
     calls = []
     search = pipeline.pair_grid_search
-    monkeypatch.setattr(pipeline, "pair_grid_search", lambda *a, **k: calls.append(k) or search(*a, **k))
-    out = locate.locate(spec, DAY, BOX, [_traces(tmp_path)], locate.LocateConfig(dem=False), out_dir=tmp_path / "out")
+    monkeypatch.setattr(pipeline, "pair_grid_search", lambda *a, **k: calls.append(a[5]) or search(*a, **k))
+    out = _locate(spec, [_traces(tmp_path)], tmp_path)
     assert [r["rule"] for r in out.record["pair_rules"]] == ["comparable"]
-    assert len(calls) == 3 and all(k["comparable"] and k["silence_d_m"] == 6000.0 for k in calls)  # 3 events: 3 pairs
+    assert len(calls) == 3 and all(p.scoring.normalisation == "pair_zscore"            # 3 events: 3 pairs
+                                   and p.gates.negative_information_distance_m == 6000.0 for p in calls)
     assert out.record["verdict"]["reason_codes"] == ["winner_only_refined"]
 
 
@@ -193,6 +204,6 @@ def test_the_clock_gate_counts_what_it_drops():
     import pandas as pd
     res = pd.DataFrame({"t_heard1": [1000.0, 1100.0, 1300.0], "shift": [0.0, 0.0, 0.0], "score": [3.0, 2.0, 1.0]})
     res.attrs["funnel"] = {"scored": 3}
-    out = clock_gate(res, 100.0, start_utc=900.0, start_tol_s=60.0, tol_s=locate.LocateConfig().tol_s)
+    out = clock_gate(res, 100.0, start_utc=900.0, start_tol_s=60.0, tol_s=resolve("locate").gates.time_gate_s)
     assert list(out.t_heard1) == [1000.0] and out.attrs["funnel"]["clock_gate"]["after"] == 1
     assert out.attrs["funnel"]["scored"] == 3

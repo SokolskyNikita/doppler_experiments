@@ -12,16 +12,17 @@ MARGIN_SIGMA = 2.0            # fine cells: every coarse cell within MARGIN_SIGM
 MAX_CELLS = 20                #   at most MAX_CELLS of them by Z
 
 
-def keep_cells(pts_c: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
-    """The coarse cells the fine stage visits: Z >= Z_max - MARGIN_SIGMA * sigma_c, sigma_c = MADN (1.4826 MAD) of the
-    coarse map's Z over its positive cells only (the cells with any window above its null), the highest MAX_CELLS of
-    them."""
+def keep_cells(pts_c: pd.DataFrame, margin_sigma: float = MARGIN_SIGMA,
+               max_cells: int = MAX_CELLS) -> tuple[pd.DataFrame, dict]:
+    """The coarse cells the fine stage visits: Z >= Z_max - margin_sigma (MARGIN_SIGMA) * sigma_c, sigma_c = MADN (1.4826 MAD) of the
+    coarse map's Z over its positive cells only (the cells with any window above its null), the highest max_cells
+    (MAX_CELLS) of them."""
     z = pts_c.Z.to_numpy(float)
     zmax = float(z.max())
     _, sigma = median_madn(z)
-    thr = zmax - MARGIN_SIGMA * sigma
+    thr = zmax - margin_sigma * sigma
     within = pts_c[pts_c.Z >= thr].sort_values("Z", ascending=False)
-    keep = within.head(MAX_CELLS)
+    keep = within.head(max_cells)
     return keep, dict(coarse_max=zmax, coarse_sigma=sigma, margin_threshold=thr, margin_cells=len(within),
-                      kept_cells=len(keep), capped=len(within) > MAX_CELLS,
+                      kept_cells=len(keep), capped=len(within) > max_cells,
                       margin_reached=float(zmax - keep.Z.min()) if len(keep) else None)

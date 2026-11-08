@@ -80,7 +80,7 @@ def _profile_rss(t, g, w, tc, s):
 
 def fit_track(track: Track, c: float | None = None, weighted: bool = False,
               v_bounds: tuple[float, float] = (10.0, 300.0), d_bounds: tuple[float, float] = (100.0, 30000.0),
-              n_tc: int = 24, n_s: int = 24, n_refine: int = 5) -> TrackFit:
+              n_tc: int = 24, n_s: int = 24, n_refine: int = 5, z_span_min: float = LS_Z_SPAN_MIN) -> TrackFit:
     """Least-squares fit of the straight-pass model to a track by variable projection: alpha and beta are
     solved in closed form at each (t_c, s), so the search is over those two only.
 
@@ -187,7 +187,7 @@ def fit_track(track: Track, c: float | None = None, weighted: bool = False,
     if ok_v and not (d_bounds[0] < d < d_bounds[1]):
         at_bound.append("d")
     z_span = float(z.max() - z.min())
-    identified = bool(z_span >= LS_Z_SPAN_MIN and beta < 0 and ok_v and converged
+    identified = bool(z_span >= z_span_min and beta < 0 and ok_v and converged
                       and not ({"v", "d"} & set(at_bound)))
     return TrackFit(f0=f0, v=v, d=d, t_cpa_emit=t_ref + tc, t_cpa=t_ref + tc + d / c, t_start=float(t_abs[0]), t_end=float(t_abs[-1]),
                     alpha=float(alpha), beta=float(beta), s=s, weighted=weighted, n=n,

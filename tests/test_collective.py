@@ -12,6 +12,7 @@ import dopplertrack.components.search.segments as segments
 import dopplertrack.components.stft as stft
 import dopplertrack.components.scoring.point_score as point_score
 import dopplertrack.components.windows as windows
+from dopplertrack.methods.collective.parameters import resolve_collective
 
 
 def _trace(icao, t, enu, lat0, lon0, gs):
@@ -41,8 +42,9 @@ def test_collective_find_puts_the_winner_at_the_observer_and_floors_an_empty_win
         wins.append(windows.Window(heard - 100, heard + 100, 1.03 * f0, heard + 4.0, 1.0))
     sp = stft.compute_spectrogram(x, sr, nperseg=8192, hop_s=0.5, fmin=60, fmax=300, whiten_window_s=None)
     wins.append(windows.Window(1500.0, 1700.0, 150.0, 1600.0, 0.0))     # nothing passes then: noise only
+    params = resolve_collective({"speed_of_sound_m_s": c, "f0_span": 0.04, "null_n": 60})
     out = collective.collective_detection(sp, wins, traces, (lat0 - 0.03, lat0 + 0.03, lon0 - 0.035, lon0 + 0.035),
-                                     c=c, workers=1, log=lambda m: None, f0_span=0.04, null_n=60)
+                                          params, workers=1, log=lambda m: None)
     w = out["winner"]
     assert w is not None, out.get("reason")
     assert haversine_m(w["lat"], w["lon"], lat0, lon0) < 1000.0, w

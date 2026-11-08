@@ -14,6 +14,8 @@ from dopplertrack.data.coverage import DEFAULT_MAX_RANGE_M, report_coverage
 from dopplertrack.core.propagation import speed_of_sound
 from dopplertrack.runtime.parallel import JOBS_ENV
 from dopplertrack.components.scoring.doppler_inflection import INFLECTION_FLAT_RATIO
+from dopplertrack.methods.grid_pair.parameters import resolve
+from dopplertrack.methods.parameters import parse_assignments
 from dopplertrack.components.search.grid import Grid
 from dopplertrack.data.terrain import Terrain
 from dopplertrack.components.types import EventFit
@@ -155,8 +157,9 @@ def main(argv=None):
     lo.add_argument("--start", metavar="ISO_UTC", help="the recording's stated start time, e.g. 2024-12-28T19:21:16Z; "
                     "with --start-tolerance, a pair whose clock disagrees by more is dropped")
     lo.add_argument("--start-tolerance", type=float, metavar="S", help="how far the stated start may be off, in seconds")
-    lo.add_argument("--band", nargs=2, type=float, default=(60.0, 300.0), metavar=("FLO", "FHI"))
-    lo.add_argument("--spacing", type=float, default=200.0)
+    lo.add_argument("--band", nargs=2, type=float, metavar=("FLO", "FHI"), help="detection band (default: the locate "
+                    "profile's, 60-300 Hz)")
+    lo.add_argument("--spacing", type=float, help="grid spacing, m (default: the locate profile's, 200)")
     lo.add_argument("--no-dem", action="store_true")
     lo.add_argument("--assume-envelope", nargs=4, type=float, action="append", metavar=("LATMIN", "LATMAX", "LONMIN", "LONMAX"),
                     help="the box a trace file without extraction metadata was cut to, one per --traces file, in order")
@@ -172,6 +175,11 @@ def main(argv=None):
     for parser in (e, fd, r, rf, g, lo):
         parser.add_argument("--max-range", type=float, default=DEFAULT_MAX_RANGE_M, metavar="METRES",
                             help="search range / extraction margin in metres (default: 12000); use the same value for extraction and search")
+    for parser in (s, d, r, rf, g, lo):
+        parser.add_argument("--param", action="append", default=[], metavar="KEY=VALUE",
+                            help="set any grid_pair parameter, as stage.field or a field name one stage alone has "
+                                 "(methods/grid_pair/parameters.py; repeatable, VALUE is JSON or a string, applied "
+                                 "after the flags); unknown names are refused")
 
     a = ap.parse_args(argv)
     if hasattr(a, "max_range") and (not np.isfinite(a.max_range) or a.max_range <= 0):
@@ -183,7 +191,13 @@ def main(argv=None):
         if not np.isfinite(a.temperature) or a.temperature <= -273.15:
             ap.error("--temperature must be finite and above absolute zero")
         c_kw = {"c": speed_of_sound(a.temperature)}
-    geo_kw = dict(c_kw, temperature_c=a.temperature) if c_kw else {}
+    air = {"air.temperature_c": a.temperature} if c_kw else {}
+    params = None
+    if hasattr(a, "param"):
+        try:
+            params = _parameters(a, air)
+        except ValueError as exc:
+            ap.error(str(exc))
     if a.cmd in ("search", "refine"):
         try:
             ev1, ev2 = load_events(a.events, a.pick)
@@ -198,10 +212,10 @@ def main(argv=None):
         from dopplertrack.components.stft import spectrogram_from_audiomoth
         try:
             if Path(a.audio).is_dir():
-                sp = spectrogram_from_audiomoth(a.audio, hop_s=a.hop, fmin=a.fmin, fmax=a.fmax)
+                sp = spectrogram_from_audiomoth(a.audio, **params.spectrogram.stft_kwargs())
                 sp.save(a.out)
             else:
-                sp = pipeline.make_spectrogram(a.audio, a.out, hop_s=a.hop, fmin=a.fmin, fmax=a.fmax)
+                sp = pipeline.make_spectrogram(a.audio, a.out, params.spectrogram)
         except FFmpegNotFoundError as exc:
             ap.exit(2, f"dopplertrack: {exc}\n")
         except ValueError as exc:
@@ -217,13 +231,10 @@ def main(argv=None):
         if a.out:
             open(a.out, "w").write(js)
     elif a.cmd == "detect":
-        import dopplertrack.components.detection.grid_scan as tracks
-        from dopplertrack.runtime.cache import cached_detections
         sp = Spectrogram.load(a.spec)
         # cached on the spectrogram's contents, the parameters and the detector's source ($DOPPLERTRACK_CACHE)
-        evs = cached_detections(sp, tracks.detect_events, f_lo=a.band[0], f_hi=a.band[1], harmonics=a.harmonics,
-                                top=a.top, window_s=a.window, min_score=a.min_score, workers=a.jobs, **c_kw,
-                                progress=lambda k, n: print(f"\r  window {k}/{n}", end="", flush=True))
+        evs, _ = pipeline.detect(sp, params, workers=a.jobs,
+                                 progress=lambda k, n: print(f"\r  window {k}/{n}", end="", flush=True))
         print()
         if not evs:
             print("no flyovers found")
@@ -244,14 +255,10 @@ def main(argv=None):
             el = elev(np.array([a.point[0]]), np.array([a.point[1]])) if elev else np.zeros(1)
             grid = Grid.points([a.point[0]], [a.point[1]], el)
         else:
-            grid = Grid.make(*a.bbox, a.spacing, elev)
-        res, segs = pipeline.pair_grid_search(sp, ev1, ev2, traces, grid, harmonics=tuple(a.harmonics),
-                                        silence_d_m=None if a.no_silence else 6000.0, tol_s=a.tol, cpa_cache=a.cpa_cache,
-                                        max_range_m=a.max_range, trace_metadata=trace_meta,
-                                        search_bbox=tuple(a.bbox) if a.bbox else (a.point[0], a.point[0], a.point[1], a.point[1]),
-                                        workers=a.jobs, time_convention=a.convention, sf_tol_s=a.sf_tol,
-                                        sf_smooth_s=a.sf_smooth, sf_window_s=a.sf_window, sf_flat_ratio=a.sf_flat_ratio,
-                                        clock_anchor=a.anchor, **geo_kw)
+            grid = Grid.make(*a.bbox, params.grid.spacing_m, elev)
+        res, segs = pipeline.pair_grid_search(sp, ev1, ev2, traces, grid, params, cpa_cache=a.cpa_cache,
+                                              trace_metadata=trace_meta, workers=a.jobs,
+                                              search_bbox=tuple(a.bbox) if a.bbox else (a.point[0], a.point[0], a.point[1], a.point[1]))
         for name, t in res.attrs.get("stages", {}).items():
             pipeline.log(f"stage {name}: {t['wall_s']:.1f} s wall, {t['cpu_s']:.1f} s CPU")
         pipeline.log("funnel: " + ", ".join(f"{k} {v}" for k, v in res.attrs.get("funnel", {}).items()))
@@ -262,25 +269,23 @@ def main(argv=None):
         import pandas as pd
         sp = Spectrogram.load(a.spec)
         extra = [EventFit(**json.load(open(p))) for p in a.extra]
-        xh = list(a.extra_harmonics) + [1] * (len(extra) - len(a.extra_harmonics))
         res = pd.read_csv(a.results)
         best = res.sort_values("score", ascending=False).drop_duplicates(["icao1", "icao2"]).reset_index(drop=True)
-        row = best.iloc[a.rank - 1]
+        row = best.iloc[params.refinement.rank - 1]
         traces, trace_meta = join_days(a.traces)
-        report_coverage(trace_meta, tuple(a.bbox), a.max_range, pipeline.log)
+        report_coverage(trace_meta, tuple(a.bbox), params.gates.max_range_m, pipeline.log)
         elev = None if a.no_dem else Terrain().elevation
-        segs = pipeline.segments_for_search(traces, tuple(a.bbox), float(row.lat0), float(row.lon0), max_range_m=a.max_range)
+        segs = pipeline.segments_for_search(traces, tuple(a.bbox), float(row.lat0), float(row.lon0),
+                                            max_range_m=params.gates.max_range_m)
         row = pipeline.relocate_row(row, segs, ev2.t_cpa - ev1.t_cpa)
-        print(f"refining rank {a.rank}: {row.icao1}/{row.icao2} at {row.lat:.5f}, {row.lon:.5f} (score {row.score:.2f})")
-        fine = pipeline.refine(sp, ev1, ev2, segs, row, spacing_m=a.spacing, half_m=a.half, harmonics=tuple(a.harmonics),
-                               elevation=elev, extra=extra, extra_harmonics=xh, max_range_m=a.max_range,
-                               workers=a.jobs, **geo_kw)
+        print(f"refining rank {params.refinement.rank}: {row.icao1}/{row.icao2} at {row.lat:.5f}, {row.lon:.5f} (score {row.score:.2f})")
+        fine = pipeline.refine(sp, ev1, ev2, segs, row, params, elevation=elev, extra=extra, workers=a.jobs)
         fine.to_csv(a.out, index=False)
         b = fine.iloc[0]
         print(f"peak score {b.score:.2f} at {b.lat:.6f}, {b.lon:.6f}" + (f"; extra flights {fine.attrs['extra_icao']}" if extra else ""))
         print(fine.head(10).to_string())
     elif a.cmd == "locate":
-        _locate(a, c_kw)
+        _locate(a, params)
     elif a.cmd == "search-single":
         from datetime import datetime, timezone
         sp = Spectrogram.load(a.spec)
@@ -291,16 +296,63 @@ def main(argv=None):
         except ValueError:
             t_unix = datetime.fromisoformat(a.utc.replace("Z", "+00:00")).astimezone(timezone.utc).timestamp()
         elev = None if a.no_dem else Terrain().elevation
-        grid = Grid.make(*a.bbox, a.spacing, elev)
-        res, segs = pipeline.single_grid_search(sp, ev, traces, grid, t_unix, tol_s=a.tol, harmonics=a.harmonics,
-                                               max_range_m=a.max_range, trace_metadata=trace_meta,
-                                               search_bbox=tuple(a.bbox), workers=a.jobs, **geo_kw)
+        grid = Grid.make(*a.bbox, params.grid.spacing_m, elev)
+        res, segs = pipeline.single_grid_search(sp, ev, traces, grid, t_unix, params, trace_metadata=trace_meta,
+                                                search_bbox=tuple(a.bbox), workers=a.jobs)
         res["lat0"] = grid.lat0; res["lon0"] = grid.lon0
         res.to_csv(a.out, index=False)
         print(res.head(20).to_string())
 
 
-def _locate(a, c_kw):
+ANCHORS = {"heard": "heard_cpa", "steepest": "doppler_inflection"}           # --anchor's values
+PAIR_RULES = {"top2": {"event_source.source": "top2"}, "comparable": {"event_source.source": "comparable_pairs"},
+              "both": {"event_source.source": "comparable_pairs", "event_source.report_top2": True}}
+
+
+def _parameters(a, air: dict):
+    """The grid_pair parameters a command runs with (methods/grid_pair/parameters.py): locate starts from the locate
+    profile, the others from the defaults; then the command's flags; then each --param. Unknown names raise."""
+    cmd, flags = a.cmd, dict(air)
+    if cmd == "spectrogram":
+        flags.update({"spectrogram.hop_s": a.hop, "spectrogram.fmin": a.fmin, "spectrogram.fmax": a.fmax})
+    if cmd == "detect":
+        flags.update({"detection.band_hz": tuple(a.band), "detection.harmonics": a.harmonics, "detection.top": a.top,
+                      "detection.window_s": a.window, "detection.min_score": a.min_score})
+    if cmd in ("search", "refine", "search-single", "locate"):
+        flags["gates.max_range_m"] = a.max_range
+    if cmd in ("search", "search-single", "refine", "locate") and a.no_dem:
+        flags["grid.dem"] = False
+    if cmd == "search":
+        flags.update({"gates.harmonics": tuple(a.harmonics), "gates.time_gate_s": a.tol,
+                      "gates.negative_information_distance_m": None if a.no_silence else 6000.0,
+                      "gates.time_convention": a.convention, "gates.inflection_tol_s": a.sf_tol,
+                      "gates.inflection_smooth_s": a.sf_smooth, "gates.inflection_window_s": a.sf_window,
+                      "gates.inflection_flat_ratio": a.sf_flat_ratio, "gates.clock_anchor": ANCHORS[a.anchor],
+                      "grid.spacing_m": a.spacing})
+    if cmd == "refine":
+        flags.update({"refinement.spacing_m": a.spacing, "refinement.half_width_m": a.half, "refinement.rank": a.rank,
+                      "gates.harmonics": tuple(a.harmonics) + tuple(a.extra_harmonics)})
+    if cmd == "search-single":
+        flags.update({"gates.single_event_time_gate_s": a.tol, "gates.harmonics": (a.harmonics, 1),
+                      "grid.spacing_m": a.spacing})
+    if cmd == "locate":
+        if (a.start is None) != (a.start_tolerance is None):
+            raise ValueError("--start and --start-tolerance go together")
+        if a.start is not None:
+            import datetime
+            flags["event_source.start_utc"] = datetime.datetime.fromisoformat(a.start.replace("Z", "+00:00")).timestamp()
+            flags["event_source.start_tol_s"] = a.start_tolerance
+        flags.update(PAIR_RULES[a.pair_rule])
+        if a.band is not None:
+            flags["detection.band_hz"] = tuple(a.band)
+        if a.spacing is not None:
+            flags["grid.spacing_m"] = a.spacing
+        if a.no_silence:
+            flags["gates.negative_information_distance_m"] = None
+    return resolve("locate" if cmd == "locate" else None, overrides={**flags, **parse_assignments(a.param)})
+
+
+def _locate(a, params):
     """The locate command: the spectrogram and the flight data it needs, then locate.locate and its record."""
     import os
     from pathlib import Path
@@ -309,19 +361,13 @@ def _locate(a, c_kw):
     from dopplertrack.components.spectrogram_cache import cached_spectrogram
     from dopplertrack.runtime.cache import cache_root
     from dopplertrack.runtime.records import write_record
-    if (a.start is None) != (a.start_tolerance is None):
-        raise SystemExit("--start and --start-tolerance go together")
-    start_utc = None
-    if a.start is not None:
-        import datetime
-        start_utc = datetime.datetime.fromisoformat(a.start.replace("Z", "+00:00")).timestamp()
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
     if str(a.audio).endswith(".npz"):
-        spec = Path(a.audio)
+        spec, made = Path(a.audio), "file"
     else:
-        spec = out / "spectrogram.npz"
-        cached_spectrogram(a.audio).save(spec)
+        spec, made = out / "spectrogram.npz", "audio"
+        cached_spectrogram(a.audio, **params.spectrogram.stft_kwargs()).save(spec)
     days = [a.date]
     if a.days:
         from datetime import date, timedelta
@@ -331,16 +377,15 @@ def _locate(a, c_kw):
         for day in days:
             path = out / f"traces_{day}.npz"
             if not path.exists():
-                pipeline.fetch_region(day, tuple(a.bbox), path, max_range_m=a.max_range)
+                pipeline.fetch_region(day, tuple(a.bbox), path, max_range_m=params.gates.max_range_m)
             traces.append(str(path))
     box = "_".join(f"{x:g}" for x in a.bbox)
-    cfg = loc.LocateConfig(band_hz=tuple(a.band), spacing_m=a.spacing, max_range_m=a.max_range,
-                           silence_d_m=None if a.no_silence else loc.DEFAULT_SILENCE_D_M, pair_rule=a.pair_rule,
-                           start_utc=start_utc, start_tol_s=a.start_tolerance, dem=not a.no_dem,
-                           c=c_kw.get("c"), temperature_c=a.temperature, workers=a.jobs, envelope=a.assume_envelope,
-                           cpa_cache=str(cache_root() / "cpa" / "locate" / f"{a.date}-days{a.days}-{box}-{a.spacing:g}m.npz"))
-    os.makedirs(Path(cfg.cpa_cache).parent, exist_ok=True)
-    result = loc.locate(spec, a.date, a.bbox, traces, cfg, out_dir=out, log=pipeline.log)
+    run = loc.RunSettings(workers=a.jobs, envelope=a.assume_envelope,
+                          cpa_cache=str(cache_root() / "cpa" / "locate" /
+                                        f"{a.date}-days{a.days}-{box}-{params.grid.spacing_m:g}m.npz"))
+    os.makedirs(Path(run.cpa_cache).parent, exist_ok=True)
+    result = loc.locate(spec, a.date, a.bbox, traces, params, run, out_dir=out, log=pipeline.log,
+                        spectrogram_input=made)
     sha = write_record(out / "result.json", result.record)
     (out / "result.json.sha256").write_text(f"{sha}  result.json\n")
     for line in result.summary:

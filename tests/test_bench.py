@@ -282,11 +282,14 @@ def test_search_overrides_parse_and_refuse_the_cpa_inputs():
     with pytest.raises(ValueError):
         runner.parse_overrides(["tol_s"])
     case = cases.blind_case("oyster-bay")
-    d = runner.Draft(case, {}, "saved-fit", lambda m: None, {"tol_s": 12, "time_convention": "emission"})
-    assert d.search["tol_s"] == 12 and d.extra_kwargs == {"time_convention": "emission"}
-    assert d.params["search_overrides"] == {"tol_s": 12, "time_convention": "emission"}
+    d = runner.Draft(case, {}, "saved-fit", lambda m: None, {"time_gate_s": 12, "time_convention": "emission"})
+    assert d.search["tol_s"] == 12 and d.parameters.gates.time_convention == "emission"
+    assert d.params["search_overrides"] == {"time_gate_s": 12, "time_convention": "emission"}
+    assert d.params["resolved"]["gates"]["time_gate_s"] == 12
     with pytest.raises(ValueError, match="CPA table"):
-        runner.Draft(case, {}, "saved-fit", lambda m: None, {"spacing_m": 100})
+        runner.Draft(case, {}, "saved-fit", lambda m: None, {"grid.spacing_m": 100})
+    with pytest.raises(ValueError, match="unknown parameter names"):       # old keyword names are refused, not ignored
+        runner.Draft(case, {}, "saved-fit", lambda m: None, {"tol_s": 12})
 
 
 def test_a_recipe_can_write_into_a_folder(tmp_path, monkeypatch):
@@ -630,8 +633,9 @@ def test_a_box_override_squares_a_private_case_around_its_site_and_off_the_grid(
     assert np.hypot(east, north).min() > 20.0                                   # no node on the site
     seen = {}
 
-    def fake_locate(spec, date, bbox, paths, cfg, **kw):
-        seen.update(bbox=bbox, cache=cfg.cpa_cache, envelope=cfg.envelope, spacing=cfg.spacing_m, paths=list(paths))
+    def fake_locate(spec, date, bbox, paths, params, run, **kw):
+        seen.update(bbox=bbox, cache=run.cpa_cache, envelope=run.envelope, spacing=params.grid.spacing_m,
+                    paths=list(paths))
         raise RuntimeError("stop here")
     monkeypatch.setattr(loc, "locate", fake_locate)
     case = private.resolve_case(runner.blind_case("home-1", path=private_home))

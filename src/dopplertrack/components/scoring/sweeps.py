@@ -2,7 +2,7 @@
 sweep and the curve's samples a window is scored over, the nuisance parameters the score is maximised over."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 
@@ -20,18 +20,22 @@ class Sweep:
     f0_span: float
     f0_step: float
     n: int = 80
+    # the views' log-frequency step and best-stretch length; left out of repr, which seeds the window decoy nulls,
+    # so a sweep at the defaults draws R1's rows
+    log_du: float = field(default=LOG_DU, repr=False)
+    sub_s: float = field(default=SUB_S, repr=False)
 
     def n_for(self, length_s: float) -> int:
-        return max(self.n, int(round(self.n * length_s / SUB_S)))
+        return max(self.n, int(round(self.n * length_s / self.sub_s)))
 
     def shifts(self):
         return np.arange(-self.shift_s, self.shift_s + 1e-9, self.shift_step)
 
     def offsets(self):
-        return log_offsets(self.f0_span, self.f0_step)
+        return log_offsets(self.f0_span, self.f0_step, self.log_du)
 
     def f0_scales(self):
-        return np.exp(self.offsets() * LOG_DU)
+        return np.exp(self.offsets() * self.log_du)
 
 
 def fine_sweep(f0_span: float = F0_SPAN) -> Sweep:

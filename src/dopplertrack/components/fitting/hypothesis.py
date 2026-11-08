@@ -23,6 +23,11 @@ K_BOUNDS = (V_BOUNDS[0] ** 2 / D_BOUNDS[1], V_BOUNDS[1] ** 2 / D_BOUNDS[0])
 TAU_REACH_S = 60.0          # tau profiles stop this far from the optimum
 
 
+def k_bounds(v_bounds: tuple, d_bounds: tuple) -> tuple[float, float]:
+    """The range of k = v^2/d that speed and distance bounds allow (K_BOUNDS for the defaults)."""
+    return (v_bounds[0] ** 2 / d_bounds[1], v_bounds[1] ** 2 / d_bounds[0])
+
+
 @dataclass
 class Hypothesis:
     """One optimum of one event's fit with its profile-interval box; admits holds the CPA rows inside it."""

@@ -52,19 +52,21 @@ def inputs(tmp_path):
 @pytest.mark.parametrize("command", ["search", "refine", "search-single", "detect", "fit"])
 @pytest.mark.parametrize("flags, c", [([], None), (["--temperature", "15"], doppler.speed_of_sound(15.0)),
                                       (["--temperature", "30"], doppler.speed_of_sound(30.0))])
-def test_the_cli_passes_c_only_when_a_temperature_is_given(tmp_path, monkeypatch, inputs, command, flags, c):
+def test_the_cli_sets_the_temperature_only_when_one_is_given(tmp_path, monkeypatch, inputs, command, flags, c):
+    """The searches get the parameters (their sixth argument): with a temperature its c for the fits and the
+    temperature for the geometry, else the 15 C default and none. detect gets c always; fit only with a temperature."""
     spec, files, traces, results = inputs
     seen = []
     row = pd.DataFrame([dict(lat=40, lon=-74, lat0=40, lon0=-74, seg1=0, seg2=1, icao1="a", icao2="b",
                              t_heard1=1e9, score=10, shift=0)])
 
     def capture(*a, **kw):
-        seen.append(kw)
-        return (row, []) if not kw.get("_refine") else row
+        seen.append(a[5])
+        return row, []
 
     monkeypatch.setattr(pipeline, "pair_grid_search", capture)
     monkeypatch.setattr(pipeline, "single_grid_search", capture)
-    monkeypatch.setattr(pipeline, "refine", lambda *a, **kw: (seen.append(kw), row)[1])
+    monkeypatch.setattr(pipeline, "refine", lambda *a, **kw: (seen.append(a[5]), row)[1])
     monkeypatch.setattr(pipeline, "segments_for_search", lambda *a, **k: [])
     monkeypatch.setattr(pipeline, "relocate_row", lambda r, *a: r)
     monkeypatch.setattr(cache, "cached_detections", lambda sp, produce, **kw: (seen.append(kw), [])[1])
@@ -76,14 +78,17 @@ def test_the_cli_passes_c_only_when_a_temperature_is_given(tmp_path, monkeypatch
             "detect": ["detect", str(spec), "--band", "100", "130"],
             "fit": ["fit", str(spec), "--window", "70", "130", "--band", "90", "160"]}[command]
     cli.main(args + flags)
-    (kw,) = seen
-    if c is None:
-        assert "c" not in kw and "temperature_c" not in kw        # the default path is today's, untouched
-    else:
-        assert kw["c"] == pytest.approx(c)
+    (got,) = seen
+    if command in ("search", "refine", "search-single"):
         # the geometry gets each flight's own sound speed from the ground temperature; fits get the ground's c
-        geometry = command in ("search", "refine", "search-single")
-        assert (kw.get("temperature_c") == float(flags[1])) if geometry else "temperature_c" not in kw
+        assert got.speed_of_sound() == pytest.approx(doppler.speed_of_sound() if c is None else c)
+        assert got.air.temperature_c == (None if c is None else float(flags[1]))
+    elif command == "detect":
+        assert got["c"] == pytest.approx(doppler.speed_of_sound() if c is None else c) and "temperature_c" not in got
+    elif c is None:
+        assert "c" not in got and "temperature_c" not in got        # fit: the default path is today's, untouched
+    else:
+        assert got["c"] == pytest.approx(c) and "temperature_c" not in got
 
 
 def test_a_changed_speed_of_sound_changes_the_cpa_fingerprint():
@@ -129,11 +134,12 @@ def test_a_run_ignores_the_case_weather_unless_it_sets_use_case_weather():
     blind = cases.blind_case("oyster-bay")
     assert blind["weather"]["station"].startswith("KFRG") and blind["weather"]["temperature_c"] == 25.6
     d = runner.Draft(blind, {}, "saved-fit", lambda m: None)
-    assert d.c_kw == {} and d.geo_kw == {} and d.params["speed_of_sound"]["basis"].startswith("the pipeline's default")
-    assert d.params["speed_of_sound"]["case_temperature_c"] == 25.6 and runner.WEATHER_KEY not in d.extra_kwargs
+    assert d.parameters.air.temperature_c is None and d.parameters.speed_of_sound() == doppler.speed_of_sound()
+    assert d.params["speed_of_sound"]["basis"].startswith("the pipeline's default")
+    assert d.params["speed_of_sound"]["case_temperature_c"] == 25.6
     d = runner.Draft(blind, {}, "saved-fit", lambda m: None, {runner.WEATHER_KEY: True})
-    assert d.c_kw["c"] == pytest.approx(346.48, abs=0.01) == d.params["speed_of_sound"]["c_m_s"]
-    assert d.geo_kw["temperature_c"] == 25.6 and runner.WEATHER_KEY not in d.extra_kwargs
+    assert d.parameters.speed_of_sound() == pytest.approx(346.48, abs=0.01) == d.params["speed_of_sound"]["c_m_s"]
+    assert d.parameters.air.temperature_c == 25.6 and d.params["resolved"]["air"]["temperature_c"] == 25.6
     assert d.params["search_overrides"] == {runner.WEATHER_KEY: True}
     # the two settings build different CPA tables, so they never share a file
     off = runner.Draft(blind, {}, "saved-fit", lambda m: None).cpa_cache

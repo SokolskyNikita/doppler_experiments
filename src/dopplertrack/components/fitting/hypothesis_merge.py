@@ -21,9 +21,10 @@ A CPA row (grid point, flight) is admitted for an event if some hypothesis holds
 v^2/d: each candidate flight's own ground speed gives the distance it implies."""
 from __future__ import annotations
 
-from dopplertrack.components.fitting.fit_event_hypotheses import fit_event_hypotheses
-from dopplertrack.components.fitting.hypothesis import Hypothesis
-from dopplertrack.components.fitting.ls_hypotheses import ls_hypotheses
+from dopplertrack.components.fitting.fit_event_hypotheses import MIN_SEP_S, NULL_DELTA, fit_event_hypotheses
+from dopplertrack.components.fitting.hypothesis import D_BOUNDS, MAX_OPTIMA, MODEL_ERROR_FACTOR, TAU_REACH_S, V_BOUNDS, Hypothesis
+from dopplertrack.components.fitting.ls_hypotheses import LS_DCHI2, ls_hypotheses
+from dopplertrack.components.fitting.track_regression import LS_Z_SPAN_MIN
 from dopplertrack.components.search.pair_gate import rectangular_gate
 from dopplertrack.components.spectrogram import Spectrogram
 from dopplertrack.components.types import EventFit
@@ -64,10 +65,22 @@ def informative(hyps: list[Hypothesis]) -> list[Hypothesis]:
 
 
 def event_hypotheses(sp: Spectrogram, w, ev: EventFit, c: float, null_sigma: float, harmonic: int = 1,
-                     v_tol: float = 0.35, d_tol: tuple = (0.4, 2.5)) -> list[Hypothesis]:
+                     v_tol: float = 0.35, d_tol: tuple = (0.4, 2.5), *, max_optima: int = MAX_OPTIMA,
+                     ls_dchi2: float = LS_DCHI2, null_delta: float = NULL_DELTA,
+                     model_error_factor: float = MODEL_ERROR_FACTOR, min_sep_s: float = MIN_SEP_S,
+                     v_bounds: tuple = V_BOUNDS, d_bounds: tuple = D_BOUNDS, tau_reach_s: float = TAU_REACH_S,
+                     coarse_v=None, coarse_d=None, z_span_min: float = LS_Z_SPAN_MIN,
+                     spectral_floor: float = 0.0) -> list[Hypothesis]:
     """Both sources' hypotheses for one event, merged, without uninformative ones; with none left, the rectangular gate
-    (gate_hypothesis). The band is 0.85 f_post to 1.15 f_pre of the event's fit."""
+    (gate_hypothesis). The band is 0.85 f_post to 1.15 f_pre of the event's fit. The keyword settings are the two
+    sources' (ls_hypotheses, fit_event_hypotheses), defaulting to their module constants."""
     f_lo, f_hi = 0.85 * ev.f_post, 1.15 * ev.f_pre
-    hyps = informative(merge(ls_hypotheses(sp, ev, f_lo, f_hi, c, harmonic) +
-                             fit_event_hypotheses(sp, w, ev, f_lo, f_hi, c, null_sigma, harmonic)))
+    ls = ls_hypotheses(sp, ev, f_lo, f_hi, c, harmonic, max_optima=max_optima, ls_dchi2=ls_dchi2,
+                       model_error_factor=model_error_factor, v_bounds=v_bounds, d_bounds=d_bounds,
+                       tau_reach_s=tau_reach_s, z_span_min=z_span_min, spectral_floor=spectral_floor)
+    fe = fit_event_hypotheses(sp, w, ev, f_lo, f_hi, c, null_sigma, harmonic, max_optima=max_optima,
+                              null_delta=null_delta, model_error_factor=model_error_factor, min_sep_s=min_sep_s,
+                              v_bounds=v_bounds, d_bounds=d_bounds, tau_reach_s=tau_reach_s, coarse_v=coarse_v,
+                              coarse_d=coarse_d, spectral_floor=spectral_floor)
+    hyps = informative(merge(ls + fe))
     return hyps or [gate_hypothesis(ev, v_tol, d_tol, c)]

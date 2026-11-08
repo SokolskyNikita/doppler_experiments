@@ -7,8 +7,9 @@ import numpy as np
 from dopplertrack.components.scoring.curve_integral import EventWindow
 
 
-def f0_sweep(w: EventWindow, hyps: list) -> np.ndarray:
-    """Scales of the event's fitted f0 to sweep in scoring: today's +-5 %, widened to every hypothesis's f0 range."""
-    lo = min([0.95] + [h.f0_range[0] / w.fit.f0 for h in hyps])
-    hi = max([1.05] + [h.f0_range[1] / w.fit.f0 for h in hyps])
-    return np.arange(lo, hi + 1e-9, 0.005)
+def f0_sweep(w: EventWindow, hyps: list, base: tuple = (0.95, 1.05, 0.005)) -> np.ndarray:
+    """Scales of the event's fitted f0 to sweep in scoring: base (lo, hi, step; today's +-5 % by 0.5 %), widened to
+    every hypothesis's f0 range."""
+    lo = min([base[0]] + [h.f0_range[0] / w.fit.f0 for h in hyps])
+    hi = max([base[1]] + [h.f0_range[1] / w.fit.f0 for h in hyps])
+    return np.arange(lo, hi + 1e-9, base[2])

@@ -8,6 +8,7 @@ from dopplertrack.components.scoring.curve_integral import EventWindow
 from dopplertrack.components.types import EventFit
 import dopplertrack.components.search.types as search_types
 import dopplertrack.components.nulls.event_decoy_null as event_decoy_null
+from dopplertrack.methods.grid_pair.parameters import resolve as resolve_parameters
 
 
 def _cpa(rows):
@@ -22,11 +23,11 @@ EV2 = EventFit(1926.8, 1918.0, 120, 100, 3000, 1870, 1970, 5, 150, 90)
 def _patch(monkeypatch, cpa, segs, locked):
     monkeypatch.setattr(pipeline, "build_segments", lambda *a, **k: segs)
     monkeypatch.setattr(pipeline, "cached_cpa_table", lambda *a, **k: cpa)
-    monkeypatch.setattr(pipeline.EventWindow, "from_fit", staticmethod(lambda sp, fit, h=1: EventWindow(fit, None, h)))
+    monkeypatch.setattr(pipeline.EventWindow, "from_fit", staticmethod(lambda sp, fit, h=1, **k: EventWindow(fit, None, h)))
     monkeypatch.setattr(pipeline, "modelled_curve", lambda *a: (np.zeros(2), np.zeros(2)))
     monkeypatch.setattr(pipeline, "custom_locked_score", locked)
     # the null: event 1's wrong flights score around 10 (spread 2), event 2's around 1 (spread 0.5)
-    monkeypatch.setattr(event_decoy_null, "custom_single_score", lambda w, seg, o, t, c=None:
+    monkeypatch.setattr(event_decoy_null, "custom_single_score", lambda w, seg, o, t, c=None, **k:
                         (10.0 + 2.0 * np.sin(seg.trace_idx)) if w.fit is EV1 else (1.0 + 0.5 * np.sin(seg.trace_idx)))
     for name in ("report_coverage", "report_altitude_sources", "report_candidate_gaps"):
         monkeypatch.setattr(pipeline, name, lambda *a, **k: None)
@@ -41,10 +42,13 @@ def test_comparable_score_ranks_by_each_events_own_null(monkeypatch):
     _patch(monkeypatch, cpa, segs, lambda w1, w2, s1, s2, obs, th, **k: (sum(scores[int(obs[0])]), *scores[int(obs[0])], 0.0))
     grid = search.Grid.points([40.0, 40.01], [-74.0, -74.0], np.zeros(2))
     grid.enu[:, 0] = [0.0, 1.0]
-    run = dict(silence_d_m=None, progress=False, workers=1)
-    plain, _ = pipeline.pair_grid_search(None, EV1, EV2, [], grid, **run)
+    run = dict(progress=False, workers=1)
+
+    def params(**kw):
+        return resolve_parameters(overrides={"negative_information_distance_m": None, **kw})
+    plain, _ = pipeline.pair_grid_search(None, EV1, EV2, [], grid, params(), **run)
     assert list(plain.gidx) == [0, 1] and "z1" not in plain                     # raw: the loud event wins
-    res, _ = pipeline.pair_grid_search(None, EV1, EV2, [], grid, comparable=True, **run)
+    res, _ = pipeline.pair_grid_search(None, EV1, EV2, [], grid, params(normalisation="pair_zscore"), **run)
     n1, n2 = res.attrs["null"]["event1"], res.attrs["null"]["event2"]
     assert n1["n"] == event_decoy_null.NULL_N and n1["seed"] != n2["seed"] and len(n1["sample_sha256"]) == 64
     assert list(res.gidx) == [1, 0]                                              # comparable: point 1 wins
@@ -52,7 +56,8 @@ def test_comparable_score_ranks_by_each_events_own_null(monkeypatch):
     assert row.z1 == pytest.approx((11.0 - n1["median"]) / n1["sigma"])
     assert row.z2 == pytest.approx((2.0 - n2["median"]) / n2["sigma"])
     assert row.score == pytest.approx(row.z1 + row.z2) and row.raw_score == pytest.approx(13.0)
-    big, _ = pipeline.pair_grid_search(None, EV1, EV2, [], grid, comparable=True, null_n=4000, **run)
+    big, _ = pipeline.pair_grid_search(None, EV1, EV2, [], grid, params(normalisation="pair_zscore", null_n=4000),
+                                       **run)
     assert big.attrs["null"]["event1"]["n"] == 4000 and big.attrs["null"]["event2"]["n"] == 4000
 
 

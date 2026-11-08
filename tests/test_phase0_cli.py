@@ -42,12 +42,12 @@ def test_search_and_refine_take_fits_or_ranked_detect_list(tmp_path, monkeypatch
     row = dict(lat=40, lon=-74, lat0=40, lon0=-74, seg1=0, seg2=1, icao1="a", icao2="b",
                t_heard1=1e9, score=10, shift=0)
 
-    def fake_search(sp, a, b, traces, grid, **kwargs):
-        seen.append((a, b, kwargs["max_range_m"]))
+    def fake_search(sp, a, b, traces, grid, params, **kwargs):
+        seen.append((a, b, params.gates.max_range_m))
         return pd.DataFrame([row]), []
 
-    def fake_refine(sp, a, b, *args, **kwargs):
-        seen.append((a, b, kwargs["max_range_m"]))
+    def fake_refine(sp, a, b, segs, row_, params, **kwargs):
+        seen.append((a, b, params.gates.max_range_m))
         return pd.DataFrame([row])
 
     monkeypatch.setattr(pipeline, "pair_grid_search", fake_search)

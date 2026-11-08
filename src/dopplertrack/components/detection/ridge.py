@@ -39,13 +39,14 @@ def ridge_curve(sp: Spectrogram, max_step_bins: int = 3, jump_penalty: float = 1
     return sp.f[path]
 
 
-def ridge_track(sp: Spectrogram, t_start: float, t_end: float, f_lo: float, f_hi: float, harmonic: int = 1) -> Track:
+def ridge_track(sp: Spectrogram, t_start: float, t_end: float, f_lo: float, f_hi: float, harmonic: int = 1,
+                spectral_floor: float = 0.0) -> Track:
     """ridge_curve() through the window, on local_whiten of exactly the band (times the harmonic), as a Track:
     bin-centre frequencies, amplitude 10^(dB/20) of the whitened level on the path, and the
     spectrogram's frame mask. Unlike fit_event's padded crop, which constrains its curve to the band,
     ridge_curve() takes the strongest path through whatever it is given, so any margin lets it lock onto a
     line outside the band."""
-    win = local_whiten(sp.crop(t_start, t_end, harmonic * f_lo, harmonic * f_hi))
+    win = local_whiten(sp.crop(t_start, t_end, harmonic * f_lo, harmonic * f_hi), spectral_floor)
     f = ridge_curve(win)
     level = win.S[np.searchsorted(win.f, f), np.arange(len(win.t))]
     return Track(win.t, f, 10.0 ** (level / 20.0), win.valid.copy(), harmonic)

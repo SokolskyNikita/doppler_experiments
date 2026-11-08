@@ -21,14 +21,17 @@ class LogView:
     is 0.45-2.0 times the coarse tone, which holds a +-25 % f0 sweep over a pass's Doppler span; outside it, and on
     invalid frames, the level is 0, as sweep_scores' fill."""
 
-    def __init__(self, win: Window, sp: Spectrogram, n: int, pad_s: float = 40.0):
-        crop = local_whiten(sp.crop(win.t_start - pad_s, win.t_end + pad_s, max(0.45 * win.f0, sp.f[0]),
-                                    min(2.0 * win.f0, sp.f[-1])))
-        self.f0, self.n = win.f0, n
+    def __init__(self, win: Window, sp: Spectrogram, n: int, pad_s: float = 40.0, f_lo: float = 0.45,
+                 f_hi: float = 2.0, log_du: float = LOG_DU, sub_s: float = SUB_S, spectral_floor: float = 0.0):
+        """The crop is the window padded by pad_s, f_lo to f_hi times the coarse tone, through local_whiten at
+        spectral_floor; log_du is the log-frequency step and sub_s the best stretch's length."""
+        crop = local_whiten(sp.crop(win.t_start - pad_s, win.t_end + pad_s, max(f_lo * win.f0, sp.f[0]),
+                                    min(f_hi * win.f0, sp.f[-1])), spectral_floor)
+        self.f0, self.n, self.log_du, self.sub_s = win.f0, n, log_du, sub_s
         self.tq = np.linspace(win.t_start, win.t_end, n)
         self.u0 = float(np.log(crop.f[0])) if len(crop.f) else 0.0
-        J = int(np.floor((np.log(crop.f[-1]) - self.u0) / LOG_DU)) + 1 if len(crop.f) > 1 else 0
-        F = np.exp(self.u0 + LOG_DU * np.arange(J))
+        J = int(np.floor((np.log(crop.f[-1]) - self.u0) / log_du)) + 1 if len(crop.f) > 1 else 0
+        F = np.exp(self.u0 + log_du * np.arange(J))
         T, FF = np.broadcast_to(self.tq[None, :], (J, n)), np.broadcast_to(F[:, None], (J, n))
         self.A = crop.sample(T.ravel(), FF.ravel()).reshape(J, n).astype(np.float32) if J else np.zeros((0, n), np.float32)
 
@@ -45,7 +48,7 @@ class LogView:
         rat = np.interp(rel, t_audio[ok], ratio[ok], left=np.nan, right=np.nan)
         valid = np.isfinite(rat).sum(1) >= 10
         with np.errstate(invalid="ignore", divide="ignore"):
-            x = (np.log(self.f0 * rat) - self.u0) / LOG_DU                              # (S, n) fractional row
+            x = (np.log(self.f0 * rat) - self.u0) / self.log_du                         # (S, n) fractional row
         x = x[:, None, :] + np.asarray(offsets, float)[None, :, None]                   # (S, K, n)
         good = np.isfinite(x) & (x >= 0) & (x <= J - 1)
         j0 = np.where(good, np.floor(x), 0).astype(np.int64)
@@ -55,15 +58,16 @@ class LogView:
         v = flat[j0 * n + col] * (1 - w) + flat[j1 * n + col] * w
         v = np.where(good, v, 0.0)
         span = (self.tq[-1] - self.tq[0]) / max(n - 1, 1)
-        L = int(min(n, max(1, round(SUB_S / span) + 1))) if span > 0 else n
+        L = int(min(n, max(1, round(self.sub_s / span) + 1))) if span > 0 else n
         cs = np.concatenate([np.zeros(v.shape[:2] + (1,)), np.cumsum(v, axis=2)], axis=2)
         total = ((cs[..., L:] - cs[..., :-L]) / L).max(axis=2)
         total[~valid] = 0.0
         return total
 
 
-def log_offsets(span: float, step: float) -> np.ndarray:
-    """f0 offsets in LOG_DU units covering scales 1 - span to 1 + span at about `step` (uniform in log f0)."""
-    m = max(1, int(round(np.log1p(step) / LOG_DU)))
-    lo = int(np.floor(np.log1p(-span) / (m * LOG_DU))); hi = int(np.ceil(np.log1p(span) / (m * LOG_DU)))
+def log_offsets(span: float, step: float, log_du: float = LOG_DU) -> np.ndarray:
+    """f0 offsets in log_du units (LOG_DU by default) covering scales 1 - span to 1 + span at about `step` (uniform in
+    log f0)."""
+    m = max(1, int(round(np.log1p(step) / log_du)))
+    lo = int(np.floor(np.log1p(-span) / (m * log_du))); hi = int(np.ceil(np.log1p(span) / (m * log_du)))
     return m * np.arange(lo, hi + 1)

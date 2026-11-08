@@ -9,7 +9,8 @@ import dataclasses
 
 import numpy as np
 
-from dopplertrack.components.detection.custom_curve_contrast import custom_curve_contrast, custom_sweep_weights
+from dopplertrack.components.detection.custom_curve_contrast import (CONTRAST_DF, SWEEP_FLOOR, custom_curve_contrast,
+                                                                     custom_sweep_weights)
 from dopplertrack.components.detection.doppler_curve import straight_pass_doppler_curve
 from dopplertrack.components.spectrogram import Spectrogram
 from dopplertrack.components.types import EventFit
@@ -32,12 +33,13 @@ def overlap_weight(hop_s: float, window_s: float = 2.048, n: int = 8192) -> floa
 
 
 # old name: curve_zscore
-def custom_contrast_zscore(sp: Spectrogram, ef: EventFit, c: float, harmonics: int = 1, frame_weight: float | None = None
-                 ) -> tuple[float, float]:
+def custom_contrast_zscore(sp: Spectrogram, ef: EventFit, c: float, harmonics: int = 1, frame_weight: float | None = None,
+                           off_curve: tuple = OFF_CURVE, contrast_df: float = CONTRAST_DF,
+                           sweep_floor: float = SWEEP_FLOOR) -> tuple[float, float]:
     """S1 for a fitted curve: sum_k a_k c_k / (sigma_c sqrt(sum_k a_k^2 / w)) over the valid frames k of sp (whitened)
     in [t_start, t_end], with c_k the ridge contrast on the curve (averaged over harmonics), a_k its sweep weights,
     w the frames' overlap weight and sigma_c the MADN (Maronna 2019 eq. 2.63) of the same contrast along the curve
-    moved off itself in frequency (OFF_CURVE). Scaled to about unit spread in noise whatever the curve's length or
+    moved off itself in frequency (off_curve, default OFF_CURVE). Scaled to about unit spread in noise whatever the curve's length or
     the overlap; with an estimated scale it is t-like rather than a unit z (Kay 1998 §9.3), and the reference
     samples share frames with the curve. Returns (S1, sigma_c)."""
     k = (sp.t >= ef.t_start) & (sp.t <= ef.t_end) & sp.valid
@@ -46,13 +48,14 @@ def custom_contrast_zscore(sp: Spectrogram, ef: EventFit, c: float, harmonics: i
         return float("nan"), float("nan")
     dto, ratio = straight_pass_doppler_curve(ef.v, ef.d, c)
     rat = np.interp(t - ef.t_cpa_emit, dto, ratio, left=np.nan, right=np.nan)
-    a = np.where(np.isnan(rat), 0.0, custom_sweep_weights(rat, t))
+    a = np.where(np.isnan(rat), 0.0, custom_sweep_weights(rat, t, sweep_floor=sweep_floor))
     rat = np.nan_to_num(rat, nan=1.0)
 
     def contrast(scale):
-        return np.mean([custom_curve_contrast(sp, t, h * ef.f0 * rat * scale) for h in range(1, harmonics + 1)], axis=0)
+        return np.mean([custom_curve_contrast(sp, t, h * ef.f0 * rat * scale, contrast_df) for h in range(1, harmonics + 1)],
+                       axis=0)
     on = np.nan_to_num(contrast(1.0))
-    off = np.concatenate([contrast(1.0 + s) for s in OFF_CURVE])
+    off = np.concatenate([contrast(1.0 + s) for s in off_curve])
     off = off[np.isfinite(off)]
     sigma = 1.4826 * float(np.median(np.abs(off - np.median(off)))) if len(off) else float("nan")
     w = overlap_weight(float(np.median(np.diff(sp.t)))) if frame_weight is None else frame_weight
@@ -63,7 +66,8 @@ def custom_contrast_zscore(sp: Spectrogram, ef: EventFit, c: float, harmonics: i
 # old name: rescore_z
 def custom_rescore_zscore(sp: Spectrogram, events: list[EventFit], f_lo: float, f_hi: float, c: float | None = None,
               harmonics: int = 1, min_sep_s: float = 60.0, top: int | None = None, min_score: float = 0.0,
-              diagnostics: list | None = None) -> list[EventFit]:
+              diagnostics: list | None = None, off_curve: tuple = OFF_CURVE, contrast_df: float = CONTRAST_DF,
+              sweep_floor: float = SWEEP_FLOOR, spectral_floor: float = 0.0) -> list[EventFit]:
     """detect_events' fits rescored by S1 (custom_contrast_zscore, PLAN item 6), re-ranked, one event per min_sep_s
     (greedy non-maximum suppression), the best
     `top` above min_score. The fits are unchanged; only the score is S1's. Kept apart from detect_events so that
@@ -75,8 +79,9 @@ def custom_rescore_zscore(sp: Spectrogram, events: list[EventFit], f_lo: float, 
     scored, rows = [], []
     for ef in events:
         win = local_whiten(sp.crop(ef.t_start - 30, ef.t_end + 30, max(f_lo - pad, sp.f[0]),
-                                   min(f_hi * harmonics + pad, sp.f[-1])))
-        z, sigma = custom_contrast_zscore(win, ef, c, harmonics)
+                                   min(f_hi * harmonics + pad, sp.f[-1])), spectral_floor)
+        z, sigma = custom_contrast_zscore(win, ef, c, harmonics, off_curve=off_curve, contrast_df=contrast_df,
+                                          sweep_floor=sweep_floor)
         rows.append(dict(t_cpa=ef.t_cpa, s0=ef.score, s1=z, sigma_c=sigma))
         if np.isfinite(z) and z > min_score:
             scored.append(dataclasses.replace(ef, score=z))

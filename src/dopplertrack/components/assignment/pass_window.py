@@ -10,17 +10,18 @@ PASS_FALLBACK = 3              # a window's best passes per clock bin offered to
 
 
 # old name: clock_matches
-def greedy_assignment(scored: pd.DataFrame, one_pass: bool = True, clock_bin: int | None = None) -> pd.DataFrame:
+def greedy_assignment(scored: pd.DataFrame, one_pass: bool = True, clock_bin: int | None = None,
+                      agree_s: float = AGREE_S, pass_fallback: int = PASS_FALLBACK) -> pd.DataFrame:
     """Greedy assignment (Blackman & Popoli 1999 p.46): the positive-z matches in descending z, each accepted only when
     neither its window nor its pass is already taken at that grid point and clock bin. Each window offers its
-    PASS_FALLBACK best passes per bin; clocks are binned at AGREE_S / 2 and each match spread over +-2 bins. Like any
+    pass_fallback (PASS_FALLBACK) best passes per bin; clocks are binned at agree_s (AGREE_S) / 2 and each match spread over +-2 bins. Like any
     greedy assignment it need not reach the best total (ibid.). With one_pass=False there is no assignment: each
     window's best match per bin. Shared by scoring and reporting."""
     pos = scored[scored["z"] > 0].copy()
-    pos["bin"] = np.floor(pos["b"] / (AGREE_S / 2)).astype(np.int64)
+    pos["bin"] = np.floor(pos["b"] / (agree_s / 2)).astype(np.int64)
     pos["pass"] = np.round(pos["t_heard"].to_numpy(float)).astype(np.int64)
     pos = pos.sort_values("z", ascending=False, kind="stable")
-    best = pos.groupby(["gidx", "w", "bin"]).head(PASS_FALLBACK if one_pass else 1)
+    best = pos.groupby(["gidx", "w", "bin"]).head(pass_fallback if one_pass else 1)
     spread = pd.concat([best.assign(bin=best["bin"] + d) for d in range(-2, 3)], ignore_index=True)
     if clock_bin is not None:
         spread = spread[spread["bin"] == clock_bin]

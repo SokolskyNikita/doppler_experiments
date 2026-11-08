@@ -21,7 +21,8 @@ Installed defaults:
   one harmonic, top 20, finite scores strictly above `min_score=0`. Its band is required.
 - `search`: 200 m grid; heard-CPA gap ±6 s, speed ±35%, distance 0.4–2.5× the fits, 6 km silence filter,
   heard clock anchor. Emission timing, steepest-fall checks and a steepest clock anchor are explicit options.
-  Comparable scores and hypotheses are library switches, off by default in `pipeline.pair_grid_search`.
+  Comparable scores (`scoring.normalisation=pair_zscore`) and hypotheses (`gates.event_gate=profile_intervals`) are
+  parameters, off by default.
 - `refine`: CLI 50 m grid with 600 m half-width (the library's default half-width is 400 m).
   `search-single` takes an absolute heard-CPA time, default ±30 s gate and 200 m grid.
 - `locate`: 60–300 Hz, top 10 detections, every pair among the top five usable events with comparable scores,
@@ -36,7 +37,21 @@ Benchmark profiles are part of a result's identity. `saved-fit` (default) uses t
 `raw-audio` uses detection's top two by score, earlier first, with one harmonic. The `locate` profile uses the
 comparable default, but takes silence, geometry and refinement settings from the case, uses its own trace
 selection/envelope rules, and gates on the case's stated start unless disabled. Weather is off unless `--weather`.
-These assumptions need not match a CLI invocation; `execute_case_locate` constructs the actual configuration.
+
+Every setting that can change a result is a field of one frozen parameters dataclass per recipe (research readiness
+R2): `GridPairParameters` in [methods/grid_pair/parameters.py](../src/dopplertrack/methods/grid_pair/parameters.py)
+and `CollectiveParameters` in [methods/collective/parameters.py](../src/dopplertrack/methods/collective/parameters.py),
+nested by stage, with the functions' keyword defaults as defaults. Resolution runs default, then profile (`PROFILES`,
+data: `saved-fit`, `raw-audio`, `locate`), then the case (`bench/runner.case_parameters`: its search and refine blocks,
+harmonics under saved-fit, the station temperature with `--weather`, the stated start under locate), then the run's
+explicit overrides (`bench run --search-param`, CLI flags then `--param`, the collective config's `parameters`), and
+unknown names are refused. A method choice is a name looked up in a dict in the recipe module (`pipeline.py`:
+`DETECTION_STATISTICS`, `TIME_CONVENTIONS`, `EVENT_GATES`, `SCORE_NORMALISATIONS`, `CLOCK_ANCHORS`; `runner.py`:
+`EVENT_SOURCES`; `collective/search.py`: `VIEWS`, `ASSIGNMENTS`; `methods/parameters.py`: `WHITENINGS`). Each record
+keeps the fully resolved set: grid_pair under `provenance.parameters.resolved`, collective under `parameters`
+(`--revision` runs record that another revision's CLI ran instead). The `locate` profile still runs through
+`execute_case_locate` and `locate.locate` (usability, coverage and verdict), saved-fit and raw-audio through
+`execute_case`.
 
 ## Results, coverage and abstention
 
@@ -160,8 +175,9 @@ serial/pool equivalence, full-default real-data performance or a calibrated maxi
 record reports v4's smoke cancelled without results; that is recorded history, not a fresh run inspection.
 
 The trackers (`viterbi`, `hysteresis_viterbi`, `hmm_tracker`), the de-Dopplerised tone score, track fitting and the
-hypotheses remain library/research code. `pair_grid_search(hypotheses=True)` is explicit; CLI detect selects none of
-these trackers. `custom_rescore_zscore` (S1) and `rescore_surrogate` (S2) are separate APIs, not CLI detector statistic choices. Their tests demonstrate mechanics,
+hypotheses remain library/research code. The hypotheses are the `gates.event_gate=profile_intervals` choice; CLI detect
+selects none of these trackers. `custom_rescore_zscore` (S1) and `rescore_surrogate` (S2's D) are the
+`detection.statistic` choices beside the default contrast. Their tests demonstrate mechanics,
 not adoption of a failed or unfinished experiment.
 
 The late [detector_roc.py](../tools/experiments/2026-11-04/detector_roc.py) change dispatches S2 reversed-window fits

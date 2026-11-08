@@ -10,7 +10,8 @@ from dopplertrack.components.search.pair_join import join_pairs, stage_triples
 
 
 def pair_hypotheses(cpa: pd.DataFrame, hyps: list, tol_s: float, emission: bool, silence_d_m, funnel: dict,
-                     triples: dict | None) -> pd.DataFrame:
+                     triples: dict | None, tau_reach_s: float = TAU_REACH_S,
+                     silence_margin_s: float = 40.0) -> pd.DataFrame:
     """Triples for every pair of the two events' hypotheses: each pair's admitted rows, joined at its own time
     offset (and at the window's reach when either tau profile was flat), then the negative-information filter. A
     triple is kept once per event-1 hypothesis, since that sets the clock it is scored at; pair_grid_search keeps each triple's
@@ -26,9 +27,10 @@ def pair_hypotheses(cpa: pd.DataFrame, hyps: list, tol_s: float, emission: bool,
         for j, h2 in enumerate(hyps[1]):
             b = cpa[h2.admits(cpa)]
             dt = h2.t_cpa_emit - h1.t_cpa_emit if emission else h2.t_cpa - h1.t_cpa
-            tol = max(tol_s, TAU_REACH_S) if "tau" in set(h1.weak) | set(h2.weak) else tol_s
+            tol = max(tol_s, tau_reach_s) if "tau" in set(h1.weak) | set(h2.weak) else tol_s
             sub: dict = {}
-            m = join_pairs(a, b, cpa, dt, tol, time_col=time_col, silence_d_m=silence_d_m, funnel={}, triples=sub)
+            m = join_pairs(a, b, cpa, dt, tol, time_col=time_col, silence_d_m=silence_d_m,
+                           silence_margin_s=silence_margin_s, funnel={}, triples=sub)
             gated.append(sub[gate])
             parts.append(m.assign(h1=i, h2=j))
     cols = list(cpa.columns)

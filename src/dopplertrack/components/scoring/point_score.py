@@ -6,33 +6,36 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from dopplertrack.components.assignment.pass_window import AGREE_S, greedy_assignment
+from dopplertrack.components.assignment.pass_window import AGREE_S, PASS_FALLBACK, greedy_assignment
 
 
-def point_scores(scored: pd.DataFrame, n_windows: int, one_pass: bool = True) -> pd.DataFrame:
+def point_scores(scored: pd.DataFrame, n_windows: int, one_pass: bool = True, agree_s: float = AGREE_S,
+                 pass_fallback: int = PASS_FALLBACK, assign=greedy_assignment) -> pd.DataFrame:
     """Z(x) = max over clocks of sum over windows of max(z, 0) (key Z), the windows' best clocks agreeing within
     +-AGREE_S: clocks are binned at AGREE_S / 2, and a window's z at a bin is its best within two bins either side.
     With one_pass (the design's section 1, enforced from the fourth step), a pass, a segment's CPA at the point,
     explains only its best window at a point and clock, by greedy assignment (Blackman & Popoli 1999 p. 46); a
-    window whose best pass is taken falls back to its next (of PASS_FALLBACK)."""
-    per = greedy_assignment(scored, one_pass)
+    window whose best pass is taken falls back to its next (of pass_fallback). assign is the window-pass assignment
+    (greedy_assignment's signature)."""
+    per = assign(scored, one_pass, agree_s=agree_s, pass_fallback=pass_fallback)
     if not len(per):
         return pd.DataFrame(columns=["gidx", "Z", "b", "n_matched"])
-    step = AGREE_S / 2
+    step = agree_s / 2
     tot = per.groupby(["gidx", "bin"]).agg(Z=("z", "sum"), n_matched=("w", "nunique")).reset_index()
     top = tot.sort_values("Z", ascending=False).drop_duplicates("gidx")
     top["b"] = (top["bin"] + 0.5) * step
     return top[["gidx", "Z", "b", "n_matched"]].reset_index(drop=True)
 
 
-def matched_at(scored: pd.DataFrame, gidx: int, b: float, segs, wins) -> tuple[list, list]:
+def matched_at(scored: pd.DataFrame, gidx: int, b: float, segs, wins, agree_s: float = AGREE_S,
+               pass_fallback: int = PASS_FALLBACK, assign=greedy_assignment) -> tuple[list, list]:
     """The matches used by point_scores at the winning clock bin, plus all windows with a candidate there."""
-    step = AGREE_S / 2
+    step = agree_s / 2
     b0 = int(np.floor(b / step))
     here = scored[(scored["gidx"] == gidx)]
     here = here[np.abs(np.floor(here["b"] / step).astype(np.int64) - b0) <= 2]
     voters = sorted({int(w) for w in here["w"]})
-    taken = greedy_assignment(here, clock_bin=b0)
+    taken = assign(here, clock_bin=b0, agree_s=agree_s, pass_fallback=pass_fallback)
     here = pd.concat([taken, here[~here["w"].isin(taken["w"]) & (here["z"] <= 0)]])
     out = []
     for w, win in enumerate(wins):

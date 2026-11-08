@@ -33,10 +33,15 @@ PER_EVENT_GATE = ("run_search gates speed and distance together for each event; 
                   "and event2_gates")
 NEAR_REFERENCE_M = 250.0     # the nearest 200 m grid point and its neighbours (Phase 2 item 1's criterion)
 TRIPLES_FILE = "funnel_triples.npz"
-# Overrides change how a run searches, never the CPA table a case's cache file holds, so the inputs of
-# cpa_table (the grid, the range, the terrain) and the cache path itself can't be overridden.
-FIXED_BY_CASE = ("bbox", "spacing_m", "dem", "max_range_m", "cpa_cache")
-SEARCH_ARGS = ("tol_s", "v_tol", "d_tol", "silence_d_m", "harmonics")
+# Overrides change how a run searches, never the CPA table a case's cache file holds, so the parameters that are
+# inputs of cpa_table (the grid, the range, the terrain) can't be overridden; the box and the cache path aren't
+# parameters at all.
+FIXED_BY_CASE = ("grid.spacing_m", "grid.dem", "gates.max_range_m")
+# The case's search block keys and the parameters they set (the record's `search` keeps the case's spelling).
+CASE_SEARCH = {"tol_s": "gates.time_gate_s", "v_tol": "gates.speed_gate_fraction",
+               "d_tol": "gates.slant_range_gate_factors", "silence_d_m": "gates.negative_information_distance_m",
+               "max_range_m": "gates.max_range_m", "spacing_m": "grid.spacing_m", "dem": "grid.dem"}
+CASE_REFINE = {"rank": "refinement.rank", "spacing_m": "refinement.spacing_m", "half_m": "refinement.half_width_m"}
 
 
 def git(*args) -> str | None:
@@ -91,18 +96,54 @@ class Stages:
             self.warnings += [f"{name}: {w.category.__name__}: {w.message}" for w in caught]
 
 
-# The two baseline profiles of PLAN 5.5. saved-fit takes each case's committed fits and isolates search and
-# physics; raw-audio runs detect with no hand-picked windows and takes its top two by score, earlier first
-# (trying every pair is Phase 3's job). Detection searches with one harmonic per event: nothing says which
-# harmonic a detected tone is.
+def _profile_detect(name: str) -> dict:
+    """The profile's detection settings as the record's profile_settings has always shown them."""
+    from dopplertrack.methods.grid_pair.parameters import resolve as resolve_parameters
+    d = resolve_parameters(name).detection
+    return {"band_hz": [float(x) for x in d.band_hz], "top": d.top, "harmonics": d.harmonics, "window_s": d.window_s}
+
+
+# The benchmark's profiles, described for the record; the settings themselves are the grid_pair recipe's profiles
+# (methods/grid_pair/parameters.py PROFILES), which every run resolves. saved-fit takes each case's committed fits and
+# isolates search and physics; raw-audio runs detect with no hand-picked windows and takes its top two by score,
+# earlier first. Detection searches with one harmonic per event: nothing says which harmonic a detected tone is.
 PROFILES = {
     "saved-fit": {"events": "the case's saved fits", "harmonics": "the case's"},
-    "raw-audio": {"events": "detect, top two by score, earlier first", "detect": {"band_hz": [60.0, 300.0], "top": 10,
-                  "harmonics": 1, "window_s": 240.0}, "harmonics": [1, 1]},
+    "raw-audio": {"events": "detect, top two by score, earlier first", "detect": _profile_detect("raw-audio"),
+                  "harmonics": [1, 1]},
     # locate detects its own events and defaults to comparable pairs; geometry, silence and refinement come from
-    # the case. Its stated-start clock gate is on unless overridden; see execute_case_locate for the configuration.
+    # the case. Its stated-start clock gate is on unless overridden; see execute_case_locate.
     "locate": {"events": "detect, then locate's pair rule", "harmonics": [1, 1]},
 }
+
+
+def case_parameters(case: dict, profile: str, use_weather: bool = False, clock_gate: bool = False) -> dict:
+    """The case's layer of the parameters: its search and refine blocks (CASE_SEARCH, CASE_REFINE), its harmonics
+    under saved-fit, its station temperature when the run applies it, and under locate with the clock gate its
+    stated start and uncertainty."""
+    s, rf = case["search"], case["refine"]
+    layer = {path: s[k] for k, path in CASE_SEARCH.items() if k in s}
+    layer.update({path: rf[k] for k, path in CASE_REFINE.items() if k in rf})
+    if profile == "saved-fit":
+        layer["gates.harmonics"] = list(s["harmonics"])
+    temperature = sound_speed(case, use_weather)[1]["temperature_c"]
+    if temperature is not None:
+        layer["air.temperature_c"] = temperature
+    if clock_gate:
+        st = case["start_time"]
+        if st.get("utc") is None:
+            raise ValueError(f"{case['id']}: the clock gate needs the case's start_time.utc; set clock_gate=false")
+        layer["event_source.start_utc"] = datetime.datetime.fromisoformat(
+            str(st["utc"]).replace("Z", "+00:00")).timestamp()
+        layer["event_source.start_tol_s"] = float(st["uncertainty_s"])
+    return layer
+
+
+def case_resolved(case: dict, profile: str, overrides: dict | None = None, use_weather: bool = False,
+                  clock_gate: bool = False):
+    """The run's parameters: the profile's, then the case's, then the run's overrides (parameter names only)."""
+    from dopplertrack.methods.grid_pair.parameters import resolve as resolve_parameters
+    return resolve_parameters(profile, case_parameters(case, profile, use_weather, clock_gate), overrides)
 
 
 def load_events(case: dict):
@@ -239,29 +280,44 @@ def code_revision() -> dict:
             "git_dirty": bool(git("status", "--porcelain")) if commit else unavailable("not a git checkout")}
 
 
-class Draft:
-    """The parts of one result record as a run fills them in; `record()` assembles it."""
+def _get(params, path: str):
+    for part in path.split("."):
+        params = getattr(params, part)
+    return params
 
-    def __init__(self, case: dict, code: dict, profile: str, log, overrides: dict | None = None):
+
+class Draft:
+    """The parts of one result record as a run fills them in; `record()` assembles it. Its parameters are resolved
+    from the profile, the case and the run's overrides; the record keeps them under provenance.parameters.resolved."""
+
+    def __init__(self, case: dict, code: dict, profile: str, log, overrides: dict | None = None,
+                 clock_gate: bool = False):
         from dopplertrack.coverage import padded_bbox
+        from dopplertrack.methods.parameters import to_dict
         assert "labels" not in case, "the runner must be given the blind case"
         self.case, self.code, self.stage, self.errors = case, code, Stages(log), []
         overrides = dict(overrides or {})
         weather = bool(overrides.pop(WEATHER_KEY, False))
-        fixed = sorted(set(overrides) & set(FIXED_BY_CASE))
+        # the parameters: the profile's, the case's, then the run's overrides; unknown names are refused
+        self.parameters = case_resolved(case, profile, overrides, weather, clock_gate)
+        by_case = case_resolved(case, profile, None, weather, clock_gate)
+        fixed = [k for k in FIXED_BY_CASE if _get(self.parameters, k) != _get(by_case, k)]
         if fixed:
             raise ValueError(f"--search-param can't override {fixed}: they define the case's CPA table")
-        # known settings replace the case's; anything else is a run_search keyword of its own
-        self.search = {**case["search"], **{k: v for k, v in overrides.items() if k in SEARCH_ARGS}}
-        self.extra_kwargs = {k: v for k, v in overrides.items() if k not in SEARCH_ARGS}
+        p = self.parameters
+        g = p.gates
+        effective = {"tol_s": g.time_gate_s, "v_tol": g.speed_gate_fraction, "d_tol": list(g.slant_range_gate_factors),
+                     "silence_d_m": g.negative_information_distance_m}
+        self.search = {**case["search"], **{k: v for k, v in effective.items() if case["search"].get(k) != v
+                                            and not (isinstance(v, list) and list(case["search"].get(k) or []) == v)}}
         s = self.search
-        self.harmonics = list(overrides["harmonics"]) if "harmonics" in overrides else search_harmonics(case, profile)
+        self.harmonics = [int(h) for h in g.harmonics]
         self.params = {"profile": profile, "profile_settings": PROFILES[profile], "search": s, "refine": case["refine"],
                        "search_overrides": {**overrides, **({WEATHER_KEY: True} if weather else {})},
                        "events": case["events"], "search_harmonics": self.harmonics,
                        "speed_of_sound_m_s": sound_speed(case, weather)[1]["c_m_s"],
-                       "speed_of_sound": sound_speed(case, weather)[1]}
-        self.c_kw, self.geo_kw = sound_speed(case, weather)[0], geometry_kw(case, weather)
+                       "speed_of_sound": sound_speed(case, weather)[1],
+                       "resolved": to_dict(p)}
         self.cpa_cache = cpa_cache_path(case, weather)
         self.inputs, self.caches, self.events, self.candidates = [], [], [], []
         self.refined = unavailable("the search did not run")
@@ -269,7 +325,7 @@ class Draft:
             "cpa_records", "before_silence_filter", "after_silence_filter", "flight_pairs_before_silence_filter",
             "flight_pairs_after_silence_filter", "scored", "unevaluated_budget")}
         self.funnel.update({k: unavailable(PER_GATE) for k in ("after_speed_gate", "after_distance_gate", "after_time_gate")})
-        need = padded_bbox(tuple(s["bbox"]), s["max_range_m"])
+        need = padded_bbox(tuple(s["bbox"]), g.max_range_m)
         boxes = day_boxes(case)
         self.flight = {"traces": case["flight_data"]["traces"], "declared_extraction_box": boxes if len(boxes) > 1 else boxes[0],
                        "search_box_plus_range": [round(x, 6) for x in need],
@@ -368,12 +424,12 @@ class Draft:
                            flight_pairs_after_silence_filter=flight_pairs["silence"])
 
     def add_refined(self, fine, extra_flights: list[str]):
-        rf = self.case["refine"]
+        rf = self.parameters.refinement
         b = fine.iloc[0]
         self.refined = {"lat": float(b.lat), "lon": float(b.lon), "score": float(b.score),
                         "event_scores": [float(b[c]) for c in fine.columns if c.startswith("s") and c[1:].isdigit()],
-                        "shift_s": float(b["shift"]), "spacing_m": float(rf["spacing_m"]),
-                        "half_width_m": float(rf["half_m"]), "from_rank": int(rf["rank"]), "extra_flights": extra_flights}
+                        "shift_s": float(b["shift"]), "spacing_m": float(rf.spacing_m),
+                        "half_width_m": float(rf.half_width_m), "from_rank": int(rf.rank), "extra_flights": extra_flights}
 
     def record(self) -> dict:
         from dopplertrack.coverage import ADS_B_LIMITATION
@@ -413,47 +469,46 @@ def execute_case(case: dict, case_dir: Path, log=print, code: dict | None = None
         draft = Draft(case, code or code_revision(), profile, log)
         draft.errors.append(f"ValueError: {exc}")
         return draft.record()
-    stage, s, rf = draft.stage, draft.search, case["refine"]
+    stage, s, p = draft.stage, draft.search, draft.parameters
     harmonics = draft.harmonics
-    terrain = Terrain() if s["dem"] else None
+    terrain = Terrain() if p.grid.dem else None
     try:
         with stage("spectrogram"):
             spec_path = resolve(case["spectrogram"])
             sp = Spectrogram.load(spec_path)
         draft.inputs.append(file_entry("spectrogram", spec_path))
-        if profile == "saved-fit":
+        draft.params["spectrogram_input"] = "file"
+        source = p.event_source.source
+        if source == "saved_fits":
             with stage("events"):
                 fits = saved_fit_dicts(case)
-            draft.inputs += [file_entry("saved_fits", resolve(p)) for p in case["events"]["files"]]
+            draft.inputs += [file_entry("saved_fits", resolve(f)) for f in case["events"]["files"]]
             draft.add_events(fits, harmonics, "saved_fit", "fit objective value as saved with the fit")
-        else:
-            from dopplertrack.cache import cached_detections
-            from dopplertrack.tracks import detect_events
-            d = PROFILES[profile]["detect"]
+        elif source == "top2":
+            from dopplertrack.methods.grid_pair.runner import SCORE_KINDS
             with stage("detect"):
                 # cached on the spectrogram, the parameters and the detector's source
-                detected = [e.to_dict() for e in cached_detections(sp, detect_events, f_lo=d["band_hz"][0],
-                                                                   f_hi=d["band_hz"][1], harmonics=d["harmonics"],
-                                                                   top=d["top"], window_s=d["window_s"], **draft.c_kw)]
+                found, _ = pipeline.detect(sp, p)
+                detected = [e.to_dict() for e in found]
             (case_dir / "detected.json").write_text(json.dumps(detected, indent=1) + "\n")
             fits = pick_detected(detected)
-            draft.add_events(fits, harmonics, "detect", "detect's sweep-weighted ridge contrast")
+            draft.add_events(fits, harmonics, "detect", SCORE_KINDS[p.detection.statistic])
+        else:
+            raise ValueError(f"event_source.source {source!r} runs through locate (--profile locate); "
+                             "saved-fit and raw-audio take saved_fits or top2")
         ev = [EventFit(**f) for f in fits]
         ev1, ev2 = ev[0], ev[1]
         with stage("flight_data"):
             traces, meta = draft.load_flight_data()
         with stage("grid"):
-            grid = Grid.make(*s["bbox"], s["spacing_m"], terrain.elevation if terrain else None)
+            grid = Grid.make(*s["bbox"], p.grid.spacing_m, terrain.elevation if terrain else None)
         cache_path = draft.cpa_cache
         cache_path.parent.mkdir(parents=True, exist_ok=True)
         triples: dict = {}
         with stage("search"):
-            res, segs = pipeline.pair_grid_search(sp, ev1, ev2, traces, grid, harmonics=tuple(harmonics[:2]),
-                                            tol_s=s["tol_s"], v_tol=s["v_tol"], d_tol=tuple(s["d_tol"]),
-                                            silence_d_m=s["silence_d_m"], max_range_m=s["max_range_m"],
-                                            progress=False, cpa_cache=str(cache_path),
-                                            trace_metadata=meta, search_bbox=tuple(s["bbox"]), triples=triples,
-                                            **draft.geo_kw, **draft.extra_kwargs)
+            res, segs = pipeline.pair_grid_search(sp, ev1, ev2, traces, grid, p, progress=False,
+                                                  cpa_cache=str(cache_path), trace_metadata=meta,
+                                                  search_bbox=tuple(s["bbox"]), triples=triples)
         draft.caches.append(file_entry("cpa_table", cache_path))
         draft.stage.stages += [{"name": f"search.{k}", "wall_s": round(v["wall_s"], 3), "cpu_s": round(v["cpu_s"], 3)}
                                for k, v in res.attrs.get("stages", {}).items()]
@@ -468,13 +523,10 @@ def execute_case(case: dict, case_dir: Path, log=print, code: dict | None = None
                                           if w.startswith("search: ") and "candidate" in w]
         if draft.candidates:
             with stage("refine"):
-                row = best.iloc[rf["rank"] - 1].copy()
+                row = best.iloc[p.refinement.rank - 1].copy()
                 row["lat0"], row["lon0"] = grid.lat0, grid.lon0
-                hs = harmonics + [1] * (len(ev) - len(harmonics))
-                fine = pipeline.refine(sp, ev1, ev2, segs, row, spacing_m=rf["spacing_m"], half_m=rf["half_m"],
-                                       harmonics=tuple(harmonics[:2]), elevation=terrain.elevation if terrain else None,
-                                       extra=ev[2:], extra_harmonics=hs[2:], max_range_m=s["max_range_m"],
-                                       **draft.geo_kw)
+                fine = pipeline.refine(sp, ev1, ev2, segs, row, p, elevation=terrain.elevation if terrain else None,
+                                       extra=ev[2:])
             draft.add_refined(fine, list(fine.attrs.get("extra_icao", [])))
     except Exception as exc:          # kept apart from the verdict: a failed run is not an abstention
         draft.errors.append(f"{type(exc).__name__}: {exc}")
@@ -526,13 +578,18 @@ def execute_case_at(case: dict, case_dir: Path, rev, log=print, code: dict | Non
     draft = Draft(case, code or rev.provenance(), profile, log)
     stage, s, rf = draft.stage, case["search"], case["refine"]
     harmonics = search_harmonics(case, profile)
+    not_here = unavailable(f"{rev.short}'s own CLI ran this case: its settings are the case's search and refine "
+                           "blocks with the overrides, as the record's search and refine show")
+    draft.params["resolved"] = not_here
     try:
         weather = bool((overrides or {}).get(WEATHER_KEY, False))
-        if set(overrides or {}) - {"tol_s", WEATHER_KEY}:
-            raise ValueError(f"{rev.short}'s CLI takes only tol_s of the search overrides, not "
-                             f"{sorted(set(overrides) - {'tol_s'})}")
+        allowed = {"time_gate_s", "gates.time_gate_s", WEATHER_KEY}
+        if set(overrides or {}) - allowed:
+            raise ValueError(f"{rev.short}'s CLI takes only gates.time_gate_s (its tol_s) of the search overrides, not "
+                             f"{sorted(set(overrides) - allowed)}")
         if overrides:
             draft = Draft(case, draft.code, profile, log, overrides)
+            draft.params["resolved"] = not_here
             stage, s = draft.stage, draft.search
         verify(rev)
         if sound_speed(case, weather)[0]:
@@ -561,7 +618,7 @@ def execute_case_at(case: dict, case_dir: Path, rev, log=print, code: dict | Non
             draft.inputs += [file_entry("saved_fits", resolve(p)) for p in case["events"]["files"]]
             draft.add_events(fits, harmonics, "saved_fit", "fit objective value as saved with the fit")
         else:
-            d = PROFILES[profile]["detect"]
+            d = PROFILES[profile]["detect"]       # what the profile ran at that revision too: its CLI flags
             with stage("detect"):
                 _stream(rev.cli("detect", str(spec), "--band", *map(str, d["band_hz"]), "--top", str(d["top"]),
                                 "--harmonics", str(d["harmonics"]), "--window", str(d["window_s"]),
@@ -791,18 +848,38 @@ def new_run(topic: str) -> Path:
     return Path(out)
 
 
+LOCATE_CASE_KEYS = {"clock_gate", "box_m", "box_offset_m", "extraction_box", "spacing_m", "traces"}
+
+
+def check_overrides(profile: str, overrides: dict | None, revision: str | None = None) -> None:
+    """Refuse, before any case runs, an override that names no parameter (the locate profile's case keys aside) or one
+    that would change a case's CPA table."""
+    from dopplertrack.methods.grid_pair.parameters import resolve as resolve_parameters
+    named = {k: v for k, v in (overrides or {}).items() if k != WEATHER_KEY
+             and not (profile == "locate" and k in LOCATE_CASE_KEYS)}
+    if revision is not None:
+        return                       # another revision's CLI: execute_case_at says what it takes
+    p, base = resolve_parameters(profile, None, named), resolve_parameters(profile)
+    fixed = [k for k in FIXED_BY_CASE if profile != "locate" and _get(p, k) != _get(base, k)]
+    if fixed:
+        raise ValueError(f"--search-param can't override {fixed}: they define the case's CPA table")
+
+
 def execute_case_locate(case: dict, case_dir: Path, log=print, code: dict | None = None,
                         overrides: dict | None = None) -> dict:
     """The case through dopplertrack locate: its spectrogram, flight-data date, box and trace files, and nothing of
-    its fits. Overrides: pair_rule (default locate's, comparable), silence_d_m (default the case's; null turns the
-    filter off) and clock_gate (default true: the case's stated start time and its uncertainty gate each pair's
-    clock; false turns it off)."""
+    its fits. The parameters are the locate profile's, then the case's, then the overrides that name parameters
+    (e.g. event_source.source=top2, event_source.report_top2=true, negative_information_distance_m=null). The other
+    overrides change the case: clock_gate (default true: the case's stated start time and its uncertainty gate each
+    pair's clock; false turns it off), and for private cases box_m, box_offset_m, spacing_m, traces and
+    extraction_box."""
     from dopplertrack import locate as loc
     assert "labels" not in case, "the runner must be given the blind case"
     overrides = dict(overrides or {})
     weather = bool(overrides.get(WEATHER_KEY, False))
-    unknown = set(overrides) - {"pair_rule", "silence_d_m", "clock_gate", "box_m", "box_offset_m", "extraction_box",
-                                "spacing_m", "traces", WEATHER_KEY}
+    case_keys = LOCATE_CASE_KEYS | {WEATHER_KEY}
+    named = {k: v for k, v in overrides.items() if k not in case_keys}
+    unknown = set()
     tag = ""                       # a private case's own CPA table for every override that changes it
     if "traces" in overrides:      # a public cut in place of the case's flight data (a box wider than its own cut)
         if "site" not in case:
@@ -831,27 +908,19 @@ def execute_case_locate(case: dict, case_dir: Path, log=print, code: dict | None
             unknown.add("extraction_box (private cases only)")
         else:
             case = {**case, "flight_data": {**case["flight_data"], "extraction_box": list(overrides["extraction_box"])}}
-    st = case["start_time"]
     gate = overrides.get("clock_gate", True)
-    start_utc = (datetime.datetime.fromisoformat(str(st["utc"]).replace("Z", "+00:00")).timestamp()
-                 if gate else None)
     s = case["search"]
     paths, envelope, cpa_cache = locate_flight_data(case, str(cpa_cache_path(case, weather)))
-    cfg = loc.LocateConfig(spacing_m=s["spacing_m"], max_range_m=s["max_range_m"], tol_s=s["tol_s"], v_tol=s["v_tol"],
-                           d_tol=tuple(s["d_tol"]), silence_d_m=overrides.get("silence_d_m", s["silence_d_m"]),
-                           pair_rule=overrides.get("pair_rule", loc.LocateConfig.pair_rule), dem=s["dem"], c=sound_speed(case, weather)[0].get("c"),
-                           temperature_c=sound_speed(case, weather)[1]["temperature_c"],
-                           refine_spacing_m=case["refine"]["spacing_m"], refine_half_m=case["refine"]["half_m"],
-                           cpa_cache=cpa_cache, envelope=envelope, start_utc=start_utc,
-                           start_tol_s=float(st["uncertainty_s"]) if gate else None,
-                           extra={"search_overrides": overrides, "speed_of_sound": sound_speed(case, weather)[1]})
     record = None
     try:
         if unknown:
-            raise ValueError(f"the locate profile takes only pair_rule, silence_d_m, clock_gate and (private) box_m, "
-                             f"box_offset_m, spacing_m, traces and extraction_box overrides, not {sorted(unknown)}")
-        out = loc.locate(resolve(case["spectrogram"]), case["flight_data"]["date"], s["bbox"], paths, cfg,
-                         out_dir=case_dir, code=code or code_revision(), log=log)
+            raise ValueError(f"the locate profile's case overrides are clock_gate and (private) box_m, box_offset_m, "
+                             f"spacing_m, traces and extraction_box; not {sorted(unknown)}")
+        params = case_resolved(case, "locate", named, weather, clock_gate=bool(gate))
+        run = loc.RunSettings(cpa_cache=cpa_cache, envelope=envelope)
+        out = loc.locate(resolve(case["spectrogram"]), case["flight_data"]["date"], s["bbox"], paths, params, run,
+                         out_dir=case_dir, code=code or code_revision(), log=log,
+                         extra={"search_overrides": overrides, "speed_of_sound": sound_speed(case, weather)[1]})
         record = out.record
         (case_dir / "summary.txt").write_text("\n".join(out.summary) + "\n")
         for line in out.summary:
@@ -974,6 +1043,7 @@ def run_bench(case_ids: list[str], tier: str = "t2", run_dir: Path | None = None
     excluded = [c for c in case_ids if profile not in case_profiles(latest_case(c))]
     if excluded:
         raise ValueError(f"{excluded} don't run under the {profile} profile (their cases' profiles field)")
+    check_overrides(profile, overrides, revision)
     code, execute = _executor(revision, profile, log, overrides=overrides)
     commit = code["git_commit"]
     from .cases import is_private

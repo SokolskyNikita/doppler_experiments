@@ -69,7 +69,7 @@ def test_run_search_reports_stage_timings_and_funnel(monkeypatch):
     segs = [search_types.Segment(0, f"s{k}", np.zeros(2), np.zeros((2, 3)), np.zeros(2)) for k in range(4)]
     monkeypatch.setattr(pipeline, "build_segments", lambda *a, **k: segs)
     monkeypatch.setattr(pipeline, "cached_cpa_table", lambda *a, **k: cpa)
-    monkeypatch.setattr(pipeline.EventWindow, "from_fit", staticmethod(lambda *a: None))
+    monkeypatch.setattr(pipeline.EventWindow, "from_fit", staticmethod(lambda *a, **k: None))
     monkeypatch.setattr(pipeline, "custom_locked_score", lambda *a, **k: (2.0, 1.0, 1.0, 0.0))
     monkeypatch.setattr(pipeline, "modelled_curve", lambda *a: (np.zeros(2), np.zeros(2)))
     for name in ("report_coverage", "report_altitude_sources", "report_candidate_gaps"):

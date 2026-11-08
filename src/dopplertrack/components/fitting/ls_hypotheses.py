@@ -12,9 +12,10 @@ from dopplertrack.components.fitting.hypothesis import (
     V_BOUNDS,
     Hypothesis,
     MAX_OPTIMA,
+    k_bounds,
 )
 from dopplertrack.components.fitting.profile_intervals import profile_box
-from dopplertrack.components.fitting.track_regression import fit_track
+from dopplertrack.components.fitting.track_regression import LS_Z_SPAN_MIN, fit_track
 from dopplertrack.components.spectrogram import Spectrogram
 from dopplertrack.components.types import EventFit, Track
 
@@ -39,19 +40,25 @@ def _ls_objective(track: Track, c: float):
     return rss, len(t)
 
 
-def ls_hypotheses(sp: Spectrogram, ev: EventFit, f_lo: float, f_hi: float, c: float, harmonic: int = 1) -> list[Hypothesis]:
-    track = ridge_track(sp, ev.t_start, ev.t_end, f_lo, f_hi, harmonic=harmonic)
+def ls_hypotheses(sp: Spectrogram, ev: EventFit, f_lo: float, f_hi: float, c: float, harmonic: int = 1, *,
+                  max_optima: int = MAX_OPTIMA, ls_dchi2: float = LS_DCHI2,
+                  model_error_factor: float = MODEL_ERROR_FACTOR, v_bounds: tuple = V_BOUNDS,
+                  d_bounds: tuple = D_BOUNDS, tau_reach_s: float = TAU_REACH_S, z_span_min: float = LS_Z_SPAN_MIN,
+                  spectral_floor: float = 0.0) -> list[Hypothesis]:
+    """Up to max_optima optima of the track's fit within ls_dchi2 * model_error_factor^2 of the best, each with its
+    profile box; the defaults are the module constants."""
+    track = ridge_track(sp, ev.t_start, ev.t_end, f_lo, f_hi, harmonic=harmonic, spectral_floor=spectral_floor)
     try:
-        fit = fit_track(track, c=c, v_bounds=V_BOUNDS, d_bounds=D_BOUNDS)
+        fit = fit_track(track, c=c, v_bounds=tuple(v_bounds), d_bounds=tuple(d_bounds), z_span_min=z_span_min)
     except ValueError:
         return []
     if not fit.identified:
         return []
     obj, n = _ls_objective(track, c)
     sigma2 = fit.optima[0][0] / max(n - 4, 1)
-    threshold = LS_DCHI2 * MODEL_ERROR_FACTOR ** 2 * sigma2
+    threshold = ls_dchi2 * model_error_factor ** 2 * sigma2
     out = []
-    for rss, tc, s in fit.optima[:MAX_OPTIMA]:
+    for rss, tc, s in fit.optima[:max_optima]:
         if rss > fit.optima[0][0] + threshold:
             continue
         sub = tracks_fit_at(track, tc, s, c)
@@ -59,8 +66,9 @@ def ls_hypotheses(sp: Spectrogram, ev: EventFit, f_lo: float, f_hi: float, c: fl
             continue
         f0, v, d = sub
         theta = np.array([f0, v, d, tc])
-        span = (ev.t_start - TAU_REACH_S, ev.t_end + TAU_REACH_S)
-        out.append(profile_box(obj, theta, threshold, span, (f_lo, f_hi), ["ls"], fit.corr_v_d, fit.identified, c))
+        span = (ev.t_start - tau_reach_s, ev.t_end + tau_reach_s)
+        out.append(profile_box(obj, theta, threshold, span, (f_lo, f_hi), ["ls"], fit.corr_v_d, fit.identified, c,
+                               v_bounds=tuple(v_bounds), k_bounds=k_bounds(v_bounds, d_bounds), tau_reach_s=tau_reach_s))
     return out
 
 

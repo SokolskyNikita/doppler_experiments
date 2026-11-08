@@ -22,8 +22,16 @@ def main(argv=None):
     required = {"spectrogram", "traces", "bbox", "windows"}
     if missing := required - config.keys():
         parser.error(f"missing configuration fields: {sorted(missing)}")
-    if unknown := config.keys() - required - {"parameters", "terrain"}:
+    if unknown := config.keys() - required - {"parameters", "terrain", "run"}:
         parser.error(f"unknown configuration fields: {sorted(unknown)}")
+    from dopplertrack.methods.collective.parameters import resolve_collective
+    try:   # the parameters are the dataclass's field names (methods/collective/parameters.py); unknown names are refused
+        params = resolve_collective(config.get("parameters"))
+    except ValueError as exc:
+        parser.error(str(exc))
+    run = dict(config.get("run", {}))
+    if unknown := run.keys() - {"workers", "cpa_cache", "only_cells"}:
+        parser.error(f"unknown run settings: {sorted(unknown)} (workers, cpa_cache and only_cells change no result)")
     from dopplertrack.components.spectrogram import Spectrogram
     from dopplertrack.data.day_seams import join_days
     from dopplertrack.data.terrain import Terrain
@@ -41,8 +49,8 @@ def main(argv=None):
     (args.out / "request.json").write_text(json.dumps({"method": "collective", "config": config,
         "input_sha256": provenance, "assistance": "explicit event windows", "status": "running"}, indent=2) + "\n")
     flights, _ = join_days(traces)
-    result = collective_detection(Spectrogram.load(spec), windows, flights, config["bbox"],
-        elevation=Terrain().elevation if config.get("terrain", True) else None, **config.get("parameters", {}))
+    result = collective_detection(Spectrogram.load(spec), windows, flights, config["bbox"], params,
+        elevation=Terrain().elevation if config.get("terrain", True) else None, **run)
     # This is the method's research output, not a calibrated common verdict.
     text = json.dumps(result, indent=2, default=float) + "\n"
     output = args.out / "result.json"

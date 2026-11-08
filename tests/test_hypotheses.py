@@ -13,6 +13,9 @@ import dopplertrack.components.fitting.hypothesis_merge as hypothesis_merge
 import dopplertrack.components.fitting.ls_hypotheses as ls_hypotheses
 import dopplertrack.components.search.types as search_types
 import dopplertrack.components.nulls.event_decoy_null as event_decoy_null
+from dopplertrack.methods.grid_pair.parameters import resolve as resolve_parameters
+
+HYPOTHESES = resolve_parameters(overrides={"event_gate": "profile_intervals", "negative_information_distance_m": None})
 
 C = 340.0
 
@@ -80,7 +83,7 @@ def test_run_search_pairs_every_hypothesis_pair(monkeypatch):
     anchors, sweeps = [], []
     monkeypatch.setattr(pipeline, "build_segments", lambda *a, **k: segs)
     monkeypatch.setattr(pipeline, "cached_cpa_table", lambda *a, **k: cpa)
-    monkeypatch.setattr(pipeline.EventWindow, "from_fit", staticmethod(lambda sp, fit, h=1: EventWindow(fit, None, h)))
+    monkeypatch.setattr(pipeline.EventWindow, "from_fit", staticmethod(lambda sp, fit, h=1, **k: EventWindow(fit, None, h)))
     monkeypatch.setattr(pipeline, "event_decoy_null", lambda *a, **k: {"median": 0.0, "sigma": 1.0})
     monkeypatch.setattr(pipeline, "event_hypotheses", lambda sp, w, ev, c, s, h, **k: fast if ev.t_cpa < 1500 else slow)
     monkeypatch.setattr(pipeline, "modelled_curve", lambda *a: (np.zeros(2), np.zeros(2)))
@@ -95,8 +98,8 @@ def test_run_search_pairs_every_hypothesis_pair(monkeypatch):
     ev1 = EventFit(1008.8, 1000.0, 120, 100, 3000, 950, 1050, 5, 150, 90)
     ev2 = EventFit(1926.8, 1918.0, 120, 100, 3000, 1870, 1970, 5, 150, 90)
     triples = {}
-    res, _ = pipeline.pair_grid_search(None, ev1, ev2, [], grid, silence_d_m=None, progress=False, workers=1,
-                                 hypotheses=True, triples=triples)
+    res, _ = pipeline.pair_grid_search(None, ev1, ev2, [], grid, HYPOTHESES, progress=False, workers=1,
+                                       triples=triples)
     f = res.attrs["funnel"]
     assert sorted(res.gidx) == [0, 1] and f["event1_hypotheses"] == 2 and f["event1_gates"] == 4   # rows, not pairs
     assert f["time_join"] == 2 and f["silence"] == 2 and set(triples) == {"time_join", "silence"}
@@ -104,7 +107,8 @@ def test_run_search_pairs_every_hypothesis_pair(monkeypatch):
     assert all(n1 == n2 and n1 > 21 for n1, n2 in sweeps)                     # 0.9-1.1 of f0, wider than +-5 %
     assert len(res.attrs["hypotheses"]["event2"]) == 2
     with pytest.raises(ValueError):
-        pipeline.pair_grid_search(None, ev1, ev2, [], grid, progress=False, workers=1, hypotheses=True, sf_tol_s=4.0)
+        pipeline.pair_grid_search(None, ev1, ev2, [], grid, resolve_parameters(overrides={"event_gate": "profile_intervals",
+                                                                           "inflection_tol_s": 4.0}))
 
 
 def test_a_triple_is_scored_at_every_clock_its_hypotheses_give_and_keeps_the_best(monkeypatch):
@@ -119,7 +123,7 @@ def test_a_triple_is_scored_at_every_clock_its_hypotheses_give_and_keeps_the_bes
     second = [_hyp(100, 3000, 1918, (90, 110), (3.0, 3.7))]
     monkeypatch.setattr(pipeline, "build_segments", lambda *a, **k: segs)
     monkeypatch.setattr(pipeline, "cached_cpa_table", lambda *a, **k: cpa)
-    monkeypatch.setattr(pipeline.EventWindow, "from_fit", staticmethod(lambda sp, fit, h=1: EventWindow(fit, None, h)))
+    monkeypatch.setattr(pipeline.EventWindow, "from_fit", staticmethod(lambda sp, fit, h=1, **k: EventWindow(fit, None, h)))
     monkeypatch.setattr(pipeline, "event_decoy_null", lambda *a, **k: {"median": 0.0, "sigma": 1.0})
     monkeypatch.setattr(pipeline, "modelled_curve", lambda *a: (np.zeros(2), np.zeros(2)))
     # the score depends on the clock: the late hypothesis's anchor fits better
@@ -131,8 +135,8 @@ def test_a_triple_is_scored_at_every_clock_its_hypotheses_give_and_keeps_the_bes
     ev2 = EventFit(1926.8, 1918.0, 120, 100, 3000, 1870, 1970, 5, 150, 90)
     for order in ([early, late], [late, early]):
         monkeypatch.setattr(pipeline, "event_hypotheses", lambda sp, w, ev, c, s, h, o=order, **k: o if ev.t_cpa < 1500 else second)
-        res, _ = pipeline.pair_grid_search(None, ev1, ev2, [], grid, silence_d_m=None, progress=False, workers=1,
-                                     hypotheses=True, tol_s=30.0)
+        res, _ = pipeline.pair_grid_search(None, ev1, ev2, [], grid, resolve_parameters(base=HYPOTHESES, overrides={
+                                           "time_gate_s": 30.0}), progress=False, workers=1)
         assert len(res) == 1 and res.score[0] == 5.0
         assert res.attrs["funnel"]["scored"] == 1 and res.attrs["funnel"]["scored_clocks"] == 2
         assert res.attrs["funnel"]["silence"] == 1
@@ -140,7 +144,7 @@ def test_a_triple_is_scored_at_every_clock_its_hypotheses_give_and_keeps_the_bes
 
 def test_the_null_gets_the_candidates_f0_sweep(monkeypatch):
     seen = []
-    monkeypatch.setattr(event_decoy_null, "custom_single_score", lambda w, seg, o, t, c=None, f0_scales=None: seen.append(f0_scales) or 1.0)
+    monkeypatch.setattr(event_decoy_null, "custom_single_score", lambda w, seg, o, t, c=None, f0_scales=None, **k: seen.append(f0_scales) or 1.0)
     cpa = pd.DataFrame({"gidx": np.int32([0, 0]), "seg": np.int32([0, 1]), "t_emit": [1.0, 2.0], "t_heard": [1.0, 2.0],
                         "d": np.float32([1, 1]), "v": np.float32([1, 1])})
     segs = [search_types.Segment(k, f"s{k}", np.zeros(2), np.zeros((2, 3)), np.zeros(2)) for k in range(2)]

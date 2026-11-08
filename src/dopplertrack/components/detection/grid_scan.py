@@ -11,6 +11,7 @@ import numpy as np
 from dopplertrack.components.spectrogram import Spectrogram
 from dopplertrack.core.propagation import speed_of_sound
 from dopplertrack.runtime.parallel import process_pool, resolve_jobs
+from dopplertrack.components.detection.custom_curve_contrast import CONTRAST_DF, SWEEP_FLOOR
 from dopplertrack.components.detection.event_fit import fit_event
 from dopplertrack.components.detection.grid_search import grid_search
 from dopplertrack.components.types import EventFit
@@ -34,6 +35,9 @@ class ScanRequest:
     n_curve: int
     per_window: int             # local maxima kept from this window
     min_sep_s: float            # between those maxima's emission-CPA times
+    objective: str = "contrast"
+    contrast_df: float = CONTRAST_DF
+    sweep_floor: float = SWEEP_FLOOR
 
 
 @dataclass(frozen=True)
@@ -53,7 +57,8 @@ def _scan_window(req: ScanRequest) -> list[Candidate]:
         return []
     t0s, bs, bp = grid_search(req.window, req.window_start_s, req.window_end_s, req.f_lo_hz, req.f_hi_hz,
                               req.sound_speed_mps, req.harmonics, req.speed_grid_mps, req.slant_grid_m,
-                              f0_step=req.f0_step_hz, t0_step=req.t0_step_s, n_curve=req.n_curve, per_t0=True)
+                              f0_step=req.f0_step_hz, t0_step=req.t0_step_s, n_curve=req.n_curve, per_t0=True,
+                              objective=req.objective, contrast_df=req.contrast_df, sweep_floor=req.sweep_floor)
     out: list[Candidate] = []
     order = np.argsort(-bs)
     for i in order:
@@ -86,7 +91,11 @@ def detect_events(sp: Spectrogram, f_lo: float, f_hi: float, c: float | None = N
                   window_s: float = 240.0, step_s: float = 120.0, v_grid=None, d_grid=None,
                   f0_step: float = 2.0, t0_step: float = 2.0, n_curve: int = 80, top: int = 20,
                   per_window: int = 3, min_sep_s: float = 60.0, refine: bool = True,
-                  workers: int | None = None, progress=None, min_score: float = 0.0) -> list[EventFit]:
+                  workers: int | None = None, progress=None, min_score: float = 0.0,
+                  refine_v_bounds: tuple[float, float] = (35.0, 200.0),
+                  refine_d_bounds: tuple[float, float] = (200.0, 15000.0), refine_half_s: float = 120.0,
+                  objective: str = "contrast", contrast_df: float = CONTRAST_DF, sweep_floor: float = SWEEP_FLOOR,
+                  spectral_floor: float = 0.0) -> list[EventFit]:
     """Scan a whole recording for Doppler-shaped curves whose fundamental lies in [f_lo, f_hi].
 
     Each window gets the coarse grid search used by fit_event (windows run in `workers`
@@ -97,7 +106,11 @@ def detect_events(sp: Spectrogram, f_lo: float, f_hi: float, c: float | None = N
     (sweep-weighted ridge contrast, dB). Only finite scores strictly above
     min_score are returned, so the result may be empty. The default rejects a zero
     score; a useful false-alarm threshold still needs calibration. custom_rescore_zscore puts the result on
-    S1's scale."""
+    S1's scale.
+
+    The refining fit runs over the candidate's emission CPA +- refine_half_s within refine_v_bounds and
+    refine_d_bounds; objective, contrast_df and sweep_floor are the scan's and the fit's (grid_search, fit_event), and
+    spectral_floor every window's local_whiten."""
     if top < 1:
         raise ValueError("top must be at least 1")
     if not np.isfinite(min_score):
@@ -112,11 +125,13 @@ def detect_events(sp: Spectrogram, f_lo: float, f_hi: float, c: float | None = N
     def jobs():
         for t in starts:
             t1 = min(t + window_s, sp.t[-1])
-            win = local_whiten(sp.crop(t - 30, t1 + 30, max(f_lo - pad, sp.f[0]), min(f_hi * harmonics + pad, sp.f[-1])))
+            win = local_whiten(sp.crop(t - 30, t1 + 30, max(f_lo - pad, sp.f[0]), min(f_hi * harmonics + pad, sp.f[-1])),
+                               spectral_floor)
             yield ScanRequest(window=win, window_start_s=t, window_end_s=t1, f_lo_hz=f_lo, f_hi_hz=f_hi,
                               sound_speed_mps=c, harmonics=harmonics, speed_grid_mps=v_grid, slant_grid_m=d_grid,
                               f0_step_hz=f0_step, t0_step_s=t0_step, n_curve=n_curve, per_window=per_window,
-                              min_sep_s=min_sep_s)
+                              min_sep_s=min_sep_s, objective=objective, contrast_df=contrast_df,
+                              sweep_floor=sweep_floor)
 
     cands: list[Candidate] = []
     with contextlib.ExitStack() as stack:
@@ -133,10 +148,15 @@ def detect_events(sp: Spectrogram, f_lo: float, f_hi: float, c: float | None = N
     for cnd in keep:
         f0, v, d, t0 = cnd.f0_hz, cnd.speed_mps, cnd.slant_m, cnd.t_cpa_emit_s
         if refine:
-            ef = fit_event(sp, max(t0 - 120, sp.t[0]), min(t0 + 120, sp.t[-1]), f_lo, f_hi, c=c,
-                           harmonics=harmonics, init=(f0, v, d, t0), v_bounds=(35.0, 200.0), d_bounds=(200.0, 15000.0))
+            ef = fit_event(sp, max(t0 - refine_half_s, sp.t[0]), min(t0 + refine_half_s, sp.t[-1]), f_lo, f_hi, c=c,
+                           harmonics=harmonics, init=(f0, v, d, t0),
+                           v_bounds=(float(refine_v_bounds[0]), float(refine_v_bounds[1])),
+                           d_bounds=(float(refine_d_bounds[0]), float(refine_d_bounds[1])), objective=objective,
+                           contrast_df=contrast_df,
+                           sweep_floor=sweep_floor, spectral_floor=spectral_floor)
         else:
-            ef = EventFit(t_cpa=t0 + d / c, t_cpa_emit=t0, f0=f0, v=v, d=d, t_start=t0 - 120, t_end=t0 + 120,
+            ef = EventFit(t_cpa=t0 + d / c, t_cpa_emit=t0, f0=f0, v=v, d=d, t_start=t0 - refine_half_s,
+                          t_end=t0 + refine_half_s,
                           score=cnd.score, f_pre=f0 * c / (c - v), f_post=f0 * c / (c + v))
         if np.isfinite(ef.score) and ef.score > min_score:
             out.append(ef)

@@ -9,10 +9,11 @@ from dopplertrack.components.search.grid import Grid
 COARSE_M, FINE_M = 1000.0, 200.0   # the third design step (collective/search.py): 1 km, as position is what a 2 km cell's span missed
 
 
-def fine_grid(grid: Grid, gidx, elevation, lat0, lon0) -> tuple[Grid, np.ndarray]:
-    """FINE_M points inside each coarse cell, and each point's coarse cell."""
-    k = int(round(COARSE_M / FINE_M))
-    offs = (np.arange(k) - (k - 1) / 2) * FINE_M
+def fine_grid(grid: Grid, gidx, elevation, lat0, lon0, coarse_m: float = COARSE_M,
+              fine_m: float = FINE_M) -> tuple[Grid, np.ndarray]:
+    """Points fine_m apart (FINE_M) inside each coarse_m (COARSE_M) cell, and each point's coarse cell."""
+    k = int(round(coarse_m / fine_m))
+    offs = (np.arange(k) - (k - 1) / 2) * fine_m
     lat, lon, cell = [], [], []
     for gi in gidx:
         la0, lo0 = float(grid.lat[gi]), float(grid.lon[gi])

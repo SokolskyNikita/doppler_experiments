@@ -42,14 +42,16 @@ def _profile_value(obj, which, value, theta_opt, x_start):
 
 
 # old name: profile_range
-def profile_interval(obj, theta_opt: np.ndarray, which: str, threshold: float, bounds: tuple) -> tuple[float, float, bool]:
+def profile_interval(obj, theta_opt: np.ndarray, which: str, threshold: float, bounds: tuple,
+                     tau_reach_s: float = TAU_REACH_S) -> tuple[float, float, bool]:
     """(lo, hi, weak): the profile interval of one parameter (v, k, tau or f0), over which obj, re-optimised over
     the others (Raue 2009, eq. 10), stays within threshold of its value at theta_opt. A side that reaches its bound
-    first is practically non-identifiable (Raue 2009, Def. 1), flagged weak, and set to the bound."""
+    first is practically non-identifiable (Raue 2009, Def. 1), flagged weak, and set to the bound. A tau profile
+    steps out at most tau_reach_s."""
     f_opt = obj(theta_opt)
     p0 = {"v": theta_opt[1], "k": theta_opt[1] ** 2 / theta_opt[2], "tau": theta_opt[3], "f0": theta_opt[0]}[which]
     additive = which == "tau"
-    steps = [1, 2, 4, 8, 16, 32, TAU_REACH_S] if additive else [1.02, 1.05, 1.1, 1.2, 1.35, 1.6, 2.0, 3.0, 5.0]
+    steps = [1, 2, 4, 8, 16, 32, tau_reach_s] if additive else [1.02, 1.05, 1.1, 1.2, 1.35, 1.6, 2.0, 3.0, 5.0]
     ends, weak = [], False
     for sign in (-1, 1):
         x = _x0(which, theta_opt)
@@ -79,13 +81,14 @@ def profile_interval(obj, theta_opt: np.ndarray, which: str, threshold: float, b
 
 
 # old name: hypothesis_region
-def profile_box(obj, theta, threshold, tau_bounds, f0_bounds, sources, corr=None, identified=None, c=343.0):
+def profile_box(obj, theta, threshold, tau_bounds, f0_bounds, sources, corr=None, identified=None, c=343.0,
+                v_bounds: tuple = V_BOUNDS, k_bounds: tuple = K_BOUNDS, tau_reach_s: float = TAU_REACH_S):
     """The Hypothesis at theta: the box of its pointwise profile intervals in v, k, tau and f0 (Raue 2009, df = 1),
-    not a joint likelihood-based region (Raue 2009, eq. 8)."""
+    not a joint likelihood-based region (Raue 2009, eq. 8). v and k are bounded by v_bounds and k_bounds."""
     f0, v, d, tau = theta
     ranges, weak = {}, []
-    for which, bounds in (("v", V_BOUNDS), ("k", K_BOUNDS), ("tau", tau_bounds), ("f0", f0_bounds)):
-        lo, hi, wk = profile_interval(obj, np.asarray(theta, float), which, threshold, bounds)
+    for which, bounds in (("v", tuple(v_bounds)), ("k", tuple(k_bounds)), ("tau", tau_bounds), ("f0", f0_bounds)):
+        lo, hi, wk = profile_interval(obj, np.asarray(theta, float), which, threshold, bounds, tau_reach_s)
         ranges[which] = (lo, hi)
         if wk:
             weak.append(which)

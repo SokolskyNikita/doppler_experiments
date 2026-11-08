@@ -35,8 +35,10 @@ def main(argv=None):
                    "the fits at the ground temperature, each flight at its own mid-height speed. Off by default: the 15 C "
                    "path, the case's reading recorded but not used")
     r.add_argument("--search-param", action="append", default=[], metavar="KEY=VALUE",
-                   help="override a search setting for this run (repeatable); VALUE is JSON or a string. tol_s, v_tol, "
-                   "d_tol, silence_d_m and harmonics replace the case's; any other key is passed to run_search")
+                   help="override a grid_pair parameter for this run (repeatable; methods/grid_pair/parameters.py), as "
+                   "stage.field or a field name one stage alone has, after the profile's and the case's; VALUE is JSON "
+                   "or a string. Unknown names are refused. Under --profile locate, clock_gate and the private cases' "
+                   "box_m, box_offset_m, spacing_m, traces and extraction_box change the case instead")
     rc = sub.add_parser("run-case", help="(used by run --parallel) one case into an existing run folder")
     rc.add_argument("case"); rc.add_argument("--run-dir", type=Path, required=True)
     rc.add_argument("--revision"); rc.add_argument("--profile", choices=sorted(runner.PROFILES), default="saved-fit")

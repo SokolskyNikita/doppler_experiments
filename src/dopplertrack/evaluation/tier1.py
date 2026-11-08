@@ -364,7 +364,7 @@ def known_point(case: dict, out_dir: Path, reference: dict, true_pair, log=print
     from dopplertrack.terrain import Terrain
     from dopplertrack.components.types import EventFit
 
-    from .runner import geometry_kw, trace_paths
+    from .runner import case_resolved, trace_paths
     try:
         ev = _read_hashed(out_dir / EVENTS_FILE)
     except (OSError, IndexError, RecordError, ValueError) as exc:
@@ -376,10 +376,9 @@ def known_point(case: dict, out_dir: Path, reference: dict, true_pair, log=print
     traces, meta = join_days(trace_paths(case))
     ev1, ev2 = (EventFit(**e) for e in ev["events"])
     sp = Spectrogram.load(resolve(case["spectrogram"]))
-    res, _ = pipeline.pair_grid_search(sp, ev1, ev2, traces, grid, harmonics=tuple(ev["harmonics"][:2]), tol_s=s["tol_s"],
-                                 v_tol=s["v_tol"], d_tol=tuple(s["d_tol"]), silence_d_m=s["silence_d_m"],
-                                 max_range_m=s["max_range_m"], progress=False, trace_metadata=meta,
-                                 search_bbox=(lat, lat, lon, lon), workers=1, **geometry_kw(case))
+    params = case_resolved(case, "saved-fit", {"gates.harmonics": list(ev["harmonics"][:2])})
+    res, _ = pipeline.pair_grid_search(sp, ev1, ev2, traces, grid, params, progress=False, trace_metadata=meta,
+                                       search_bbox=(lat, lat, lon, lon), workers=1)
     best = res.sort_values("score", ascending=False, kind="stable").drop_duplicates(["icao1", "icao2"])
     pairs = [{"flights": [str(r.icao1), str(r.icao2)], "score": float(r.score), "event_scores": [float(r.s1), float(r.s2)],
               "shift_s": float(r.shift)} for r in best.itertuples()]

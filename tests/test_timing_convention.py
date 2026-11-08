@@ -3,13 +3,14 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from dopplertrack import pipeline, search
+from dopplertrack import doppler, pipeline, search
 from dopplertrack.doppler import ideal_curve
 from dopplertrack.components.scoring.doppler_inflection import INFLECTION_FLAT_RATIO, doppler_inflection
 from dopplertrack.components.types import EventFit
 import dopplertrack.components.search.pair_gate as pair_gate
 import dopplertrack.components.search.types as search_types
 import dopplertrack.components.scoring.inflection_gate as steepest_gate
+from dopplertrack.methods.grid_pair.parameters import resolve as resolve_parameters
 
 C = 340.0
 
@@ -61,7 +62,7 @@ def test_steepest_fall_check_in_run_search(monkeypatch):
     anchors = []
     monkeypatch.setattr(pipeline, "build_segments", lambda *a, **k: segs)
     monkeypatch.setattr(pipeline, "cached_cpa_table", lambda *a, **k: cpa)
-    monkeypatch.setattr(pipeline.EventWindow, "from_fit", staticmethod(lambda *a: None))
+    monkeypatch.setattr(pipeline.EventWindow, "from_fit", staticmethod(lambda *a, **k: None))
     monkeypatch.setattr(pipeline, "custom_locked_score", lambda *a, **k: anchors.append(k["t0_map"]) or (2.0, 1.0, 1.0, 0.0))
     monkeypatch.setattr(pipeline, "modelled_curve", lambda seg, o, c: (np.full(2, float(seg.trace_idx)), np.zeros(2)))
     monkeypatch.setattr(steepest_gate, "doppler_inflection", lambda t, r, center, *a: None if t[0] == 3 else center)
@@ -70,9 +71,12 @@ def test_steepest_fall_check_in_run_search(monkeypatch):
     grid = search.Grid.points([40.0, 40.01, 40.02], [-74.0, -74.0, -74.0], np.zeros(3))
     ev1 = EventFit(1008.8, 1000.0, 120, 100, 3000, 950, 1050, 5, 150, 90)
     ev2 = EventFit(1926.8, 1918.0, 120, 100, 3000, 1870, 1970, 5, 150, 90)
-    run = dict(silence_d_m=None, progress=False, workers=1)
+    run = dict(progress=False, workers=1)
+
+    def params(**kw):
+        return resolve_parameters(overrides={"negative_information_distance_m": None, **kw})
     triples = {}
-    res, _ = pipeline.pair_grid_search(None, ev1, ev2, [], grid, sf_tol_s=4.0, triples=triples, **run)
+    res, _ = pipeline.pair_grid_search(None, ev1, ev2, [], grid, params(inflection_tol_s=4.0), triples=triples, **run)
     assert sorted(res.gidx) == [0, 2]
     assert sorted(triples["time_join"]["gidx"]) == [0, 1, 2] and sorted(triples["steepest_fall"]["gidx"]) == [0, 2]
     assert sorted(triples["steepest_fall"]["seg2"]) == [2, 3]
@@ -80,10 +84,10 @@ def test_steepest_fall_check_in_run_search(monkeypatch):
     assert (f["time_join"], f["steepest_fall"], f["unplaceable"], f["scored"]) == (3, 2, 1, 2)
     assert anchors == [None, None]                                  # the heard anchor
     anchors.clear()
-    res, _ = pipeline.pair_grid_search(None, ev1, ev2, [], grid, clock_anchor="steepest", **run)
-    fit1 = steepest_gate.fitted_inflection(ev1, pipeline.speed_of_sound())
+    res, _ = pipeline.pair_grid_search(None, ev1, ev2, [], grid, params(clock_anchor="doppler_inflection"), **run)
+    fit1 = steepest_gate.fitted_inflection(ev1, doppler.speed_of_sound())
     assert len(res) == 3 and anchors[0] == pytest.approx(fit1 - 1000.0) and anchors[2] is None
-    plain, _ = pipeline.pair_grid_search(None, ev1, ev2, [], grid, **run)
+    plain, _ = pipeline.pair_grid_search(None, ev1, ev2, [], grid, params(), **run)
     assert "steepest_fall" not in plain.attrs["funnel"]
     with pytest.raises(ValueError):
-        pipeline.pair_grid_search(None, ev1, ev2, [], grid, time_convention="steepest", **run)
+        pipeline.pair_grid_search(None, ev1, ev2, [], grid, params(time_convention="steepest"), **run)

@@ -15,7 +15,7 @@ import hashlib
 import os
 from pathlib import Path
 
-from dopplertrack.adsb import load_trace_metadata, load_traces, save_traces
+from dopplertrack.data.region_loading import load_trace_metadata, load_traces, save_traces
 
 ARRAYS = ("t", "lat", "lon", "alt", "gs", "on_ground", "alt_source", "position_source", "flags")
 

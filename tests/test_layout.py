@@ -18,7 +18,7 @@ def test_historical_imports_are_same_modules(monkeypatch):
 
 def test_old_pickle_module_path_resolves():
     # GLOBAL from a historical protocol-0 pickle must still resolve through the alias.
-    from dopplertrack.tracks import EventFit
+    from dopplertrack.components.types import EventFit
     assert pickle.loads(b'cdopplertrack.tracks\nEventFit\n.') is EventFit
 
 

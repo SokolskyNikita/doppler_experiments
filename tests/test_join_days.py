@@ -2,9 +2,14 @@
 import numpy as np
 import pytest
 
-from dopplertrack.adsb import Trace, join_days, load_traces, save_traces
+from dopplertrack.adsb import Trace
+from dopplertrack.data.day_seams import join_days
+from dopplertrack.data.region_loading import load_traces, save_traces
 from dopplertrack.geo import enu_to_lla
-from dopplertrack.search import Grid, build_segments, cpa_fingerprint, cpa_table
+from dopplertrack.search import Grid
+from dopplertrack.components.search.segments import build_segments
+from dopplertrack.components.search.cpa_storage import cpa_fingerprint
+from dopplertrack.components.search.cpa_table import cpa_table
 
 MIDNIGHT = 1712534400.0          # 2024-04-08 00:00 UTC
 LAT0, LON0, V, ALT = 40.0, -84.0, 60.0, 1500.0

@@ -11,7 +11,7 @@ A path being installed or unit-tested does not establish acoustic accuracy or a 
 | Installed CLI | `pyproject.toml` → [cli.main](../src/dopplertrack/cli.py) | `spectrogram`, `fit`, `detect`, `extract-region`, `fetch-day`, `search`, `refine`, `search-single`, `locate` |
 | Audio-to-record orchestration | `cli._locate` → [locate.locate](../src/dopplertrack/locate.py) | Detection, coverage preflight, pair searches, winner refinement, schema-v2 record/hash; never emits `located` |
 | Repository benchmark | `python -m bench` → [bench/runner.py](../bench/runner.py) | `saved-fit`, `raw-audio`, `locate`; record/hash before labels, revision exports, shards/resume, comparison; `bench report` renders HTML |
-| Collective search | [collective.collective_find](../src/dopplertrack/collective.py), `tools/experiments/2026-11-04/collective_run.py` | Experimental alternative; separate result dictionary, outside CLI locate, benchmark profiles and versioned verdicts |
+| Collective search | [collective_detection](../src/dopplertrack/methods/collective/search.py), `tools/experiments/2026-11-04/collective_run.py` | Experimental alternative; separate result dictionary, outside CLI locate, benchmark profiles and versioned verdicts |
 
 Installed defaults:
 
@@ -21,7 +21,7 @@ Installed defaults:
   one harmonic, top 20, finite scores strictly above `min_score=0`. Its band is required.
 - `search`: 200 m grid; heard-CPA gap ±6 s, speed ±35%, distance 0.4–2.5× the fits, 6 km silence filter,
   heard clock anchor. Emission timing, steepest-fall checks and a steepest clock anchor are explicit options.
-  Comparable scores and hypotheses are library switches, off by default in `pipeline.run_search`.
+  Comparable scores and hypotheses are library switches, off by default in `pipeline.pair_grid_search`.
 - `refine`: CLI 50 m grid with 600 m half-width (the library's default half-width is 400 m).
   `search-single` takes an absolute heard-CPA time, default ±30 s gate and 200 m grid.
 - `locate`: 60–300 Hz, top 10 detections, every pair among the top five usable events with comparable scores,
@@ -68,14 +68,15 @@ from evidence verdicts; unreadable audio, missing ffmpeg or network failures are
 
 ## Detector edit map
 
-[tracks.detect_events](../src/dopplertrack/tracks.py) schedules windows as keyword-built `ScanRequest`s.
+[grid_scan.detect_events](../src/dopplertrack/components/detection/grid_scan.py) schedules windows as keyword-built `ScanRequest`s.
 Each request holds a whitened crop; `_scan_window` searches the ideal straight-pass grid, keeping separated maxima. Serial
-`map` and the package's spawn pool consume the same requests. `merge_candidates` ranks by score, f0, speed,
+`map` and the package's spawn pool consume the same requests. `non_maximum_suppression` ranks by score, f0, speed,
 slant range and emission CPA (all descending), retaining up to `2 * top` before refinement. Refinement is serial:
-`fit_event` narrows the grid then uses Nelder–Mead. Final finite-score filtering and deduplication use **heard**
+[`fit_event`](../src/dopplertrack/components/detection/event_fit.py) narrows the
+[grid search](../src/dopplertrack/components/detection/grid_search.py) then uses Nelder–Mead. Final finite-score filtering and deduplication use **heard**
 CPA times; the earlier merge uses **emission** CPA times.
 
-Audio times are recording seconds; flight/CPA times are Unix seconds. [score.locked_score](../src/dopplertrack/score.py)
+Audio times are recording seconds; flight/CPA times are Unix seconds. [trajectory_score.custom_locked_score](../src/dopplertrack/components/scoring/trajectory_score.py)
 sets `audio = unix + (event1.t_cpa - flight1.t_heard) + shift`, sharing event 1's shift with event 2 and extras.
 Pairing first compares time differences, requiring no absolute offset. Preserve these conventions when changing
 scheduling or scoring.
@@ -87,15 +88,15 @@ Those deterministic synthetic checks do not calibrate detection thresholds on no
 
 ## CPA build and scoring edit map
 
-[pipeline.run_search](../src/dopplertrack/pipeline.py) builds clipped flight segments, then calls
-`cached_cpa_table`. [search.cpa_table](../src/dopplertrack/search.py) runs one task per segment; workers hold
+[pipeline.pair_grid_search](../src/dopplertrack/methods/grid_pair/pipeline.py) builds clipped flight segments, then calls
+`cached_cpa_table`. [cpa_table](../src/dopplertrack/components/search/cpa_table.py) runs one task per segment; workers hold
 the grid and KD-tree once. Longest segments run first but results return in segment/grid order.
 `_corridor` prunes horizontal grid points; `_nearest_samples` compares 4 km tiles with nearby trajectory samples.
 Chunks (20,000 points by default) are centred on their own mean. Changing chunk membership can change rounding.
 Repeated positions choose the earliest trajectory sample. Endpoint CPAs and out-of-range rows are discarded.
 Rows hold `gidx`, `seg`, `t_emit`, `t_heard`, slant distance `d` and ground speed `v`.
 
-The table is independent of event fits. Pairing gates its rows, then `locked_score` samples trajectory-derived
+The table is independent of event fits. Pairing gates its rows, then `custom_locked_score` samples trajectory-derived
 curves. Search and refinement dispatch scoring chunks through `parallel.ordered_map`, passing immutable scoring
 state with an initializer and restoring task order. Package process pools use spawn and pin numerical threads to
 one. These guarantees do not automatically apply to experiment scripts' own executors.
@@ -158,9 +159,9 @@ and serial workers, plus small fallback/report consistency regressions. It does 
 serial/pool equivalence, full-default real-data performance or a calibrated maximum null. The historical stopped
 record reports v4's smoke cancelled without results; that is recorded history, not a fresh run inspection.
 
-`freqtrack`, `hmmtrack`, `lltrack`, `warp`, track fitting and `hypotheses` remain library/research code.
-`run_search(hypotheses=True)` is explicit; CLI detect selects none of these trackers. `tracks.rescore_z` (S1)
-and `rescore_null` (S2) are separate APIs, not CLI detector statistic choices. Their tests demonstrate mechanics,
+The trackers (`viterbi`, `hysteresis_viterbi`, `hmm_tracker`), the de-Dopplerised tone score, track fitting and the
+hypotheses remain library/research code. `pair_grid_search(hypotheses=True)` is explicit; CLI detect selects none of
+these trackers. `custom_rescore_zscore` (S1) and `rescore_surrogate` (S2) are separate APIs, not CLI detector statistic choices. Their tests demonstrate mechanics,
 not adoption of a failed or unfinished experiment.
 
 The late [detector_roc.py](../tools/experiments/2026-11-04/detector_roc.py) change dispatches S2 reversed-window fits

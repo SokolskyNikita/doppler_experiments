@@ -172,7 +172,7 @@ class _Context:
             if not named or any(p is None for p in named):
                 self._traces = False
             else:
-                from dopplertrack.data.trajectories import join_days
+                from dopplertrack.data.day_seams import join_days
                 self._traces = join_days(named)[0]
         return self._traces or None
 
@@ -400,7 +400,7 @@ def _flights(ctx: _Context) -> str:
 
 
 def _fit_obj(fit: dict, score):
-    from dopplertrack.components.detection.grid_scan import EventFit
+    from dopplertrack.components.types import EventFit
     try:
         f = EventFit(fit["t_heard_cpa_audio_s"], fit["t_emission_cpa_audio_s"], fit["f0_hz"], fit["speed_m_s"],
                      fit["slant_range_m"], fit["window_s"][0], fit["window_s"][1], float(score),
@@ -467,7 +467,7 @@ def _overlay(sp, f, e, flight, traces, top, point, obs, elev_note, c) -> str:
     plot_event_fit(sp, f, harmonics=h, ax=axes[0])
     drawn, caption = False, ""
     if flight and obs is not None and top is not None:
-        from dopplertrack.components.search.grid import build_segments
+        from dopplertrack.components.search.segments import build_segments
         amu = top["clock"]["audio_minus_utc_s"]
         t_utc = f.t_cpa - amu
         segs = [s for s in build_segments([t for t in traces if t.icao == flight], point[0], point[1])

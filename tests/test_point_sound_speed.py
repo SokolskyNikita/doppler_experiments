@@ -3,9 +3,12 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from dopplertrack import atmosphere, doppler, search
-from dopplertrack.score import modelled_curve
-from dopplertrack.search import Grid, Segment
+from dopplertrack import atmosphere, doppler
+from dopplertrack.components.scoring.modelled_curve import modelled_curve
+from dopplertrack.search import Grid
+from dopplertrack.components.search.types import Segment
+import dopplertrack.components.search.cpa_storage as cpa_storage
+import dopplertrack.components.search.cpa_table as cpa_table
 
 
 def _overhead(height_m):
@@ -23,8 +26,8 @@ def test_a_flight_at_5_km_is_heard_later_by_the_mid_height_rule():
     assert expected == pytest.approx(0.41, abs=0.02)
     grid = Grid.points([40.0], [-74.0], [0.0])
     seg = _overhead(5000.0)
-    at_c = search.cpa_table(grid, [seg], 12000.0, c_ground, workers=1)
-    per_point = search.cpa_table(grid, [seg], 12000.0, c_ground, workers=1, temperature_c=ground)
+    at_c = cpa_table.cpa_table(grid, [seg], 12000.0, c_ground, workers=1)
+    per_point = cpa_table.cpa_table(grid, [seg], 12000.0, c_ground, workers=1, temperature_c=ground)
     assert per_point.t_emit[0] == at_c.t_emit[0] and per_point.d[0] == at_c.d[0]
     assert per_point.t_heard[0] - at_c.t_heard[0] == pytest.approx(expected, abs=1e-6)
     # the modelled curve agrees: its heard CPA (the f0 crossing) moves by the same amount
@@ -45,10 +48,10 @@ def test_each_point_uses_its_own_height():
 def test_without_a_temperature_nothing_changes():
     grid = Grid.points([40.0, 40.01], [-74.0, -74.0], [0.0, 30.0])
     seg = _overhead(1500.0)
-    a = search.cpa_table(grid, [seg], 12000.0, 340.0, workers=1)
-    b = search.cpa_table(grid, [seg], 12000.0, 340.0, workers=1, temperature_c=None)
+    a = cpa_table.cpa_table(grid, [seg], 12000.0, 340.0, workers=1)
+    b = cpa_table.cpa_table(grid, [seg], 12000.0, 340.0, workers=1, temperature_c=None)
     pd.testing.assert_frame_equal(a, b, check_exact=True)
-    fp = search.cpa_fingerprint(grid, [seg], 12000.0, 340.0)
-    assert search.cpa_fingerprint(grid, [seg], 12000.0, 340.0, None) == fp
-    assert search.cpa_fingerprint(grid, [seg], 12000.0, 340.0, 25.0) != fp
-    assert search.cpa_fingerprint(grid, [seg], 12000.0, 340.0, 25.0) != search.cpa_fingerprint(grid, [seg], 12000.0, 340.0, 20.0)
+    fp = cpa_storage.cpa_fingerprint(grid, [seg], 12000.0, 340.0)
+    assert cpa_storage.cpa_fingerprint(grid, [seg], 12000.0, 340.0, None) == fp
+    assert cpa_storage.cpa_fingerprint(grid, [seg], 12000.0, 340.0, 25.0) != fp
+    assert cpa_storage.cpa_fingerprint(grid, [seg], 12000.0, 340.0, 25.0) != cpa_storage.cpa_fingerprint(grid, [seg], 12000.0, 340.0, 20.0)

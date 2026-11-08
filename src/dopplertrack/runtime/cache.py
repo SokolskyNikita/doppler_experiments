@@ -145,14 +145,24 @@ def cached(kind: str, parts: dict, produce: Callable[[], T], root: str | Path | 
 
 # ---- detections ------------------------------------------------------------------------------
 
-DETECTOR_MODULES = ("dopplertrack.components.detection.grid_scan", "dopplertrack.core.propagation", "dopplertrack.components.spectrogram")
+DETECTOR_MODULES = ("dopplertrack.components.detection.grid_scan", "dopplertrack.components.detection.event_fit",
+                    "dopplertrack.components.detection.grid_search", "dopplertrack.components.detection.custom_curve_contrast",
+                    "dopplertrack.components.detection.doppler_curve", "dopplertrack.components.whitening.local_median",
+                    "dopplertrack.components.types", "dopplertrack.core.propagation",
+                    "dopplertrack.components.spectrogram")
 # What detect_events and fit_event actually run, by module: the functions and classes whose code decides a
 # detection or a fit. tests/test_cache.py traces both producers and fails if they call anything not listed here,
 # so the list can't fall behind the code. Process-pool plumbing (parallel.py) is left out: results don't depend on
 # the number of workers.
 DETECTOR_CODE = {
-    "dopplertrack.components.detection.grid_scan": ("EventFit", "ScanRequest", "Candidate", "local_whiten", "sweep_weights", "curve_contrast",
-                            "_shape", "grid_search", "fit_event", "_scan_window", "merge_candidates", "detect_events"),
+    "dopplertrack.components.detection.grid_scan": ("ScanRequest", "Candidate", "_scan_window", "non_maximum_suppression",
+                                                    "detect_events"),
+    "dopplertrack.components.detection.event_fit": ("fit_event",),
+    "dopplertrack.components.detection.grid_search": ("grid_search",),
+    "dopplertrack.components.detection.custom_curve_contrast": ("custom_sweep_weights", "custom_curve_contrast"),
+    "dopplertrack.components.detection.doppler_curve": ("straight_pass_doppler_curve",),
+    "dopplertrack.components.whitening.local_median": ("local_whiten",),
+    "dopplertrack.components.types": ("EventFit",),
     "dopplertrack.core.propagation": ("speed_of_sound", "observed_frequency", "ideal_curve"),
     "dopplertrack.components.spectrogram": ("Spectrogram",),
 }

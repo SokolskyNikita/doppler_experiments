@@ -1,6 +1,6 @@
 # Research readiness
 
-**Status:** written 2026-11-07; implementation not started. This is the first of two plans. No research in
+**Status:** written 2026-11-07. R1 done 2026-11-07 on branch `claude/readiness-r1` (the split and the naming in standard terms); not yet merged or checked on the dev box (its ledger entries are in `$DOPPLERTRACK_DATA/runs/2026-11-07-readiness-ledger/`); R2–R9 not started. This is the first of two plans. No research in
 [PLAN.md](../../PLAN.md) starts until every exit check in §5 passes. Implementation is authorized by the owner's
 implementation instruction; status changes are recorded here only.
 
@@ -79,7 +79,13 @@ the top-two pair rule (`evaluation/runner.py:pick_detected` and the runner's `to
 
 Finished when no file holds two methods, every recipe calls methods instead of embedding them, and the
 dependencies between methods run through shared types rather than through another method's module (today the
-HMM tracker imports harmonic pooling from the coherence scorer, and collective builds fake `EventFit`s).
+HMM tracker imports harmonic pooling from the coherence scorer, and collective builds fake `EventFit`s), and every
+method is named and described in standard terms: each method file, function, class, parameter and constant uses the
+term the reference literature (`$DOPPLERTRACK_DATA/reference/`, `docs/reference/`) uses for the concept, and each
+method file's docstring opens with that term and a citation. A statistic with no standard name (S1, for example) says
+so and defines itself. A renamed definition keeps an `# old name: X` comment, and the ledger holds the old-to-new
+table. Names that are part of an output (result-record and JSON keys, CLI flags, benchmark profile names, the
+`STATISTIC` identity) keep their spelling until R6's record work; the ledger lists them.
 
 ### R2. Make both recipes configurable compositions
 
@@ -223,7 +229,7 @@ and remove the marker; it is not an accuracy result.
 
 Research may start when all of these hold:
 
-1. R1–R3: no file holds two methods; both recipes are compositions with a parameters dataclass; no legacy imports.
+1. R1–R3: no file holds two methods; methods are named and described in standard terms; both recipes are compositions with a parameters dataclass; no legacy imports.
 2. R4: caches are keyed per method and parameters; the CPA table has a code-derived key.
 3. R5: every listed defect is fixed and tested.
 4. R6: the study runner runs baseline, variants and controls with complete accounting, locally and on the fleet.

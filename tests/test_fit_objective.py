@@ -6,7 +6,9 @@ import pytest
 
 from dopplertrack import cli
 from dopplertrack.audio import Spectrogram
-from dopplertrack.tracks import EventFit, fit_event, grid_search
+from dopplertrack.components.types import EventFit
+from dopplertrack.components.detection.event_fit import fit_event
+from dopplertrack.components.detection.grid_search import grid_search
 
 
 def _uniform(level=1.0):

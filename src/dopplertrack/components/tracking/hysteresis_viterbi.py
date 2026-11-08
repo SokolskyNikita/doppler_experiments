@@ -1,11 +1,14 @@
-"""Frequency tracks with hysteresis in states (PLAN Phase 2 item 3, round 2).
+"""Hysteresis-threshold Viterbi tracker: hysteresis thresholding (Nixon & Aguado 2012 pp. 172-178) with tentative
+-> confirmed tracks (Blackman & Popoli 1999 p. 42), decoded by the Viterbi algorithm (PLAN Phase 2 item 3, round 2).
+Not an HMM: the path maximises additive dB scores, not a likelihood. Ours: confirmation is N-of-N frames in the dB
+domain.
 
-A Viterbi over a grid of fundamentals per frame, the frame's harmonic evidence summed first
-(warp.pooled: the observable harmonics h = 1..3, weights (N + 1 - h)/N), with three kinds of state
-(Quinn & Hannan 2001 7.4, Streit & Barrett's zero state):
+A Viterbi over a grid of fundamentals per frame, the frame's harmonic sum taken first
+(harmonic_sum.harmonic_sum: the observable harmonics h = 1..3, weights (N + 1 - h)/N), with three kinds of state
+(OFF is Streit & Barrett 1990's zero state; BORN and ON are ours):
 - OFF, no track;
-- BORN_a, a track at age a = 1..n_born frames, rewarded E - theta_birth;
-- ON, a continuing track, rewarded E - theta_cont, with theta_cont below theta_birth.
+- BORN_a, a tentative track at age a = 1..n_born frames, rewarded E - theta_birth;
+- ON, a confirmed, continuing track, rewarded E - theta_cont, with theta_cont below theta_birth.
 OFF -> BORN_1 costs `birth`, ON -> OFF costs `death`, BORN -> OFF is free (a failed birth makes no
 track). A track must hold n_born frames above theta_birth before it is ON, so a short run of noise
 can't afford to be born while a weak tone already ON can continue through a dip. Transitions between
@@ -13,8 +16,10 @@ fundamentals are one step in fundamental space with an L1 cost per grid step, ca
 sweep bound; frames the spectrogram marks invalid are crossed without a measurement, for at most
 max_bridge_s. Up to two tone families are decoded, the second after excluding the first's harmonic
 cells; a second family harmonically related to the first joins it. Round 1's resolve_crossings runs
-after decoding. Frequencies are measured on the original STFT (freqtrack.refine), per harmonic, and
-combined into the fundamental weighted by amplitude squared."""
+after decoding. Frequencies are measured on the original STFT (frequency_estimators.refine), per harmonic,
+and combined into the fundamental weighted by amplitude squared, A_h^2. That is not inverse-variance weighting,
+which needs h^2 A_h^2 (Quinn & Hannan 2001 Theorem 8, §3.3; as hmm_tracker does)."""
+# old module: dopplertrack.components.tracking.hmm
 from __future__ import annotations
 
 import dataclasses
@@ -22,13 +27,17 @@ from dataclasses import dataclass
 
 import numpy as np
 
-import dopplertrack.components.tracking.viterbi as ft
 from dopplertrack.components.spectrogram import Spectrogram
-from dopplertrack.components.scoring.coherent import pooled
+from dopplertrack.components.harmonic_sum import harmonic_sum
+from dopplertrack.components.tracking.frequency_estimators import refine
+from dopplertrack.components.tracking.harmonic_links import harmonic_groups, harmonic_links
+from dopplertrack.components.tracking.segment_rules import resolve_crossings
+from dopplertrack.components.tracking.types import EventTracks, SampleSTFT, Track, TrackParams
 
 
+# old name: HMMParams
 @dataclass(frozen=True)
-class HMMParams:
+class HysteresisParams:
     theta_birth: float = 9.5          # dB: a BORN frame's reward is E - theta_birth
     theta_cont: float = 6.0           # dB: an ON frame's reward is E - theta_cont
     n_born: int = 4                   # frames a track spends BORN before it is ON (1 s at 0.25 s)
@@ -39,7 +48,7 @@ class HMMParams:
     max_bridge_s: float = 5.0
     grid_frac: float = 0.25           # fundamental grid step, as a fraction of a bin
     harmonics: int = 3
-    exclusion_bins: int = 4            # a smeared line plus pooling's +-1 bin
+    exclusion_bins: int = 4            # a smeared line plus the harmonic sum's +-1 bin
     families: int = 2
     min_track_s: float = 1.0
     estimator: str = "quinn2"
@@ -64,7 +73,7 @@ def _argmax_near(prev: np.ndarray, k: int, cap: int, cost: float) -> int:
     return int(j[np.argmax(prev[lo:hi] - cost * np.abs(j - k))])
 
 
-def decode(E: np.ndarray, t: np.ndarray, valid: np.ndarray, step_hz: float, f0s: np.ndarray, p: HMMParams
+def decode(E: np.ndarray, t: np.ndarray, valid: np.ndarray, step_hz: float, f0s: np.ndarray, p: HysteresisParams
            ) -> list[tuple[int, int, np.ndarray]]:
     """Best state path; returns the runs that reached ON as (first frame, last frame, grid index per frame,
     -1 where a frame is invalid)."""
@@ -153,8 +162,8 @@ def decode(E: np.ndarray, t: np.ndarray, valid: np.ndarray, step_hz: float, f0s:
     return out
 
 
-def _measure(win: Spectrogram, stft: ft.SampleSTFT, k0: int, path: np.ndarray, f0s: np.ndarray, E: np.ndarray,
-             p: HMMParams) -> ft.Track:
+def _measure(win: Spectrogram, stft: SampleSTFT, k0: int, path: np.ndarray, f0s: np.ndarray, E: np.ndarray,
+             p: HysteresisParams) -> Track:
     n = len(path)
     t = win.t[k0:k0 + n]
     f = np.full(n, np.nan); amp = np.full(n, np.nan); level = np.full(n, np.nan)
@@ -169,29 +178,30 @@ def _measure(win: Spectrogram, stft: ft.SampleSTFT, k0: int, path: np.ndarray, f
             b = int(round((h * f0s[k] - win.f[0]) / win.df))
             if b < 1 or b >= len(win.f) - 1:
                 continue
-            fh, ah = ft.refine(stft, frame, b + off, p.estimator)
+            fh, ah = refine(stft, frame, b + off, p.estimator)
             if abs(fh / h - f0s[k]) <= 1.5 * win.df:                      # a harmonic measured off its line is dropped
                 est.append(fh / h); wts.append(10 ** (ah / 10))
         if est:
             f[i] = float(np.average(est, weights=wts)); amp[i] = 10 * np.log10(max(wts))
-    return ft.Track(t.copy(), f, amp, level, np.isfinite(f), np.where(np.isfinite(f), path, -1))
+    return Track(t.copy(), f, amp, level, np.isfinite(f), np.where(np.isfinite(f), path, -1))
 
 
-def hmm_track(sp: Spectrogram, stft: ft.SampleSTFT, t_start: float, t_end: float, f_lo: float, f_hi: float,
-              p: HMMParams = HMMParams()) -> ft.EventTracks:
+# old name: hmm_track
+def hysteresis_track(sp: Spectrogram, stft: SampleSTFT, t_start: float, t_end: float, f_lo: float, f_hi: float,
+              p: HysteresisParams = HysteresisParams()) -> EventTracks:
     """Families of tracks whose fundamental lies in [f_lo, f_hi] between t_start and t_end."""
-    from dopplertrack.components.detection.grid_scan import local_whiten
+    from dopplertrack.components.whitening.local_median import local_whiten
     top = min(sp.f[-1], p.harmonics * f_hi + 2 * sp.df)
-    win = local_whiten(sp.crop(t_start, t_end, max(f_lo - 2 * sp.df, sp.f[0]), top), floor=-np.inf)
+    win = local_whiten(sp.crop(t_start, t_end, max(f_lo - 2 * sp.df, sp.f[0]), top), spectral_floor=-np.inf)
     S = np.where(win.valid[None, :], win.S, -np.inf).T                      # (T, F)
     S = np.where(np.isfinite(S), S, -1e3)
     step = p.grid_frac * win.df
     f0s = np.arange(f_lo, f_hi + step / 2, step)
     excl = np.zeros(S.shape, bool)
-    tracks: list[ft.Track] = []
+    tracks: list[Track] = []
     fam_of: list[int] = []
     for fam in range(p.families):                                         # one decode per family
-        E = pooled(S, win.f, f0s, p.harmonics, exclude=excl)
+        E = harmonic_sum(S, win.f, f0s, p.harmonics, exclude=excl)
         E[~win.valid] = -1e3
         runs = [r for r in decode(E, win.t, win.valid, win.df, f0s, p) if win.t[r[1]] - win.t[r[0]] >= p.min_track_s]
         if not runs:
@@ -204,11 +214,11 @@ def hmm_track(sp: Spectrogram, stft: ft.SampleSTFT, t_start: float, t_end: float
                 for h in range(1, p.harmonics + 1):
                     b = int(round((h * f0s[k] - win.f[0]) / win.df))
                     excl[k0 + i, max(b - p.exclusion_bins, 0):max(b + p.exclusion_bins + 1, 0)] = True
-    tracks = ft.resolve_crossings(tracks, ft.TrackParams(), win.df)
-    links = ft.harmonic_links(tracks, ft.TrackParams(harmonic_tol=p.harmonic_tol, max_order=p.max_order))
-    groups = ft.harmonic_groups(tracks, links)
-    return ft.EventTracks(tracks, links, groups)
+    tracks = resolve_crossings(tracks, TrackParams(), win.df)
+    links = harmonic_links(tracks, TrackParams(harmonic_tol=p.harmonic_tol, max_order=p.max_order))
+    groups = harmonic_groups(tracks, links)
+    return EventTracks(tracks, links, groups)
 
 
-def with_params(p: HMMParams, **kw) -> HMMParams:
+def with_params(p: HysteresisParams, **kw) -> HysteresisParams:
     return dataclasses.replace(p, **kw)

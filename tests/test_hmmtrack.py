@@ -3,10 +3,12 @@ hysteresis through a dip, a short tone never born, and a gap of invalid frames."
 import numpy as np
 import pytest
 
-from dopplertrack import audio, doppler, freqtrack as ft, hmmtrack as hm
+from dopplertrack import doppler, hmmtrack as hm
+import dopplertrack.components.stft as stft
+import dopplertrack.components.tracking.types as tracking_types
 
 SR, N, HOP = 4000, 8192, 0.25
-P = hm.HMMParams()
+P = hm.HysteresisParams()
 
 
 def _audio(dur, parts, noise=0.4, seed=0):
@@ -19,9 +21,9 @@ def _audio(dur, parts, noise=0.4, seed=0):
 
 
 def _run(x, lo, hi, blocks=None, fmax=1000.0, p=P, whiten="time"):
-    sp = (audio.compute_spectrogram(x, SR, fmax=fmax, whiten_window_s=None, whiten=whiten) if blocks is None
-          else audio.spectrogram_from_blocks(blocks, SR, fmax=fmax, whiten_window_s=None, whiten=whiten))
-    return sp, hm.hmm_track(sp, ft.SampleSTFT(x, SR, N, HOP), sp.t[0], sp.t[-1], lo, hi, p)
+    sp = (stft.compute_spectrogram(x, SR, fmax=fmax, whiten_window_s=None, whiten=whiten) if blocks is None
+          else stft.spectrogram_from_blocks(blocks, SR, fmax=fmax, whiten_window_s=None, whiten=whiten))
+    return sp, hm.hysteresis_track(sp, tracking_types.SampleSTFT(x, SR, N, HOP), sp.t[0], sp.t[-1], lo, hi, p)
 
 
 def _pass(f0):

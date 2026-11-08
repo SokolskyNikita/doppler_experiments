@@ -5,11 +5,15 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from dopplertrack import adsb, audio, cli, doppler, pipeline, tracks
+from dopplertrack import audio, cli, doppler, pipeline, tracks
+import dopplertrack.components.audio_input as audio_input
+import dopplertrack.components.types as components_types
+import dopplertrack.data.region_loading as region_loading
+import dopplertrack.components.stft as stft
 
 
 def _event(t=100, score=4):
-    return tracks.EventFit(t, t - 3, 120, 100, 1000, t - 30, t + 30, score, 150, 90)
+    return components_types.EventFit(t, t - 3, 120, 100, 1000, t - 30, t + 30, score, 150, 90)
 
 
 def _spec():
@@ -33,7 +37,7 @@ def test_search_and_refine_take_fits_or_ranked_detect_list(tmp_path, monkeypatch
             f.write_text(json.dumps(ev.to_dict()))
         event_args = ["--events", *map(str, files)]
     traces = tmp_path / "traces.npz"
-    adsb.save_traces([], traces)
+    region_loading.save_traces([], traces)
     seen = []
     row = dict(lat=40, lon=-74, lat0=40, lon0=-74, seg1=0, seg2=1, icao1="a", icao2="b",
                t_heard1=1e9, score=10, shift=0)
@@ -46,7 +50,7 @@ def test_search_and_refine_take_fits_or_ranked_detect_list(tmp_path, monkeypatch
         seen.append((a, b, kwargs["max_range_m"]))
         return pd.DataFrame([row])
 
-    monkeypatch.setattr(pipeline, "run_search", fake_search)
+    monkeypatch.setattr(pipeline, "pair_grid_search", fake_search)
     monkeypatch.setattr(pipeline, "refine", fake_refine)
     monkeypatch.setattr(pipeline, "segments_for_search", lambda *a, **k: [])
     monkeypatch.setattr(pipeline, "relocate_row", lambda row, *a: row)
@@ -75,7 +79,7 @@ def test_event_selection_rejects_invalid_ranks_and_formats(tmp_path, files, pick
 
 def test_silent_audio_has_no_detections(tmp_path, capsys, monkeypatch):
     monkeypatch.setenv("DOPPLERTRACK_CACHE", str(tmp_path / "cache"))
-    sp = audio.compute_spectrogram(np.zeros(4000 * 8, np.float32), 4000)
+    sp = stft.compute_spectrogram(np.zeros(4000 * 8, np.float32), 4000)
     assert tracks.detect_events(sp, 100, 130, workers=1) == []
     spec, out = tmp_path / "silence.npz", tmp_path / "events.json"
     sp.save(spec)
@@ -115,7 +119,7 @@ def test_min_score_is_applied_to_refined_scores(monkeypatch):
 def test_merge_breaks_score_ties_as_the_tuple_sort_did():
     first = tracks.Candidate(score=5.0, f0_hz=120.0, speed_mps=100.0, slant_m=1000.0, t_cpa_emit_s=100.0)
     second = tracks.Candidate(score=5.0, f0_hz=121.0, speed_mps=100.0, slant_m=1000.0, t_cpa_emit_s=110.0)
-    assert tracks.merge_candidates([first, second], min_sep_s=60.0, keep=2) == [second]
+    assert tracks.non_maximum_suppression([first, second], min_sep_s=60.0, keep=2) == [second]
 
 
 def test_worker_pool_matches_serial_scan():
@@ -136,9 +140,9 @@ def test_worker_pool_matches_serial_scan():
 def test_missing_ffmpeg_has_actionable_library_and_cli_error(monkeypatch, capsys):
     def missing(*a, **k):
         raise FileNotFoundError("ffmpeg")
-    monkeypatch.setattr(audio.subprocess, "run", missing)
-    with pytest.raises(audio.FFmpegNotFoundError, match="brew install ffmpeg"):
-        audio.load_audio("recording.wav")
+    monkeypatch.setattr(audio_input.subprocess, "run", missing)
+    with pytest.raises(audio_input.FFmpegNotFoundError, match="brew install ffmpeg"):
+        audio_input.load_audio("recording.wav")
     with pytest.raises(SystemExit) as exc:
         cli.main(["spectrogram", "recording.wav", "out.npz"])
     assert exc.value.code == 2

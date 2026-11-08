@@ -4,16 +4,16 @@ One pass over today's pieces: spectrogram, `detect`, a usability check (S6), fli
 table, one search on a pair of detected flyovers chosen by a pluggable rule, refinement of the winner with the other
 flyovers, and a verdict. Step A refines only the winner, so it can't rule out a competing mode: its verdict is
 "ambiguous" at best; a "located" verdict requires competitor handling and calibration that are not implemented.
-Evidence failures have stated reasons: no usable flyovers, flight data missing over the box or over the recording's
+Insufficient-evidence failures (verdict `insufficient_evidence`) have stated reasons: no usable flyovers, flight data missing over the box or over the recording's
 time, a clock past UTC midnight with only one day loaded, and no surviving candidate. Execution errors can raise.
 
 The pair rules:
 - "top2": detect's two highest-scoring usable events, earlier first. The raw-audio profile's rule; its failure on
   the development recordings is measured (docs/experiments/2026-11-04-bench-baselines.md).
-- "comparable": every pair of the top TOP_K usable events, each searched with run_search(comparable=True), the pair
+- "comparable": every pair of the top TOP_K usable events, each searched with pair_grid_search(comparable=True), the pair
   whose top candidate has the highest comparable score winning. Up to ten searches, so about ten times top2's time.
 
-The defaults, comparable with the silence filter on at 6 km, follow Tier 2 on the development set
+The defaults, comparable with the negative-information filter (key `silence`) on at 6 km, follow Tier 2 on the development set
 (docs/experiments/2026-11-04-locate.md): it found Oyster Bay where top2 and the filter off found no seed case, and
 lost none. The filter rests on one recording and is judged again on the next positive. `--pair-rule both` refines the
 default rule's answer and reports top2's beside it.
@@ -21,7 +21,6 @@ default rule's answer and reports top2's beside it.
 from __future__ import annotations
 
 import datetime
-import itertools
 import os
 import time
 from dataclasses import dataclass, field
@@ -29,10 +28,15 @@ from pathlib import Path
 
 import numpy as np
 
+from dopplertrack.components.search.best_per_pair import best_per_pair
+from dopplertrack.components.search.clock_gate import clock_gate
+from dopplertrack.components.selection.comparable_pairs import comparable_pairs
+from dopplertrack.components.selection.top2 import top2
+from dopplertrack.components.selection.usability import usable_events, valid_share
 from dopplertrack.runtime.records import CONVENTIONS_V1, KIND, SCHEMA_VERSION, file_entry, unavailable
 
 TOP_K = 5
-DEFAULT_SILENCE_D_M = 6000.0  # the silence filter's distance; on by default in locate (S4, changed 2026-11-04)
+DEFAULT_SILENCE_D_M = 6000.0  # the negative-information filter's distance; on by default in locate (S4, changed 2026-11-04)
 USABLE_VALID_SHARE = 0.5      # a recording more than half gaps is not searched (S6)
 DAY_SLACK_S = 600.0           # flight data counts as covering a day if it reaches within this of each end
 GATE_PAD_S = 300.0            # with a stated start, flight data must reach this far past the gated recording
@@ -49,7 +53,7 @@ class LocateConfig:
     tol_s: float = 6.0
     v_tol: float = 0.35
     d_tol: tuple[float, float] = (0.4, 2.5)
-    silence_d_m: float | None = DEFAULT_SILENCE_D_M   # None turns the silence filter off
+    silence_d_m: float | None = DEFAULT_SILENCE_D_M   # None turns the negative-information filter off
     pair_rule: str = "comparable"             # "top2", "comparable", or "both" (comparable's result, top2 reported)
     refine_spacing_m: float = 50.0
     refine_half_m: float = 600.0
@@ -109,14 +113,10 @@ def _envelopes(metas, cfg: LocateConfig):
 
 
 def _air(cfg: LocateConfig) -> dict:
-    """The speed-of-sound keywords of run_search and refine: c for the fits, and with a ground temperature each
+    """The speed-of-sound keywords of pair_grid_search and refine: c for the fits, and with a ground temperature each
     flight's own c from its height (PLAN 2: per emission point)."""
     kw = {} if cfg.c is None else {"c": cfg.c}
     return kw if cfg.temperature_c is None else {**kw, "temperature_c": cfg.temperature_c}
-
-
-def _best_per_pair(res):
-    return res.sort_values("score", ascending=False, kind="stable").drop_duplicates(["icao1", "icao2"]).reset_index(drop=True)
 
 
 def _search(sp, ev1, ev2, traces, grid, cfg: LocateConfig, meta, bbox, comparable=False, triples=None):
@@ -124,37 +124,19 @@ def _search(sp, ev1, ev2, traces, grid, cfg: LocateConfig, meta, bbox, comparabl
     c_kw = _air(cfg)
     if cfg.cpa_cache:             # a fresh cache root (a fleet box) has no folder for the table or its lock yet
         Path(cfg.cpa_cache).parent.mkdir(parents=True, exist_ok=True)
-    res, segs = pipeline.run_search(sp, ev1, ev2, traces, grid, harmonics=(1, 1), tol_s=cfg.tol_s, v_tol=cfg.v_tol,
+    res, segs = pipeline.pair_grid_search(sp, ev1, ev2, traces, grid, harmonics=(1, 1), tol_s=cfg.tol_s, v_tol=cfg.v_tol,
                                     d_tol=tuple(cfg.d_tol), silence_d_m=cfg.silence_d_m, max_range_m=cfg.max_range_m,
                                     progress=False, cpa_cache=cfg.cpa_cache, trace_metadata=meta,
                                     search_bbox=tuple(bbox), workers=cfg.workers, triples=triples,
                                     comparable=comparable, **c_kw)
-    return clock_gate(res, ev1, cfg), segs
-
-
-def clock_gate(res, ev1, cfg: LocateConfig):
-    """Drop every triple whose clock puts the recording's start further from the stated start than its stated
-    tolerance plus the search's own time tolerance. A triple's score depends only on its own events, flights and
-    clock (and comparable's Z on each event's own null), so dropping triples after scoring leaves exactly the
-    candidates a gate before scoring would. The counts go into the search's funnel as clock_gate."""
-    if cfg.start_utc is None or not len(res):
-        return res
-    start = res["t_heard1"].to_numpy(float) - ev1.t_cpa - res["shift"].to_numpy(float)
-    keep = np.abs(start - cfg.start_utc) <= float(cfg.start_tol_s or 0.0) + cfg.tol_s
-    out = res[keep].reset_index(drop=True)
-    out.attrs = dict(res.attrs)
-    out.attrs["funnel"] = {**res.attrs.get("funnel", {}),
-                           "clock_gate": {"before": int(len(res)), "after": int(keep.sum()),
-                                          "start_utc": cfg.start_utc, "tolerance_s": cfg.start_tol_s,
-                                          "tol_s": cfg.tol_s}}
-    return out
+    return clock_gate(res, ev1.t_cpa, cfg.start_utc, cfg.start_tol_s, cfg.tol_s), segs
 
 
 def _usable_extras(sp, row, extras, segs, cfg: LocateConfig, elevation):
     """The extra flyovers refine can place: a flight near the candidate at each one's time (pipeline.pick_flight,
     as refine chooses them); the rest are dropped with the reason, so refine never fails on one."""
     from dopplertrack.core.geometry import lla_to_enu
-    from dopplertrack.methods.grid_pair.pipeline import pick_flight
+    from dopplertrack.components.assignment.pick_flight import pick_flight
     lat, lon = float(row.lat), float(row.lon)
     el0 = float(elevation(np.array([lat]), np.array([lon]))[0]) if elevation else 0.0
     obs0 = lla_to_enu(lat, lon, el0 if np.isfinite(el0) else 0.0, row.lat0, row.lon0)
@@ -170,7 +152,7 @@ def _usable_extras(sp, row, extras, segs, cfg: LocateConfig, elevation):
 def locate(spec_path, date: str, bbox, trace_paths, cfg: LocateConfig | None = None, out_dir: Path | None = None,
            code: dict | None = None, log=None) -> Outcome:
     """Run step A on a spectrogram file and return the result record. Writes funnel_triples.npz into out_dir."""
-    from dopplertrack.data.trajectories import join_days
+    from dopplertrack.data.day_seams import join_days
     from dopplertrack.components.spectrogram import Spectrogram
     from dopplertrack.runtime.cache import cached_detections, detection_key
     from dopplertrack.data.coverage import ADS_B_LIMITATION, padded_bbox
@@ -234,8 +216,8 @@ def locate(spec_path, date: str, bbox, trace_paths, cfg: LocateConfig | None = N
     found = [e for e in cached_detections(sp, detect_events, workers=cfg.workers, **d_params)]
     params["detection_key"] = detection_key(sp, detect_events, **d_params)
     stage("detect", t0)
-    usable = [e for e in found if not getattr(e, "weak", None) and np.isfinite(e.f0)]
-    valid_share = float(np.mean(sp.valid)) if sp.valid is not None else 1.0
+    usable = usable_events(found)
+    share = valid_share(sp)
     for k, e in enumerate(usable, 1):
         rec["events"].append({
             "id": f"d{k}", "source": "detect", "harmonics": 1,
@@ -245,10 +227,10 @@ def locate(spec_path, date: str, bbox, trace_paths, cfg: LocateConfig | None = N
             "diagnostics": {"score": e.score, "score_kind": "detect's sweep-weighted ridge contrast",
                             "covariance": unavailable("fits report no covariance yet (Phase 2)")},
             "assignment": unavailable("not assigned"), "utc": unavailable("no clock yet")})
-    summary.append(f"{len(found)} detections, {len(usable)} usable; {100 * valid_share:.0f} % of frames valid")
-    if len(usable) < 2 or valid_share < USABLE_VALID_SHARE:
+    summary.append(f"{len(found)} detections, {len(usable)} usable; {100 * share:.0f} % of frames valid")
+    if len(usable) < 2 or share < USABLE_VALID_SHARE:
         why = (f"{len(usable)} usable flyover(s); the search needs two" if len(usable) < 2 else
-               f"only {100 * valid_share:.0f} % of the recording's frames are valid")
+               f"only {100 * share:.0f} % of the recording's frames are valid")
         return finish("insufficient_evidence", ["no_usable_flyovers"], [why])
 
     # 2. flight data, its coverage over the box plus the search range and over the stated day
@@ -258,7 +240,7 @@ def locate(spec_path, date: str, bbox, trace_paths, cfg: LocateConfig | None = N
         return finish("insufficient_evidence", ["flight_data_missing_box"],
                       ["no flight data was given; pass --traces, or --fetch to download the day"])
     traces, meta = join_days(paths)
-    from dopplertrack.data.trajectories import load_trace_metadata
+    from dopplertrack.data.region_loading import load_trace_metadata
     metas = [load_trace_metadata(p) for p in paths]
     inputs += [file_entry("traces", p) for p in paths]
     need = padded_bbox(tuple(bbox), cfg.max_range_m)
@@ -291,15 +273,11 @@ def locate(spec_path, date: str, bbox, trace_paths, cfg: LocateConfig | None = N
     # 3. the grid, then each pair rule's search
     elevation = Terrain().elevation if cfg.dem else None
     grid = Grid.make(*bbox, cfg.spacing_m, elevation)
-    ordered = sorted(usable, key=lambda e: e.score, reverse=True)
     runs = {}
     rules = RULES if cfg.pair_rule == "both" else (cfg.pair_rule,)
     for rule in rules:
         t0 = start()
-        if rule == "top2":
-            pairs = [tuple(sorted(ordered[:2], key=lambda e: e.t_cpa))]
-        else:
-            pairs = [tuple(sorted(p, key=lambda e: e.t_cpa)) for p in itertools.combinations(ordered[:TOP_K], 2)]
+        pairs = [top2(usable)] if rule == "top2" else comparable_pairs(usable, TOP_K)
         best = None
         for ev1, ev2 in pairs:
             triples = {}
@@ -311,7 +289,7 @@ def locate(spec_path, date: str, bbox, trace_paths, cfg: LocateConfig | None = N
         wall = time.perf_counter() - t0
         stage(f"search {rule}", t0)
         top, ev1, ev2, res, segs, triples = best
-        bp = _best_per_pair(res) if len(res) else res
+        bp = best_per_pair(res) if len(res) else res
         idx = [usable.index(ev1) + 1, usable.index(ev2) + 1]
         margin = (100 * (bp.score.iloc[0] - bp.score.iloc[1]) / bp.score.iloc[1]
                   if len(bp) > 1 and bp.score.iloc[1] > 0 else None)

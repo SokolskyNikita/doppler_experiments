@@ -3,8 +3,8 @@ that covers all of it, otherwise a flight that landed mid-pass can win on the br
 import numpy as np
 
 from dopplertrack.audio import Spectrogram
-from dopplertrack.score import EventWindow
-from dopplertrack.tracks import EventFit
+from dopplertrack.components.scoring.curve_integral import EventWindow
+from dopplertrack.components.types import EventFit
 
 
 def _window():

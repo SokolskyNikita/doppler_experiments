@@ -8,8 +8,9 @@ import matplotlib.pyplot as plt
 
 from dopplertrack.components.spectrogram import Spectrogram
 from dopplertrack.core.propagation import ideal_curve, speed_of_sound
-from dopplertrack.components.scoring.trajectory_brightness import modelled_curve
-from dopplertrack.components.detection.grid_scan import EventFit, local_whiten
+from dopplertrack.components.scoring.modelled_curve import modelled_curve
+from dopplertrack.components.types import EventFit
+from dopplertrack.components.whitening.local_median import local_whiten
 
 
 def _show(ax, sp: Spectrogram, vmax=10):

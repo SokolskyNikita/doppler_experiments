@@ -197,10 +197,10 @@ def draw(sp: Spectrogram, out_dir: Path, span, strip, sheet, vmax, smooth=2.0, f
 def passes(traces_path, site, t0_utc, span, max_range):
     """(heard t in recording s, ratio curve, heard-CPA time, slant, icao, registration) of every pass within
     max_range of the site that is heard during the span."""
-    from dopplertrack.adsb import load_traces
+    from dopplertrack.data.region_loading import load_traces
     from dopplertrack.doppler import speed_of_sound
-    from dopplertrack.score import modelled_curve
-    from dopplertrack.search import build_segments
+    from dopplertrack.components.scoring.modelled_curve import modelled_curve
+    from dopplertrack.components.search.segments import build_segments
     c = speed_of_sound()
     traces = load_traces(traces_path)
     t0 = utc(t0_utc)

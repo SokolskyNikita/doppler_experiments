@@ -7,8 +7,10 @@ import numpy as np
 import pytest
 import scipy.io.wavfile
 
-from dopplertrack import audio, cache
+from dopplertrack import cache
 from dopplertrack.audio import Spectrogram
+import dopplertrack.components.spectrogram_cache as spectrogram_cache
+import dopplertrack.components.stft as stft
 
 
 def _counting(calls, value):
@@ -106,15 +108,15 @@ def test_spectrogram_cache_hits_and_matches_uncached(tmp_path, monkeypatch):
     x = 0.3 * np.random.default_rng(0).standard_normal(20 * sr)
     scipy.io.wavfile.write(wav, sr, np.round(x * 32767).astype(np.int16))
     built = []
-    real = audio.spectrogram_from_files
-    monkeypatch.setattr(audio, "spectrogram_from_files", lambda *a, **k: built.append(1) or real(*a, **k))
+    real = stft.spectrogram_from_files
+    monkeypatch.setattr(spectrogram_cache, "spectrogram_from_files", lambda *a, **k: built.append(1) or real(*a, **k))
     root = tmp_path / "c"
-    sp = audio.cached_spectrogram(wav, root=root, hop_s=0.5)
-    again = audio.cached_spectrogram(wav, root=root, hop_s=0.5)
+    sp = spectrogram_cache.cached_spectrogram(wav, root=root, hop_s=0.5)
+    again = spectrogram_cache.cached_spectrogram(wav, root=root, hop_s=0.5)
     assert len(built) == 1 and np.array_equal(sp.S, again.S) and np.array_equal(sp.valid, again.valid)
     ref = real([(wav, 0.0)], sr, hop_s=0.5)
     assert np.array_equal(sp.S, ref.S) and np.array_equal(sp.t, ref.t)
-    audio.cached_spectrogram(wav, root=root, hop_s=0.25)
+    spectrogram_cache.cached_spectrogram(wav, root=root, hop_s=0.25)
     assert len(built) == 2
     with pytest.raises(TypeError, match="unknown spectrogram parameters"):
-        audio.cached_spectrogram(wav, root=root, hop=0.5)
+        spectrogram_cache.cached_spectrogram(wav, root=root, hop=0.5)

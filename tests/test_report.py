@@ -8,6 +8,7 @@ import pytest
 
 from dopplertrack import adsb, audio, report
 from dopplertrack.geo import enu_to_lla
+import dopplertrack.data.region_loading as region_loading
 
 FIXTURES = Path(__file__).parent / "fixtures" / "records"
 CASES = sorted(p.name for p in FIXTURES.iterdir() if (p / "result.json").exists())
@@ -75,7 +76,7 @@ def _straight_pass(tmp_path, lat0, lon0, t_cpa_unix):
     lat, lon, _ = enu_to_lla(e, np.full_like(e, 1500.0), np.zeros_like(e), lat0, lon0)
     tr = adsb.Trace("abc123", "N123AB", "C172", "CESSNA 172", t, lat, lon, np.full_like(t, 800.0),
                     np.full_like(t, 60.0), np.zeros(len(t), bool))
-    adsb.save_traces([tr], tmp_path / "derived" / "traces.npz", metadata={"coverage_bbox": [39, 42, -75, -72]})
+    region_loading.save_traces([tr], tmp_path / "derived" / "traces.npz", metadata={"coverage_bbox": [39, 42, -75, -72]})
 
 
 def test_the_overlay_and_the_flight_names_come_from_local_files_mapped_by_data_root(tmp_path):

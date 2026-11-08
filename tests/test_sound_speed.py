@@ -8,11 +8,15 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from dopplertrack import adsb, atmosphere, audio, cache, cli, doppler, pipeline, tracks
-from dopplertrack.search import Grid, Segment, cpa_fingerprint
+from dopplertrack import atmosphere, audio, cache, cli, doppler, pipeline
+from dopplertrack.search import Grid
+from dopplertrack.components.search.types import Segment
+from dopplertrack.components.search.cpa_storage import cpa_fingerprint
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from bench import cases, runner  # noqa: E402
+import dopplertrack.components.types as components_types
+import dopplertrack.data.region_loading as region_loading
 
 
 def test_the_default_and_the_mid_height_temperature():
@@ -27,7 +31,7 @@ def _spec():
 
 
 def _event(t):
-    return tracks.EventFit(t, t - 3, 120, 100, 1000, t - 30, t + 30, 4, 150, 90)
+    return components_types.EventFit(t, t - 3, 120, 100, 1000, t - 30, t + 30, 4, 150, 90)
 
 
 @pytest.fixture
@@ -38,7 +42,7 @@ def inputs(tmp_path):
     for f, ev in zip(files, (_event(100), _event(400))):
         f.write_text(json.dumps(ev.to_dict()))
     traces = tmp_path / "traces.npz"
-    adsb.save_traces([], traces)
+    region_loading.save_traces([], traces)
     results = tmp_path / "search.csv"
     pd.DataFrame([dict(lat=40, lon=-74, lat0=40, lon0=-74, seg1=0, seg2=1, icao1="a", icao2="b", t_heard1=1e9,
                        score=10, shift=0)]).to_csv(results, index=False)
@@ -58,8 +62,8 @@ def test_the_cli_passes_c_only_when_a_temperature_is_given(tmp_path, monkeypatch
         seen.append(kw)
         return (row, []) if not kw.get("_refine") else row
 
-    monkeypatch.setattr(pipeline, "run_search", capture)
-    monkeypatch.setattr(pipeline, "run_single_search", capture)
+    monkeypatch.setattr(pipeline, "pair_grid_search", capture)
+    monkeypatch.setattr(pipeline, "single_grid_search", capture)
     monkeypatch.setattr(pipeline, "refine", lambda *a, **kw: (seen.append(kw), row)[1])
     monkeypatch.setattr(pipeline, "segments_for_search", lambda *a, **k: [])
     monkeypatch.setattr(pipeline, "relocate_row", lambda r, *a: r)

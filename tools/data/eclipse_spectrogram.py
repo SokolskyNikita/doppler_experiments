@@ -13,7 +13,7 @@ import tempfile
 import zipfile
 from pathlib import Path
 
-from dopplertrack.audio import spectrogram_from_audiomoth
+from dopplertrack.components.stft import spectrogram_from_audiomoth
 
 if len(sys.argv) != 3:
     sys.exit(__doc__)

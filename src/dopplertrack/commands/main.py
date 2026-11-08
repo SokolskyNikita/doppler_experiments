@@ -7,15 +7,17 @@ import json
 import numpy as np
 
 import dopplertrack.methods.grid_pair.pipeline as pipeline
-from dopplertrack.data.trajectories import join_days
-from dopplertrack.components.spectrogram import FFmpegNotFoundError, Spectrogram
+from dopplertrack.data.day_seams import join_days
+from dopplertrack.components.spectrogram import Spectrogram
+from dopplertrack.components.audio_input import FFmpegNotFoundError
 from dopplertrack.data.coverage import DEFAULT_MAX_RANGE_M, report_coverage
 from dopplertrack.core.propagation import speed_of_sound
 from dopplertrack.runtime.parallel import JOBS_ENV
-from dopplertrack.components.scoring.trajectory_brightness import SF_FLAT_RATIO
+from dopplertrack.components.scoring.doppler_inflection import INFLECTION_FLAT_RATIO
 from dopplertrack.components.search.grid import Grid
 from dopplertrack.data.terrain import Terrain
-from dopplertrack.components.detection.grid_scan import EventFit, fit_event
+from dopplertrack.components.types import EventFit
+from dopplertrack.components.detection.event_fit import fit_event
 
 
 def load_events(files, picks=None):
@@ -108,7 +110,7 @@ def main(argv=None):
                    help="drop triples whose modelled and fitted steepest-fall gaps differ by more than S seconds (default: off)")
     r.add_argument("--sf-smooth", type=float, default=3.0, metavar="S", help="steepest fall: moving-average half-width, s")
     r.add_argument("--sf-window", type=float, default=60.0, metavar="S", help="steepest fall: search half-window around each CPA, s")
-    r.add_argument("--sf-flat-ratio", type=float, default=SF_FLAT_RATIO, metavar="X",
+    r.add_argument("--sf-flat-ratio", type=float, default=INFLECTION_FLAT_RATIO, metavar="X",
                    help="steepest fall: a curve whose peak slope is under X times its median slope can't be placed")
     r.add_argument("--anchor", choices=["heard", "steepest"], default="heard",
                    help="clock anchor for scoring: event 1's heard CPA (default) or its steepest fall")
@@ -193,7 +195,7 @@ def main(argv=None):
         ap.error("--top must be positive and --min-score must be finite")
     if a.cmd == "spectrogram":
         from pathlib import Path
-        from dopplertrack.components.spectrogram import spectrogram_from_audiomoth
+        from dopplertrack.components.stft import spectrogram_from_audiomoth
         try:
             if Path(a.audio).is_dir():
                 sp = spectrogram_from_audiomoth(a.audio, hop_s=a.hop, fmin=a.fmin, fmax=a.fmax)
@@ -243,7 +245,7 @@ def main(argv=None):
             grid = Grid.points([a.point[0]], [a.point[1]], el)
         else:
             grid = Grid.make(*a.bbox, a.spacing, elev)
-        res, segs = pipeline.run_search(sp, ev1, ev2, traces, grid, harmonics=tuple(a.harmonics),
+        res, segs = pipeline.pair_grid_search(sp, ev1, ev2, traces, grid, harmonics=tuple(a.harmonics),
                                         silence_d_m=None if a.no_silence else 6000.0, tol_s=a.tol, cpa_cache=a.cpa_cache,
                                         max_range_m=a.max_range, trace_metadata=trace_meta,
                                         search_bbox=tuple(a.bbox) if a.bbox else (a.point[0], a.point[0], a.point[1], a.point[1]),
@@ -290,7 +292,7 @@ def main(argv=None):
             t_unix = datetime.fromisoformat(a.utc.replace("Z", "+00:00")).astimezone(timezone.utc).timestamp()
         elev = None if a.no_dem else Terrain().elevation
         grid = Grid.make(*a.bbox, a.spacing, elev)
-        res, segs = pipeline.run_single_search(sp, ev, traces, grid, t_unix, tol_s=a.tol, harmonics=a.harmonics,
+        res, segs = pipeline.single_grid_search(sp, ev, traces, grid, t_unix, tol_s=a.tol, harmonics=a.harmonics,
                                                max_range_m=a.max_range, trace_metadata=trace_meta,
                                                search_bbox=tuple(a.bbox), workers=a.jobs, **geo_kw)
         res["lat0"] = grid.lat0; res["lon0"] = grid.lon0
@@ -304,7 +306,7 @@ def _locate(a, c_kw):
     from pathlib import Path
 
     import dopplertrack.methods.grid_pair.runner as loc
-    from dopplertrack.components.spectrogram import cached_spectrogram
+    from dopplertrack.components.spectrogram_cache import cached_spectrogram
     from dopplertrack.runtime.cache import cache_root
     from dopplertrack.runtime.records import write_record
     if (a.start is None) != (a.start_tolerance is None):

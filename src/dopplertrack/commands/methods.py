@@ -25,9 +25,10 @@ def main(argv=None):
     if unknown := config.keys() - required - {"parameters", "terrain"}:
         parser.error(f"unknown configuration fields: {sorted(unknown)}")
     from dopplertrack.components.spectrogram import Spectrogram
-    from dopplertrack.data.trajectories import join_days
+    from dopplertrack.data.day_seams import join_days
     from dopplertrack.data.terrain import Terrain
-    from dopplertrack.methods.collective.search import Window, collective_find
+    from dopplertrack.methods.collective.search import collective_detection
+    from dopplertrack.components.windows import Window
     from dopplertrack.runtime.cache import file_sha256
     def resolve(value):
         value = Path(value)
@@ -40,7 +41,7 @@ def main(argv=None):
     (args.out / "request.json").write_text(json.dumps({"method": "collective", "config": config,
         "input_sha256": provenance, "assistance": "explicit event windows", "status": "running"}, indent=2) + "\n")
     flights, _ = join_days(traces)
-    result = collective_find(Spectrogram.load(spec), windows, flights, config["bbox"],
+    result = collective_detection(Spectrogram.load(spec), windows, flights, config["bbox"],
         elevation=Terrain().elevation if config.get("terrain", True) else None, **config.get("parameters", {}))
     # This is the method's research output, not a calibrated common verdict.
     text = json.dumps(result, indent=2, default=float) + "\n"

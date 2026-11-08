@@ -13,11 +13,12 @@ import numpy as np
 import pytest
 
 from dopplertrack import pipeline
-from dopplertrack.adsb import load_traces
+from dopplertrack.data.region_loading import load_traces
 from dopplertrack.audio import Spectrogram
 from dopplertrack.search import Grid
 from dopplertrack.terrain import Terrain
-from dopplertrack.tracks import detect_events, fit_event
+from dopplertrack.tracks import detect_events
+from dopplertrack.components.detection.event_fit import fit_event
 
 DATA = os.environ.get("DOPPLERTRACK_OYSTER_BAY")
 RESULTS = Path(__file__).parent.parent / "docs" / "results"
@@ -35,7 +36,7 @@ def recording():
 
 def _at_truth(sp, traces, ev1, ev2):
     el = Terrain().elevation(np.array([TRUTH[0]]), np.array([TRUTH[1]]))
-    res, _ = pipeline.run_search(sp, ev1, ev2, traces, Grid.points([TRUTH[0]], [TRUTH[1]], el), progress=False)
+    res, _ = pipeline.pair_grid_search(sp, ev1, ev2, traces, Grid.points([TRUTH[0]], [TRUTH[1]], el), progress=False)
     return res
 
 

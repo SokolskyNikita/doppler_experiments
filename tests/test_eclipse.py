@@ -12,7 +12,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from dopplertrack.audio import audiomoth_files, spectrogram_from_audiomoth
+from dopplertrack.components.audio_input import audiomoth_files
+from dopplertrack.components.stft import spectrogram_from_audiomoth
 
 DATA = os.environ.get("DOPPLERTRACK_ESID740")
 pytestmark = pytest.mark.skipif(not DATA, reason="set DOPPLERTRACK_ESID740 to run")

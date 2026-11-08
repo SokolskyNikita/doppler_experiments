@@ -5,8 +5,12 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from dopplertrack import adsb, audio, cache, locate, pipeline, tracks
+from dopplertrack import audio, cache, locate, pipeline
 from dopplertrack.result import validate
+import dopplertrack.components.types as components_types
+import dopplertrack.components.assignment.pick_flight as pick_flight
+from dopplertrack.components.search.clock_gate import clock_gate
+import dopplertrack.data.region_loading as region_loading
 
 DAY = "2026-09-08"
 DAY0 = datetime.datetime(2026, 9, 8, tzinfo=datetime.timezone.utc).timestamp()
@@ -15,7 +19,7 @@ ENVELOPE = [39.8, 40.3, -74.3, -73.6]
 
 
 def _event(t, score):
-    return tracks.EventFit(t, t - 3, 120, 100, 1000, t - 30, t + 30, score, 150, 90)
+    return components_types.EventFit(t, t - 3, 120, 100, 1000, t - 30, t + 30, score, 150, 90)
 
 
 @pytest.fixture
@@ -31,7 +35,7 @@ def _traces(tmp_path, envelope=ENVELOPE, covered=None, metadata=True, name="trac
     meta = {"coverage_bbox": envelope, "date": DAY}
     if covered:
         meta["covered_utc"] = covered
-    adsb.save_traces([], path, metadata=meta if metadata else None)
+    region_loading.save_traces([], path, metadata=meta if metadata else None)
     return path
 
 
@@ -51,8 +55,9 @@ def _search_returning(monkeypatch, t_heard1, empty=False):
         res.attrs["funnel"] = {"cpa_rows": 10, "time_join": 4, "silence": 4, "scored": len(rows)}
         segs = [type("S", (), {"icao": k})() for k in "abcd"]
         return res, segs
-    monkeypatch.setattr(pipeline, "run_search", fake)
+    monkeypatch.setattr(pipeline, "pair_grid_search", fake)
     monkeypatch.setattr(pipeline, "pick_flight", lambda *a, **k: (-1, 0.0))
+    monkeypatch.setattr(pick_flight, "pick_flight", lambda *a, **k: (-1, 0.0))      # runner looks it up there
     monkeypatch.setattr(pipeline, "refine", lambda *a, **k: pd.DataFrame([dict(lat=40.021, lon=-73.971, score=10.5,
                                                                                   s1=6.1, s2=4.4, shift=0.0)]))
 
@@ -64,7 +69,7 @@ def _run(spec, traces, tmp_path, **cfg):
 
 
 def test_fewer_than_two_usable_flyovers(monkeypatch, spec, tmp_path):
-    _detections(monkeypatch, [_event(1000, 5.0), tracks.EventFit.unfit(1500, 1600, "band too narrow")])
+    _detections(monkeypatch, [_event(1000, 5.0), components_types.EventFit.unfit(1500, 1600, "band too narrow")])
     v = _run(spec, [_traces(tmp_path)], tmp_path)
     assert v["outcome"] == "insufficient_evidence" and v["reason_codes"] == ["no_usable_flyovers"]
 
@@ -147,7 +152,7 @@ def test_a_ground_temperature_reaches_the_search_and_the_refinement(monkeypatch,
             seen[name] = kw
             return fn(*args, **kw)
         return wrapped
-    monkeypatch.setattr(pipeline, "run_search", spy("search", pipeline.run_search))
+    monkeypatch.setattr(pipeline, "pair_grid_search", spy("search", pipeline.pair_grid_search))
     monkeypatch.setattr(pipeline, "refine", spy("refine", pipeline.refine))
     _run(spec, [_traces(tmp_path)], tmp_path, c=346.5, temperature_c=25.6)
     assert all(seen[k]["temperature_c"] == 25.6 and seen[k]["c"] == 346.5 for k in ("search", "refine"))
@@ -165,8 +170,8 @@ def test_the_defaults_are_comparable_with_the_silence_filter_on(monkeypatch, spe
     _detections(monkeypatch, [_event(1000, 5.0), _event(2000, 4.0), _event(3000, 3.0)])
     _search_returning(monkeypatch, DAY0 + 72000.0)
     calls = []
-    search = pipeline.run_search
-    monkeypatch.setattr(pipeline, "run_search", lambda *a, **k: calls.append(k) or search(*a, **k))
+    search = pipeline.pair_grid_search
+    monkeypatch.setattr(pipeline, "pair_grid_search", lambda *a, **k: calls.append(k) or search(*a, **k))
     out = locate.locate(spec, DAY, BOX, [_traces(tmp_path)], locate.LocateConfig(dem=False), out_dir=tmp_path / "out")
     assert [r["rule"] for r in out.record["pair_rules"]] == ["comparable"]
     assert len(calls) == 3 and all(k["comparable"] and k["silence_d_m"] == 6000.0 for k in calls)  # 3 events: 3 pairs
@@ -188,6 +193,6 @@ def test_the_clock_gate_counts_what_it_drops():
     import pandas as pd
     res = pd.DataFrame({"t_heard1": [1000.0, 1100.0, 1300.0], "shift": [0.0, 0.0, 0.0], "score": [3.0, 2.0, 1.0]})
     res.attrs["funnel"] = {"scored": 3}
-    out = locate.clock_gate(res, _event(100.0, 5.0), locate.LocateConfig(start_utc=900.0, start_tol_s=60.0))
+    out = clock_gate(res, 100.0, start_utc=900.0, start_tol_s=60.0, tol_s=locate.LocateConfig().tol_s)
     assert list(out.t_heard1) == [1000.0] and out.attrs["funnel"]["clock_gate"]["after"] == 1
     assert out.attrs["funnel"]["scored"] == 3

@@ -6,8 +6,8 @@ from PIL import Image
 
 from dopplertrack import pipeline, search, terrain
 from dopplertrack.audio import Spectrogram
-from dopplertrack.search import Segment
-from dopplertrack.tracks import EventFit
+from dopplertrack.components.search.types import Segment
+from dopplertrack.components.types import EventFit
 
 
 def test_esid937_nodata_pixel_is_masked(tmp_path):

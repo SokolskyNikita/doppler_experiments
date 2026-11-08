@@ -20,31 +20,37 @@ from dopplertrack.result import (CONVENTIONS_V1, ListOf, Maybe, OneOf, RecordErr
                                  unavailable)
 
 from .cases import REPO, resolve
+from dopplertrack.evaluation.fit_reference import fit_errors, line_f0, trajectory_reference
+from dopplertrack.evaluation.label_matching import line_match, match, rising
+from dopplertrack.evaluation.froc import countable_hours, pooled_froc_curve, froc_curve
+from dopplertrack.evaluation.tier1_knobs import KNOBS
+
 
 TIER1 = REPO / "bench" / "tier1.json"
+
+
 SPAN_KIND = "dopplertrack.span_result"
+
+
 SPAN_SCHEMA_VERSION = 1
+
+
 SPAN_FILE, SPAN_HASH = "span_result.json", "span_result.json.sha256"
+
+
 DETECT_TOP = 200                 # more than detect can propose on a crop, so none is dropped before matching
 
-KNOBS = {
-    "crop_margin_s": 240.0,      # detect sees the span plus this either side; a detection belongs to the span by its
-                                 # heard CPA, so one whose window straddles an edge is judged on partial evidence
-    "cpa_slack_s": 5.0,          # a detection's heard CPA may lie this far outside a window: labels are read to seconds
-    "line_tolerance": 0.10,      # f0 * k within this fraction of a labelled line's entry-exit band
-    "harmonic_ratios": [0.5, 1.0, 2.0],  # f0 * k on exactly one line for one k, and with two or more lines its next
-                                 # harmonic on another (see _line_match); tightened before the full spans were matched
-    "fit_band_margin": 0.10,     # a labelled line is fitted in its band widened by this fraction
-    "association_dt_s": 10.0,    # a detection agrees with its associated flight within this heard-CPA difference
-    "association_df": 0.10,      # and this fraction of f0
-}
+
 RISING = "rising line, no straight-pass model"
-COUNTED = ("clear", "overlapping")           # matched or missed
-EXCLUDED = ("uncertain", "masked")           # in neither count, nor are detections inside them
+
 
 NUMBER = (int, float)
+
+
 FIT = {"t_cpa": NUMBER, "t_cpa_emit": NUMBER, "f0": NUMBER, "v": NUMBER, "d": NUMBER, "t_start": NUMBER,
        "t_end": NUMBER, "score": NUMBER, "f_pre": NUMBER, "f_post": NUMBER}
+
+
 SPAN_SCHEMA_V1 = {
     "schema_version": int,
     "kind": OneOf(SPAN_KIND),
@@ -160,7 +166,7 @@ def _fit_window(task) -> dict:
     import scipy
 
     from dopplertrack.cache import DETECTOR_CODE, cached, code_sha256
-    from dopplertrack.tracks import fit_event
+    from dopplertrack.components.detection.event_fit import fit_event
     window, line, t0, t1, lo, hi, objective = task
 
     def produce():
@@ -190,152 +196,6 @@ def write_span(out_dir: Path, record: dict) -> str:
     return sha
 
 
-def rising(line) -> bool:
-    """A labelled line whose exit frequency is above its entry: no straight pass makes that."""
-    return float(line[1]) > float(line[0])
-
-
-def outside_model(w: dict) -> bool:
-    """A counted window none of whose lines a straight pass could make: it can't be a flyover, so it is
-    neither matched nor missed, and detections inside it count nowhere."""
-    return not any(not rising(line) for line in w["lines"])
-
-
-def _in_band(f: float, line) -> bool:
-    tol = KNOBS["line_tolerance"]
-    return min(line) * (1 - tol) <= f <= max(line) * (1 + tol)
-
-
-def _line_match(f0: float, lines: list[list[float]]) -> bool:
-    """Whether a detection's f0 is a window's fundamental: for some k in harmonic_ratios, f0 * k lies in
-    exactly one line's band, and no other k puts it on that line; and when the window has two or more falling
-    lines, the next harmonic, 2 * f0 * k, lies in another line's band. Rising lines take no part."""
-    falling = [line for line in lines if not rising(line)]
-    ks = KNOBS["harmonic_ratios"]
-    for k in ks:
-        on = [j for j, line in enumerate(falling) if _in_band(f0 * k, line)]
-        if len(on) != 1:
-            continue
-        j = on[0]
-        if any(_in_band(f0 * k2, falling[j]) for k2 in ks if k2 != k):
-            continue                      # the line's band spans a factor of two: which harmonic is ambiguous
-        if len(falling) < 2 or any(_in_band(2 * f0 * k, line) for i, line in enumerate(falling) if i != j):
-            return True
-    return False
-
-
-def match(detections: list[dict], windows: list[dict], min_score: float = 0.0) -> dict:
-    """Matched, missed and extra per window class for the detections scoring at least min_score.
-    A detection matches a counted window when its heard CPA lies in the window (with slack) and its f0, or a
-    harmonic ratio of it, lies on one of the window's lines. One that matches none is excluded if its heard
-    CPA lies in an uncertain or masked window, and extra otherwise."""
-    slack = KNOBS["cpa_slack_s"]
-    dets = [d for d in detections if d["score"] >= min_score]
-    hit, extra_by = set(), {}
-    excluded = 0
-    for d in dets:
-        inside = [w for w in windows if w["start"] - slack <= d["t_cpa"] <= w["end"] + slack]
-        matches = [w for w in inside if w["class"] in COUNTED and not outside_model(w) and _line_match(d["f0"], w["lines"])]
-        if matches:
-            hit.update(w["index"] for w in matches)
-        elif any(w["class"] in EXCLUDED or (w["class"] in COUNTED and outside_model(w)) for w in inside):
-            excluded += 1
-        else:
-            home = min(inside, key=lambda w: abs((w["start"] + w["end"]) / 2 - d["t_cpa"]))["class"] if inside else "outside"
-            extra_by[home] = extra_by.get(home, 0) + 1
-    out = {}
-    for cls in COUNTED:
-        ws = [w for w in windows if w["class"] == cls and not outside_model(w)]
-        out[cls] = {"windows": len(ws), "matched": sum(w["index"] in hit for w in ws),
-                    "missed": sum(w["index"] not in hit for w in ws),
-                    "outside_model": sum(1 for w in windows if w["class"] == cls and outside_model(w))}
-    out["extra"] = {"total": sum(extra_by.values()), "by_window_class": extra_by}
-    out["excluded_detections"] = excluded
-    out["detections"] = len(dets)
-    return out
-
-
-def countable_hours(span: tuple[float, float], windows: list[dict]) -> float:
-    """The audio that can hold a false alarm: the span less its uncertain, masked and outside-model windows."""
-    gone = sorted((max(w["start"], span[0]), min(w["end"], span[1])) for w in windows
-                  if w["class"] in EXCLUDED or (w["class"] in COUNTED and outside_model(w)))
-    lost, reach = 0.0, span[0]
-    for a, b in gone:
-        a = max(a, reach)
-        if b > a:
-            lost += b - a
-            reach = b
-    return max(span[1] - span[0] - lost, 0.0) / 3600.0
-
-
-def pooled_curve(units: list[tuple[list[dict], list[dict], float]]) -> list[dict]:
-    """The false-alarm table over several spans: at each detection score taken as the threshold, the summed
-    matches, misses and extras, and extras per countable hour of all of them. Matched and missed are None
-    when the pool has no counted window."""
-    hours = sum(h for _, _, h in units)
-    counted = any(w["class"] in COUNTED and not outside_model(w) for _, ws, _ in units for w in ws)
-    rows = []
-    for s in sorted({0.0, *(d["score"] for dets, _, _ in units for d in dets)}):
-        ms = [match(dets, ws, s) for dets, ws, _ in units]
-        extra = sum(m["extra"]["total"] for m in ms)
-        rows.append({"min_score": s, "extra": extra, "extra_per_hour": extra / hours if hours else None,
-                     "matched": sum(m[c]["matched"] for m in ms for c in COUNTED) if counted else None,
-                     "missed": sum(m[c]["missed"] for m in ms for c in COUNTED) if counted else None})
-    return rows
-
-
-def threshold_curve(detections: list[dict], windows: list[dict], hours: float) -> list[dict]:
-    """The match counts at each detection score taken as the threshold: the false-alarm curve, as a table."""
-    rows = []
-    for s in sorted({0.0, *(d["score"] for d in detections)}):
-        m = match(detections, windows, s)
-        rows.append({"min_score": s, "matched": sum(m[c]["matched"] for c in COUNTED),
-                     "missed": sum(m[c]["missed"] for c in COUNTED), "extra": m["extra"]["total"],
-                     "extra_per_hour": m["extra"]["total"] / hours if hours else None})
-    return rows
-
-
-def line_f0(line) -> float:
-    """A straight pass's rest frequency from its entry and exit frequencies: f_in = f0 c/(c - v) and
-    f_out = f0 c/(c + v) give f0 = 2 f_in f_out / (f_in + f_out). Read from a picture, so good to about 5 %."""
-    a, b = float(line[0]), float(line[1])
-    return 2 * a * b / (a + b)
-
-
-def trajectory_reference(traces, icao: str, observer_enu, lat0, lon0, t0_unix: float, near_audio_s: float, c: float):
-    """Layer 3 for one flight (PLAN 5.3): what the observer should hear from its trace, in audio seconds.
-    The heard CPA, the steepest fall of the modelled curve, and the slant range and ground speed at CPA, from
-    the segment whose heard CPA lies nearest near_audio_s. None if the flight has no segment in range."""
-    from dopplertrack.score import modelled_curve, steepest_fall
-    from dopplertrack.search import build_segments
-    best = None
-    for seg in build_segments([t for t in traces if t.icao == icao], lat0, lon0):
-        r = np.linalg.norm(seg.enu - observer_enu, axis=1)
-        j = int(np.argmin(r))
-        if j == 0 or j == len(r) - 1:
-            continue
-        heard = seg.t[j] + r[j] / c - t0_unix
-        if best is None or abs(heard - near_audio_s) < abs(best["t_heard_cpa_s"] - near_audio_s):
-            # placed like the search's own steepest-fall check: within ±60 s of the emission CPA, smoothed
-            t_obs, ratio = modelled_curve(seg, observer_enu, c)
-            sf = steepest_fall(t_obs, ratio, float(seg.t[j]))
-            steep = None if sf is None else float(sf - t0_unix)
-            best = {"t_heard_cpa_s": float(heard), "t_steepest_fall_s": steep, "slant_range_m": float(r[j]),
-                    "ground_speed_m_s": float(seg.speed[j])}
-    return best
-
-
-def fit_errors(fit: dict, ref: dict, c: float) -> dict:
-    """A fit against layer 3; steepest falls are placed by the same function on both sides."""
-    from dopplertrack.pipeline import fitted_steepest_fall
-    from dopplertrack.tracks import EventFit
-    sf = fitted_steepest_fall(EventFit(**fit), c)
-    return {"dt_heard_s": fit["t_cpa"] - ref["t_heard_cpa_s"],
-            "dt_steepest_s": None if ref["t_steepest_fall_s"] is None or sf is None else sf - ref["t_steepest_fall_s"],
-            "df0_pct": 100 * (fit["f0"] - ref["f0_hz"]) / ref["f0_hz"],
-            "dv_m_s": fit["v"] - ref["ground_speed_m_s"], "dd_m": fit["d"] - ref["slant_range_m"]}
-
-
 def score_fits(record: dict, windows: list[dict], associations: list[dict], reference_context) -> tuple:
     """Fit errors against layer 3 for every probable association, per objective and for its window's matching
     detection, and the association share. reference_context() gives (traces, observer_enu, lat0, lon0, t0_unix, c)."""
@@ -363,7 +223,7 @@ def score_fits(record: dict, windows: list[dict], associations: list[dict], refe
         row["objectives"] = {f["objective"]: (fit_errors(f["fit"], ref, c) if "unavailable" not in f["fit"] else f["fit"])
                              for f in fits if f["window"] == w["index"] and f["line"] == a["line"]}
         on_line = [d for d in dets if w["start"] - slack <= d["t_cpa"] <= w["end"] + slack
-                   and _line_match(d["f0"], [line])]
+                   and line_match(d["f0"], [line])]
         if on_line:
             d = max(on_line, key=lambda d: d["score"])
             e = fit_errors(d, ref, c)
@@ -401,7 +261,7 @@ def compare_span(out_dir: Path, read_labels, reference_context=None) -> dict:
     entry["detection"] = match(dets, windows)
     entry["detection"].update(countable_hours=hours, span_hours=(record["span"]["end"] - record["span"]["start"]) / 3600,
                               extra_per_hour=entry["detection"]["extra"]["total"] / hours if hours else None)
-    entry["detection_curve"] = threshold_curve(dets, windows, hours)
+    entry["detection_curve"] = froc_curve(dets, windows, hours)
     entry["_pool"] = (dets, windows, hours)          # for run_tier1's pooled curves; not written
     if reference_context is None:
         entry["fits"] = entry["association"] = unavailable("no trajectory reference was given for this span")
@@ -416,11 +276,17 @@ def compare_span(out_dir: Path, read_labels, reference_context=None) -> dict:
 # The events are chosen blind and written with their hash first; the search at the reference runs in the
 # comparison step, because the reference is truth, and its table is truth-conditioned, never a blind result.
 EVENTS_FILE, EVENTS_HASH = "events.json", "events.json.sha256"
+
+
 KP_PROFILES = ("saved-fit", "raw-audio-windows", "raw-audio")
+
+
 KP_RULES = {"saved-fit": "the case's saved fits",
             "raw-audio-windows": "detect on each saved event's window ± crop_margin_s; the best-scoring detection whose "
                                  "heard CPA lies inside that window (Tier 1's cheap raw-audio rule)",
             "raw-audio": "detect over the whole recording; its top two by score, earlier first (the raw-audio profile)"}
+
+
 KP_FILE, KP_HASH = "known_point.json", "known_point.json.sha256"
 
 
@@ -492,11 +358,11 @@ def known_point(case: dict, out_dir: Path, reference: dict, true_pair, log=print
     """After the events' hash check: every flight pair scored at the reference, written as a truth-conditioned
     table with its own hash, and the scoreboard's summary of it."""
     from dopplertrack import pipeline
-    from dopplertrack.adsb import join_days
+    from dopplertrack.data.day_seams import join_days
     from dopplertrack.audio import Spectrogram
     from dopplertrack.search import Grid
     from dopplertrack.terrain import Terrain
-    from dopplertrack.tracks import EventFit
+    from dopplertrack.components.types import EventFit
 
     from .runner import geometry_kw, trace_paths
     try:
@@ -510,7 +376,7 @@ def known_point(case: dict, out_dir: Path, reference: dict, true_pair, log=print
     traces, meta = join_days(trace_paths(case))
     ev1, ev2 = (EventFit(**e) for e in ev["events"])
     sp = Spectrogram.load(resolve(case["spectrogram"]))
-    res, _ = pipeline.run_search(sp, ev1, ev2, traces, grid, harmonics=tuple(ev["harmonics"][:2]), tol_s=s["tol_s"],
+    res, _ = pipeline.pair_grid_search(sp, ev1, ev2, traces, grid, harmonics=tuple(ev["harmonics"][:2]), tol_s=s["tol_s"],
                                  v_tol=s["v_tol"], d_tol=tuple(s["d_tol"]), silence_d_m=s["silence_d_m"],
                                  max_range_m=s["max_range_m"], progress=False, trace_metadata=meta,
                                  search_bbox=(lat, lat, lon, lon), workers=1, **geometry_kw(case))
@@ -536,7 +402,7 @@ def known_point(case: dict, out_dir: Path, reference: dict, true_pair, log=print
 def reference_context(span: dict, labels: dict):
     """For the comparison step only: the span's flight data, observer and clock, from its reference case's
     labels and the label file's own clock (both truth)."""
-    from dopplertrack.adsb import join_days
+    from dopplertrack.data.day_seams import join_days
     from dopplertrack.terrain import Terrain
 
     from .cases import case_labels, latest_case
@@ -551,6 +417,8 @@ def reference_context(span: dict, labels: dict):
 
 
 BACKGROUND_FAMILIES = ("essex", "aerosonicdb")      # recordings with nothing to find (PLAN 5.1 negatives)
+
+
 BUDGET_S = 180.0      # PLAN 5.4: Tier 1 under 3 min; a span or case joins only if the whole run stays under it
 
 
@@ -655,10 +523,10 @@ def run_tier1(sets=("development",), run_dir: Path | None = None, log=print, wor
     for kind, key in (("group", "group"), ("family", "family")):
         for name in sorted({e[key] for e in span_entries}):
             members = [e["span"] for e in span_entries if e[key] == name and e["span"] in units]
-            pools[f"{kind} {name}"] = {"spans": members, "curve": pooled_curve([units[m] for m in members])}
+            pools[f"{kind} {name}"] = {"spans": members, "curve": pooled_froc_curve([units[m] for m in members])}
     background = [e["span"] for e in span_entries if e["family"] in BACKGROUND_FAMILIES and e["span"] in units]
     if background:
-        pools["background"] = {"spans": background, "curve": pooled_curve([units[m] for m in background])}
+        pools["background"] = {"spans": background, "curve": pooled_froc_curve([units[m] for m in background])}
     kp_entries = []
     for cid in doc["known_point"]:
         case = latest_case(cid)

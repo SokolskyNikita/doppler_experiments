@@ -5,9 +5,13 @@ The windows stand in for detection's: each true pass's heard CPA and tone, off b
 leaves (+4 s, +3 %), so the clock vote and the f0 sweep have real work. A +-4 % sweep and 60 null draws keep it fast."""
 import numpy as np
 
-from dopplertrack import audio, collective, doppler, search
+from dopplertrack import collective, doppler
 from dopplertrack.adsb import Trace
 from dopplertrack.geo import enu_to_lla, haversine_m
+import dopplertrack.components.search.segments as segments
+import dopplertrack.components.stft as stft
+import dopplertrack.components.scoring.point_score as point_score
+import dopplertrack.components.windows as windows
 
 
 def _trace(icao, t, enu, lat0, lon0, gs):
@@ -24,7 +28,7 @@ def test_collective_find_puts_the_winner_at_the_observer_and_floors_an_empty_win
     tau = t2 - (T0 + 1220)
     enu2 = np.stack([3000.0 + 0.02 * tau ** 2, 95.0 * tau, np.full_like(t2, 1200.0)], -1)   # a gentle turn
     traces = [_trace("aaa001", t1, enu1, lat0, lon0, 110 / 0.5144), _trace("aaa002", t2, enu2, lat0, lon0, 95 / 0.5144)]
-    segs = search.build_segments(traces, lat0, lon0)
+    segs = segments.build_segments(traces, lat0, lon0)
     tt = np.arange(0, 1800, 1 / sr)
     x = 0.4 * np.random.default_rng(1).standard_normal(len(tt)).astype(np.float32)
     wins = []
@@ -34,10 +38,10 @@ def test_collective_find_puts_the_winner_at_the_observer_and_floors_an_empty_win
         m = np.isfinite(finst)
         x[m] += 0.05 * np.sin(2 * np.pi * np.cumsum(np.nan_to_num(finst, nan=0.0)) / sr)[m]
         heard = float(to[np.argmin(np.abs(ratio - 1))]) - T0          # the heard CPA: no Doppler shift
-        wins.append(collective.Window(heard - 100, heard + 100, 1.03 * f0, heard + 4.0, 1.0))
-    sp = audio.compute_spectrogram(x, sr, nperseg=8192, hop_s=0.5, fmin=60, fmax=300, whiten_window_s=None)
-    wins.append(collective.Window(1500.0, 1700.0, 150.0, 1600.0, 0.0))     # nothing passes then: noise only
-    out = collective.collective_find(sp, wins, traces, (lat0 - 0.03, lat0 + 0.03, lon0 - 0.035, lon0 + 0.035),
+        wins.append(windows.Window(heard - 100, heard + 100, 1.03 * f0, heard + 4.0, 1.0))
+    sp = stft.compute_spectrogram(x, sr, nperseg=8192, hop_s=0.5, fmin=60, fmax=300, whiten_window_s=None)
+    wins.append(windows.Window(1500.0, 1700.0, 150.0, 1600.0, 0.0))     # nothing passes then: noise only
+    out = collective.collective_detection(sp, wins, traces, (lat0 - 0.03, lat0 + 0.03, lon0 - 0.035, lon0 + 0.035),
                                      c=c, workers=1, log=lambda m: None, f0_span=0.04, null_n=60)
     w = out["winner"]
     assert w is not None, out.get("reason")
@@ -53,8 +57,8 @@ def test_a_pass_explains_one_window_and_the_other_falls_back():
     import pandas as pd
     scored = pd.DataFrame({"gidx": [0, 0, 0], "w": [0, 1, 1], "seg": [0, 0, 1], "t_heard": [100.0, 100.0, 200.0],
                            "b": [-50.0, -50.0, -50.0], "s": [0.0] * 3, "f0_scale": [1.0] * 3, "z": [5.0, 4.0, 1.0]})
-    assert collective.point_scores(scored, 2).Z.iloc[0] == 6.0                     # window 1 falls back to segment 1
-    assert collective.point_scores(scored, 2, one_pass=False).Z.iloc[0] == 9.0     # the old rule counted segment 0 twice
+    assert point_score.point_scores(scored, 2).Z.iloc[0] == 6.0                     # window 1 falls back to segment 1
+    assert point_score.point_scores(scored, 2, one_pass=False).Z.iloc[0] == 9.0     # the old rule counted segment 0 twice
 
 
 def _scored_rows(rows):
@@ -65,10 +69,10 @@ def _scored_rows(rows):
 
 def _assert_report_matches_score(scored, n_windows, expected_z, expected_windows):
     from types import SimpleNamespace
-    point = collective.point_scores(scored, n_windows).iloc[0]
+    point = point_score.point_scores(scored, n_windows).iloc[0]
     segs = [SimpleNamespace(icao=f"flight-{i}") for i in range(int(scored.seg.max()) + 1)]
     wins = [SimpleNamespace(f0=120.0) for _ in range(n_windows)]
-    matches, _ = collective.matched_at(scored, 0, float(point.b), segs, wins)
+    matches, _ = point_score.matched_at(scored, 0, float(point.b), segs, wins)
     positive = {i: m for i, m in enumerate(matches) if m and m["z"] > 0}
     assert point.Z == expected_z
     assert set(positive) == set(expected_windows)

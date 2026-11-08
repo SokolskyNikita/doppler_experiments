@@ -3,7 +3,10 @@ import contextlib
 import os
 import time
 import pandas as pd
-from dopplertrack.components.search.grid import (Grid, Segment, cpa_table, cpa_fingerprint, load_cpa_table, save_cpa_table)
+from dopplertrack.components.search.grid import Grid
+from dopplertrack.components.search.types import Segment
+from dopplertrack.components.search.cpa_table import cpa_table
+from dopplertrack.components.search.cpa_storage import cpa_fingerprint, load_cpa_table, save_cpa_table
 
 def log(msg):
     print(f"[{time.strftime('%H:%M:%S')}] {msg}", flush=True)

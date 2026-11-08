@@ -51,7 +51,7 @@ def main():
         sys.exit(f"{a.out} is not under {private}: a home recording's derived files stay private")
     if a.out.exists():
         sys.exit(f"{a.out} exists")
-    from dopplertrack.audio import spectrogram_from_files
+    from dopplertrack.components.stft import spectrogram_from_files
     files, start = session_files(a.session)
     r = recipe(a.fmax)
     sp = spectrogram_from_files(files, sr=r["sr"], start_utc=start, snap_s=0.01, nperseg=r["nperseg"], hop_s=r["hop_s"],

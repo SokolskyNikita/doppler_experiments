@@ -10,7 +10,9 @@ from typing import Callable, Iterator
 
 import requests
 
-from dopplertrack.data.trajectories import TRACE_ERRORS, Trace, in_bbox, parse_trace_bytes
+from dopplertrack.data.trajectories import Trace
+from dopplertrack.data.trace_parsing import TRACE_ERRORS, parse_trace_bytes
+from dopplertrack.data.region_loading import in_bbox
 from dopplertrack.data.coverage import ScanReport
 
 TRACE_RE = re.compile(r"trace_full_([0-9a-f~]+)\.json$")

@@ -302,7 +302,7 @@ def test_a_recipe_can_write_into_a_folder(tmp_path, monkeypatch):
 
 
 def test_locate_reads_its_own_traces_with_their_own_envelopes_and_cpa_cache(tmp_path, monkeypatch):
-    from dopplertrack.adsb import save_traces
+    from dopplertrack.data.region_loading import save_traces
     monkeypatch.setattr(runner, "resolve", lambda p: tmp_path / p)
     case = _case()
     save_traces([], tmp_path / case["flight_data"]["traces"].replace("/", "_"))
@@ -450,7 +450,8 @@ def test_the_box_environment_sets_the_run_folder_and_the_shard(tmp_path, monkeyp
 def test_prepare_builds_a_cases_cpa_table_without_its_labels_and_reuses_it(tmp_path, monkeypatch, capsys):
     import numpy as np
     from bench import prepare
-    from dopplertrack.adsb import Trace, save_traces
+    from dopplertrack.adsb import Trace
+    from dopplertrack.data.region_loading import save_traces
     t = np.arange(1.0e9, 1.0e9 + 600, 2.0)
     lon = np.linspace(-74.2, -73.8, len(t))
     tr = Trace("abc123", None, "C172", None, t, np.full(len(t), 40.5), lon, np.full(len(t), 800.0),

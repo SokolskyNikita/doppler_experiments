@@ -6,9 +6,13 @@ import numpy as np
 import pytest
 import scipy.io.wavfile
 
-from dopplertrack import audio, doppler, tracks
+from dopplertrack import doppler
 from dopplertrack.audio import Spectrogram
 from dopplertrack.parallel import process_pool
+import dopplertrack.components.audio_input as audio_input
+import dopplertrack.components.detection.event_fit as event_fit
+import dopplertrack.components.whitening.local_median as local_median
+import dopplertrack.components.stft as stft
 
 C, SR = 340.0, 4000
 F0, V, D, T0 = 110.0, 80.0, 400.0, 150.0     # a close, fast pass: most of its sweep lies within ±10 s of CPA
@@ -43,11 +47,11 @@ def _gapped(x, first_gap_s, gap_s=GAP_S, period_s=PERIOD_S):
 
 
 def _spec(blocks):
-    return audio.spectrogram_from_blocks(blocks, SR, hop_s=HOP_S, whiten_window_s=None)
+    return stft.spectrogram_from_blocks(blocks, SR, hop_s=HOP_S, whiten_window_s=None)
 
 
 def _fit(sp):
-    return tracks.fit_event(sp, T_CPA - 45, T_CPA + 45, 90, 135, c=C)
+    return event_fit.fit_event(sp, T_CPA - 45, T_CPA + 45, 90, 135, c=C)
 
 
 def _three_fits(seed):
@@ -118,7 +122,7 @@ def test_whitening_ignores_gaps(window_s):
     """Steady noise with 40% of the time in gaps. Zero-filled gaps sit near -200 dB, so a median
     that counted them would be dragged far down; over valid frames each bin's median stays at 0."""
     x = 0.3 * np.random.default_rng(3).standard_normal(240 * SR).astype(np.float32)
-    sp = audio.spectrogram_from_blocks(_gapped(x, 10.0, gap_s=12.0, period_s=30.0), SR, whiten_window_s=window_s)
+    sp = stft.spectrogram_from_blocks(_gapped(x, 10.0, gap_s=12.0, period_s=30.0), SR, whiten_window_s=window_s)
     assert 0.3 < np.mean(~sp.valid) < 0.6
     med = np.median(sp.S[:, sp.valid], axis=1)
     assert np.max(np.abs(med)) < 0.5, np.max(np.abs(med))
@@ -126,7 +130,7 @@ def test_whitening_ignores_gaps(window_s):
     counted = np.median(np.where(sp.valid, sp.S, -200.0), axis=1)      # what a mask-blind median would see
     assert np.min(np.abs(counted)) > 5.0
 
-    win = tracks.local_whiten(sp.crop(60, 180))
+    win = local_median.local_whiten(sp.crop(60, 180))
     assert np.array_equal(win.valid, sp.crop(60, 180).valid)
     w = sp.crop(60, 180)
     assert np.allclose(win.S[:, w.valid], np.maximum(w.S[:, w.valid] - np.median(w.S[:, w.valid], axis=1, keepdims=True), 0))
@@ -140,7 +144,7 @@ def test_local_whiten_unchanged_without_gaps():
                      start_utc=1712462446.0)
     for floor in (0.0, -2.0):
         before = np.maximum(sp.S - np.median(sp.S, axis=1, keepdims=True), floor).astype(np.float32)
-        after = tracks.local_whiten(sp, floor)
+        after = local_median.local_whiten(sp, floor)
         assert after.S.dtype == before.dtype and after.S.tobytes() == before.tobytes()
         assert after.valid.all() and after.start_utc == sp.start_utc
 
@@ -169,15 +173,15 @@ def _noise(seconds, seed):
 def test_files_that_abut_leave_no_invalid_frame(tmp_path):
     a, b = _noise(70, 1), _noise(50, 2)
     _wav(tmp_path / "a.wav", a); _wav(tmp_path / "b.wav", b); _wav(tmp_path / "ab.wav", np.concatenate([a, b]))
-    sp = audio.spectrogram_from_files([(tmp_path / "a.wav", 0.0), (tmp_path / "b.wav", 70.0)], SR)
-    one = audio.compute_spectrogram(audio.load_audio(tmp_path / "ab.wav", SR)[0], SR)
+    sp = stft.spectrogram_from_files([(tmp_path / "a.wav", 0.0), (tmp_path / "b.wav", 70.0)], SR)
+    one = stft.compute_spectrogram(audio_input.load_audio(tmp_path / "ab.wav", SR)[0], SR)
     assert sp.valid.all()
     assert np.array_equal(sp.t, one.t) and np.array_equal(sp.S, one.S)
 
 
 def test_hole_between_files_is_invalid_and_timeline_is_kept(tmp_path):
     _wav(tmp_path / "a.wav", _noise(70, 1)); _wav(tmp_path / "b.wav", _noise(50, 2))
-    sp = audio.spectrogram_from_files([(tmp_path / "a.wav", 0.0), (tmp_path / "b.wav", 73.0)], SR, nperseg=8192)
+    sp = stft.spectrogram_from_files([(tmp_path / "a.wav", 0.0), (tmp_path / "b.wav", 73.0)], SR, nperseg=8192)
     assert len(sp.t) == (123 * SR - 8192) // int(HOP_S * SR) + 1            # 123 s of timeline, hole included
     lo, hi = sp.t - 8192 / 2 / SR, sp.t + 8192 / 2 / SR                      # each frame's window
     assert np.array_equal(sp.valid, (hi <= 70.0) | (lo >= 73.0))
@@ -187,17 +191,17 @@ def test_audiomoth_folder_uses_utc_names(tmp_path):
     (tmp_path / "CONFIG.TXT").write_text("Time zone                       : UTC\n")
     for name, seed in (("20240407_040046.WAV", 1), ("20240407_040146.WAV", 2), ("20240407_040322.WAV", 3)):
         _wav(tmp_path / name, _noise(60, seed))
-    files, start = audio.audiomoth_files(tmp_path)
+    files, start = audio_input.audiomoth_files(tmp_path)
     assert start == datetime.datetime(2024, 4, 7, 4, 0, 46, tzinfo=datetime.timezone.utc).timestamp()
     assert [o for _, o in files] == [0.0, 60.0, 156.0]
-    sp = audio.spectrogram_from_audiomoth(tmp_path)
+    sp = stft.spectrogram_from_audiomoth(tmp_path)
     assert sp.start_utc == start
     lo, hi = sp.t - 8192 / 2 / SR, sp.t + 8192 / 2 / SR
     assert np.array_equal(sp.valid, (hi <= 120.0) | (lo >= 156.0))           # the seam at 60 s is clean
 
     _wav(tmp_path / "20240407_040130.wav", _noise(60, 4))                    # starts 16 s before the first ends
     with pytest.raises(ValueError, match="before the previous file ends"):
-        audio.spectrogram_from_audiomoth(tmp_path)
+        stft.spectrogram_from_audiomoth(tmp_path)
     (tmp_path / "CONFIG.TXT").write_text("Time zone                       : UTC+2\n")
     with pytest.raises(ValueError, match="only UTC"):
-        audio.audiomoth_files(tmp_path)
+        audio_input.audiomoth_files(tmp_path)

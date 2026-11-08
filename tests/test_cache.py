@@ -10,6 +10,9 @@ from PIL import Image
 from dopplertrack import pipeline, search, terrain
 from dopplertrack.adsb import Trace
 from dopplertrack.geo import enu_to_lla
+import dopplertrack.components.search.cpa_storage as cpa_storage
+import dopplertrack.components.search.cpa_table as cpa_table
+import dopplertrack.components.search.segments as segments
 
 LAT0, LON0 = 40.0, -74.0
 
@@ -21,18 +24,18 @@ def _setup(elev=0.0, dx=0.0, dt=0.0):
     lat, lon, alt = enu_to_lla(enu[:, 0], enu[:, 1], enu[:, 2], LAT0, LON0)
     traces = [Trace("abc123", None, "C172", "test", t, lat, lon, alt, np.full_like(t, 194.0), np.zeros(len(t), bool))]
     grid = search.Grid.make(LAT0 - 0.02, LAT0 + 0.02, LON0 - 0.03, LON0 + 0.03, 1000.0, lambda la, lo: np.full_like(la, elev))
-    return grid, search.build_segments(traces, grid.lat0, grid.lon0)
+    return grid, segments.build_segments(traces, grid.lat0, grid.lon0)
 
 
 def test_fingerprint_follows_contents_not_sizes():
     grid, segs = _setup()
-    fp = search.cpa_fingerprint(grid, segs, 12000, 340.0)
-    assert search.cpa_fingerprint(*_setup(), 12000, 340.0) == fp
+    fp = cpa_storage.cpa_fingerprint(grid, segs, 12000, 340.0)
+    assert cpa_storage.cpa_fingerprint(*_setup(), 12000, 340.0) == fp
     for changed in (_setup(elev=50.0), _setup(dx=10.0), _setup(dt=1.0)):   # DEM on, a position moved, times shifted
         assert len(changed[0]) == len(grid) and len(changed[1][0].t) == len(segs[0].t)
-        assert search.cpa_fingerprint(*changed, 12000, 340.0) != fp
-    assert search.cpa_fingerprint(grid, segs, 10000, 340.0) != fp
-    assert search.cpa_fingerprint(grid, segs, 12000, 343.0) != fp
+        assert cpa_storage.cpa_fingerprint(*changed, 12000, 340.0) != fp
+    assert cpa_storage.cpa_fingerprint(grid, segs, 10000, 340.0) != fp
+    assert cpa_storage.cpa_fingerprint(grid, segs, 12000, 343.0) != fp
 
 
 def test_cached_table_is_reused_only_for_identical_inputs(tmp_path, monkeypatch):
@@ -52,7 +55,7 @@ def test_cached_table_is_reused_only_for_identical_inputs(tmp_path, monkeypatch)
 def test_unreadable_cache_file_is_a_miss(tmp_path):
     path = tmp_path / "cpa.npz"
     path.write_bytes(b"cut short")
-    assert search.load_cpa_table(path, "fp") is None
+    assert cpa_storage.load_cpa_table(path, "fp") is None
 
 
 def test_failed_save_leaves_nothing_behind(tmp_path, monkeypatch):
@@ -61,7 +64,7 @@ def test_failed_save_leaves_nothing_behind(tmp_path, monkeypatch):
         raise OSError("disk full")
     monkeypatch.setattr(search.np, "savez", fails_part_way)
     with pytest.raises(OSError):
-        search.save_cpa_table(tmp_path / "cpa.npz", search.empty_cpa_table(), "fp")
+        cpa_storage.save_cpa_table(tmp_path / "cpa.npz", cpa_table.empty_cpa_table(), "fp")
     assert list(tmp_path.iterdir()) == []
 
 
@@ -93,8 +96,8 @@ def _reachable(roots, modules):
     imports = {m: {} for m in modules}
     for m, t in trees.items():
         for n in t.body:
-            if isinstance(n, ast.ImportFrom) and n.level == 1:
-                src = "dopplertrack." + n.module
+            if isinstance(n, ast.ImportFrom) and n.level == 0 and (n.module or "").startswith("dopplertrack."):
+                src = n.module
                 for alias in n.names:
                     imports[m][alias.asname or alias.name] = (src, alias.name)
     seen, todo = set(), list(roots)
@@ -114,9 +117,11 @@ def _reachable(roots, modules):
 
 def test_the_detector_code_key_lists_everything_detect_and_fit_can_reach():
     from dopplertrack.cache import DETECTOR_CODE
-    reach = _reachable([("dopplertrack.tracks", "detect_events"), ("dopplertrack.tracks", "fit_event")],
+    reach = _reachable([("dopplertrack.components.detection.grid_scan", "detect_events"),
+                        ("dopplertrack.components.detection.event_fit", "fit_event")],
                        list(DETECTOR_CODE))
     listed = {(m, n) for m, names in DETECTOR_CODE.items() for n in names}
+    assert ("dopplertrack.components.detection.grid_search", "grid_search") in reach     # the trace follows imports
     assert reach <= listed, f"add to DETECTOR_CODE: {sorted(reach - listed)}"
 
 

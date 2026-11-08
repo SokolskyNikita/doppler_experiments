@@ -12,9 +12,11 @@ uv run --frozen ruff check --select F src tests
 echo "== experiments index (docs/experiments/README.md against the records' index blocks)"
 uv run --frozen python -I tools/data/experiments_index.py --check
 
-echo "== mypy (tracks.py, search.py, parallel.py, hypotheses.py)"
-uv run --frozen mypy --follow-imports=silent --ignore-missing-imports src/dopplertrack/components/detection/grid_scan.py \
-    src/dopplertrack/components/search/grid.py src/dopplertrack/runtime/parallel.py src/dopplertrack/components/fitting/profile_hypotheses.py
+echo "== mypy (detection, the CPA search, the hypotheses, parallel.py)"
+uv run --frozen mypy --follow-imports=silent --ignore-missing-imports src/dopplertrack/components/detection/*.py \
+    src/dopplertrack/components/types.py src/dopplertrack/components/whitening/local_median.py \
+    src/dopplertrack/components/search/*.py src/dopplertrack/runtime/parallel.py \
+    src/dopplertrack/components/fitting/*.py
 
 echo "== pytest (offline; the opt-in recording is excluded)"
 pytest_start=$SECONDS

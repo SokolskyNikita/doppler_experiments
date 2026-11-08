@@ -107,7 +107,7 @@ PROFILES = {
 
 def load_events(case: dict):
     """The case's two search events (and any extras) as EventFit, on the case audio's own timeline."""
-    from dopplertrack.tracks import EventFit
+    from dopplertrack.components.types import EventFit
     return [EventFit(**d) for d in saved_fit_dicts(case)]
 
 
@@ -131,10 +131,10 @@ def saved_fit_dicts(case: dict) -> list[dict]:
 
 def pick_detected(detected: list[dict]) -> list[dict]:
     """The raw-audio profile's rule: the two highest-scoring detections, the earlier one first."""
+    from dopplertrack.components.selection.top2 import top2
     if len(detected) < 2:
         raise ValueError(f"detect returned {len(detected)} events; the two-event search needs two")
-    top = sorted(detected, key=lambda d: d["score"], reverse=True)[:2]
-    return sorted(top, key=lambda d: d["t_cpa"])
+    return list(top2(detected))
 
 
 WEATHER_KEY = "use_case_weather"     # the run setting (`bench run --weather`) that applies a case's station reading
@@ -195,7 +195,7 @@ def locate_flight_data(case: dict, cpa_cache: str) -> tuple[list[Path], list[lis
     with extraction metadata and the search-range margin, replaces its legacy traces for locate alone, so the other
     profiles' baselines stay on the files they were measured with; it gets a CPA cache file of its own so the two
     never rebuild each other's."""
-    from dopplertrack.adsb import load_trace_metadata
+    from dopplertrack.data.region_loading import load_trace_metadata
     paths = trace_paths(case, "locate_traces" if "locate_traces" in case["flight_data"] else "traces")
     cpa_cache = locate_cpa_cache(case, cpa_cache)
     # a file's own measured envelope wins; the case's declared boxes stand in only for legacy files
@@ -296,7 +296,7 @@ class Draft:
 
     def load_flight_data(self):
         """Read the case's traces, one file or consecutive days joined across midnight (adsb.join_days)."""
-        from dopplertrack.adsb import join_days
+        from dopplertrack.data.day_seams import join_days
         paths = trace_paths(self.case)
         traces, meta = join_days(paths)
         self.inputs += [file_entry("traces", p) for p in paths]
@@ -405,7 +405,7 @@ def execute_case(case: dict, case_dir: Path, log=print, code: dict | None = None
     from dopplertrack.audio import Spectrogram
     from dopplertrack.search import Grid
     from dopplertrack.terrain import Terrain
-    from dopplertrack.tracks import EventFit
+    from dopplertrack.components.types import EventFit
 
     try:
         draft = Draft(case, code or code_revision(), profile, log, overrides)
@@ -448,7 +448,7 @@ def execute_case(case: dict, case_dir: Path, log=print, code: dict | None = None
         cache_path.parent.mkdir(parents=True, exist_ok=True)
         triples: dict = {}
         with stage("search"):
-            res, segs = pipeline.run_search(sp, ev1, ev2, traces, grid, harmonics=tuple(harmonics[:2]),
+            res, segs = pipeline.pair_grid_search(sp, ev1, ev2, traces, grid, harmonics=tuple(harmonics[:2]),
                                             tol_s=s["tol_s"], v_tol=s["v_tol"], d_tol=tuple(s["d_tol"]),
                                             silence_d_m=s["silence_d_m"], max_range_m=s["max_range_m"],
                                             progress=False, cpa_cache=str(cache_path),

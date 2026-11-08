@@ -4,8 +4,9 @@ import numpy as np
 import pandas as pd
 from scipy.spatial import cKDTree
 
-from dopplertrack import search
-from dopplertrack.search import Grid, Segment
+from dopplertrack.search import Grid
+from dopplertrack.components.search.types import Segment
+import dopplertrack.components.search.cpa_table as cpa_table
 
 
 def _brute_force(grid, segs, max_range_m, c, chunk):
@@ -56,7 +57,7 @@ def test_pruned_pooled_table_equals_brute_force():
     ref = _brute_force(grid, segs, 7000.0, 340.0, chunk=500)
     assert len(ref) > 0 and ref.seg.nunique() == 3
     for workers in (1, 2):
-        got = search.cpa_table(grid, segs, 7000.0, 340.0, chunk=500, workers=workers)
+        got = cpa_table.cpa_table(grid, segs, 7000.0, 340.0, chunk=500, workers=workers)
         pd.testing.assert_frame_equal(got, ref, check_exact=True)
 
 
@@ -70,8 +71,8 @@ def test_samples_at_one_position_resolve_to_the_earliest():
     t = 1e9 + np.arange(30.0)
     pos = np.stack([-4000.0 + 150.0 * np.minimum(np.arange(30), 24), np.full(30, 700.0), np.full(30, 132.0)], -1)
     seg = Segment(0, "a9010c", t, pos, np.r_[np.full(24, 150.0), np.zeros(6)])   # stopped from sample 24 to 29
-    cpa = search.cpa_table(grid, [seg], 5000.0, 340.0, workers=1)
+    cpa = cpa_table.cpa_table(grid, [seg], 5000.0, 340.0, workers=1)
     assert len(cpa) == 168            # fixed: all 169 points but the corner 5,025 m from the stop, beyond range
     stopped = cpa[cpa.t_emit >= t[24]]
     assert len(stopped) > 0 and (stopped.t_emit == t[24]).all()      # the earliest of the tied samples
-    assert cpa.equals(search.cpa_table(grid, [seg], 5000.0, 340.0, workers=1, chunk=7))
+    assert cpa.equals(cpa_table.cpa_table(grid, [seg], 5000.0, 340.0, workers=1, chunk=7))

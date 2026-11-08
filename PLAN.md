@@ -192,6 +192,17 @@ The complete collective design's behavior, its matched search-maximum null, a us
 independent localization error and coverage, and a robust uncertainty region all remain unknown. Historical
 top-cell results, unit tests and successful shards cannot close them.
 
+Found while the methods were split and renamed (research readiness R1). Only the docstrings were corrected,
+because changing the code changes outputs:
+- A CPA row's speed `v` is the 3-D speed, including climb rate, not ground-track speed. Gates and fits compare
+  it with a straight-pass ground speed.
+- `AircraftTypes.is_prop` also accepts helicopters and gyrocopters (ICAO Doc 8643 files turboshaft with
+  turboprop).
+- The hysteresis tracker combines harmonics with weights A², not the inverse-variance h²A² (Quinn & Hannan
+  Thm 8) that the HMM tracker uses.
+- The collective statistic floors each window's z at 0 and scores a coarse cell by its maximum. Axelrad's
+  collective detection sums unclipped powers and averages.
+
 ## 8. Owner decisions
 
 - **Now:** none for research; readiness comes first.

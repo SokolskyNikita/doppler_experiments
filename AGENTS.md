@@ -39,6 +39,10 @@ A subagent reads only the sections its task names.
 - Run targeted tests locally while editing, e.g. `uv run pytest -q tests/test_phase0_cli.py` or `tests/test_cache.py`.
 - Run the full `tools/check.sh` (lint, typing, offline suite, installed-wheel smoke) on the dev box:
   `tools/aws/runs dev run -- tools/check.sh`. Not on the Mac.
+- Exception: the research-readiness refactor ([docs/plans/research-readiness.md](docs/plans/research-readiness.md))
+  touches most of the package at once. Its items land on `main` after targeted local checks (lint, typing, the
+  offline suite, import resolution). The full `tools/check.sh` on the dev box runs once, in its R8, against the
+  final source. Follow that plan's §2 rule 5, not the per-landing rule above.
 - Real data, opt-in: `DOPPLERTRACK_OYSTER_BAY="$DOPPLERTRACK_DATA/derived/oyster_bay" uv run pytest -q tests/test_oyster_bay.py`
   (needs the network on a cold terrain cache). `test_detect_output_passes_the_filters_at_truth` is a strict expected
   failure until a research gate fixes that path.

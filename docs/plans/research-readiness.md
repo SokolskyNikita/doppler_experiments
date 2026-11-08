@@ -1,6 +1,6 @@
 # Research readiness
 
-**Status:** written 2026-11-07. R1 done 2026-11-07 on branch `claude/readiness-r1` (the split and the naming in standard terms); not yet merged or checked on the dev box (its ledger entries are in `$DOPPLERTRACK_DATA/runs/2026-11-07-readiness-ledger/`); R2–R9 not started. This is the first of two plans. No research in
+**Status:** written 2026-11-07. R1 done and merged to `main` on 2026-11-07 (the split and the naming in standard terms; checked locally, the dev-box `tools/check.sh` runs in R8 per AGENTS.md) (its ledger entries are in `$DOPPLERTRACK_DATA/runs/2026-11-07-readiness-ledger/`); R2–R9 not started. This is the first of two plans. No research in
 [PLAN.md](../../PLAN.md) starts until every exit check in §5 passes. Implementation is authorized by the owner's
 implementation instruction; status changes are recorded here only.
 
@@ -41,7 +41,8 @@ removes that block. It does not try to make the methods better: that is research
 
 Each item lists what is done and when it is finished. Items in different areas can run in parallel worktrees with
 one owner per area: detection and fitting; tracking; scoring and coherence; CPA and the `grid_pair` recipe; the
-`collective` recipe; the benchmark and study runner; AWS. R1–R3 for one area land together.
+`collective` recipe; the benchmark and study runner; AWS. R1–R3 for one area land together, except that R1 landed
+for every area at once (owner's instruction, 2026-11-07).
 
 ### R1. Split every method into its own file
 
@@ -205,7 +206,8 @@ discovery contracts, a remote or always-on controller, and a GPU backend. The de
 ### R8. Final AWS phase
 
 All local work and local checks finish first. Then, after the owner signs in to the `dopplertrack` profile in
-their own terminal: run `tools/check.sh` on the dev box against the final source; run `tools/aws/check.sh` and
+their own terminal: run `tools/check.sh` on the dev box against the final source, and the opt-in Oyster Bay test
+(`tests/test_oyster_bay.py`, whose imports R1 rewrote); run `tools/aws/check.sh` and
 deploy only if the box lifetime change (R6.7) needs a new launch template, with the owner's approval of that
 deployment; and run one small study on the fleet using the synthetic fixture to verify launch, caps, upload,
 collection and termination, after its `--check` and `--rehearse` pass. Credentials are never pasted into chat.

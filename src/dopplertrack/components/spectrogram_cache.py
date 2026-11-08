@@ -9,10 +9,11 @@ from dopplertrack.components.audio_input import audiomoth_files, ffmpeg_version
 from dopplertrack.components.spectrogram import Spectrogram
 from dopplertrack.components.stft import spectrogram_from_blocks, spectrogram_from_files
 
-# What a spectrogram build runs: decoding and placement, the STFT, both whitenings and the container.
+# What a spectrogram build runs: decoding and placement, the STFT, both whitenings, the container and this entry point.
 SPECTROGRAM_MODULES = ("dopplertrack.components.audio_input", "dopplertrack.components.stft",
                        "dopplertrack.components.whitening.time_median",
-                       "dopplertrack.components.whitening.frequency_median", "dopplertrack.components.spectrogram")
+                       "dopplertrack.components.whitening.frequency_median", "dopplertrack.components.spectrogram",
+                       "dopplertrack.components.spectrogram_cache")
 
 
 def cached_spectrogram(audio: str | Path, sr: int = 4000, snap_s: float | None = None,

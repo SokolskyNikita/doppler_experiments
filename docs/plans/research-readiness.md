@@ -1,8 +1,8 @@
 # Research readiness
 
 **Status:** written 2026-11-07. R1 done and merged to `main` on 2026-11-07 (the split and the naming in standard terms; checked locally, the dev-box `tools/check.sh` runs in R8 per AGENTS.md) (its ledger entries are in `$DOPPLERTRACK_DATA/runs/2026-11-07-readiness-ledger/`). R2 done and merged to `main` on 2026-11-09
-(checked locally, synthetic outputs equal R1's apart from the new keys; ledger entries 14–21). R3 done on 2026-11-09 on branch
-`claude/stage-r3-9c4730`, not yet merged (checked locally; no output changes, ledger section R3; a full `bench run --revision` case at a
+(checked locally, synthetic outputs equal R1's apart from the new keys; ledger entries 14–21). R3 done and merged to `main` on 2026-11-09
+(checked locally; no output changes, ledger section R3; a full `bench run --revision` case at a
 pre-R3 commit is left for R8, its CLI start is checked). R4–R9 not started. This is the first of two plans. No research in
 [PLAN.md](../../PLAN.md) starts until every exit check in §5 passes. Implementation is authorized by the owner's
 implementation instruction; status changes are recorded here only.

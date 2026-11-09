@@ -42,8 +42,8 @@ removes that block. It does not try to make the methods better: that is research
 
 Each item lists what is done and when it is finished. Items in different areas can run in parallel worktrees with
 one owner per area: detection and fitting; tracking; scoring and coherence; CPA and the `grid_pair` recipe; the
-`collective` recipe; the benchmark and study runner; AWS. R1–R3 for one area land together, except that R1 landed
-for every area at once (owner's instruction, 2026-11-07).
+`collective` recipe; the benchmark and study runner; AWS. R1 and R2 landed for every area at once (owner's
+instruction, 2026-11-07), and R3 does too, since the aliases it removes span every area.
 
 ### R1. Split every method into its own file
 
@@ -181,23 +181,34 @@ Finished when:
 Delete the top-level alias modules (`dopplertrack.tracks`, `.score`, `.search` and the rest), the
 `sys.modules` redirects, the `bench/` module shims (keeping `python -m bench` as the entry point),
 [refactor-module-map.json](../refactor-module-map.json) and the alias and pickle tests in `tests/test_layout.py`.
-Update the remaining internal users. After R1, `evaluation/tier1.py`, `prepare.py`, `report.py`, `private.py` and
-`cases.py` still import legacy module paths, and so do 38 files in `tests/`, `bench/` and `tools/` (dated
-experiments excepted). R1 already re-pointed the aliases at its renamed modules, so a legacy name that R1
-renamed (for example `dopplertrack.score.locked_score`) no longer resolves. Caches that pickled `EventFit` under
-its old path are rebuilt rather than shimmed. The `# old name:` and `# old module:` comments stay: they are the
-record that links the dated experiments to the current names.
+Update the remaining internal users. After R2, `evaluation/tier1.py`, `prepare.py`, `report.py`, `private.py`,
+`cases.py` and `runner.py` still import legacy module paths, and so do 38 files in `tests/`, `bench/` and `tools/`
+(dated experiments excepted). R1 already re-pointed the aliases at its renamed modules, so a legacy name that R1
+renamed (for example `dopplertrack.score.locked_score`) no longer resolves. Cached pickles that name `EventFit`
+under its old path are unreachable since R2 changed the detection key (ledger entry 14), so they are rebuilt
+rather than shimmed. The `# old name:` and `# old module:` comments stay: they are the record that links the dated
+experiments to the current names.
 
-Finished when nothing imports a legacy name and `docs/architecture.md`, `docs/layout.md` and `AGENTS.md` link only
-canonical paths.
+The command-line entry points move with the aliases:
+- add `src/dopplertrack/__main__.py`, so `python -m dopplertrack` runs `commands.main` (moved here from R5);
+- point the installed script in `pyproject.toml` (`dopplertrack = "dopplertrack.cli:main"`) at `commands.main`;
+- `evaluation/cases.py`, which starts the current tree's CLI as `-m dopplertrack.cli`, uses `-m dopplertrack`;
+- `evaluation/revisions.py` starts another commit's CLI as `-m dopplertrack.cli`. Commits before R3 have only that
+  name and later ones lack it, so the revision's own export decides: `-m dopplertrack.cli` where
+  `dopplertrack/cli.py` exists in it, `-m dopplertrack` otherwise. A test covers both kinds of export.
+
+Finished when nothing imports or runs a legacy name, the installed `dopplertrack` command, `python -m dopplertrack`
+and `bench run --revision` at a pre-R3 commit all work, and `docs/architecture.md`, `docs/layout.md` and
+`AGENTS.md` link only canonical paths.
 
 ### R4. Cache identity per method
 
 The detection cache key is an AST hash over a hand-maintained list of definitions in `runtime/cache.py`
 (`DETECTOR_CODE`, nine modules since R1). The spectrogram cache hashes the six modules listed by hand in
 `components/spectrogram_cache.py` (`SPECTROGRAM_MODULES`). The CPA table has no code hash and depends on a manual
-`CPA_CACHE_VERSION` bump (`components/search/cpa_storage.py`). R1 kept the two lists in step by hand. After R2,
-the keys must also cover the resolved parameters rather than keyword arguments.
+`CPA_CACHE_VERSION` bump (`components/search/cpa_storage.py`, version 2). R1 and R2 kept the two lists in step by
+hand. Since R2 the recipes pass every detection setting from the resolved parameters, so the detection key already
+covers them (ledger entry 14); what remains is the hand-kept code lists and the CPA table's manual version.
 
 Key each cache by the source of the method files its producer uses, plus resolved parameters and input hashes,
 declared next to the producer. Give the CPA table the same kind of key. Keep the existing test that checks the
@@ -215,8 +226,9 @@ These change outputs and go in the ledger. Each gets a test.
   null tooling that refuses incompatible or missing draws (it currently reads only `null_draws.npz` and skips units
   without it). Today the merging and the null tooling exist only in the dated scripts
   `tools/experiments/2026-11-04/collective_run.py` and `collective_null.py`, which stay as records (rule 4). The
-  fixes go into the package's collective path, which R6.1's profile and R6.6's record run on. The mode rule (spatial separation, clock separation, number of modes), clocks kept per point and
-  merging modes across all cells become parameters in R2, with today's behavior as the default; choosing their
+  fixes go into the package's collective path, which R6.1's profile and R6.6's record run on. R2 made the mode rule's spatial separation and number of modes fields of
+  `CollectiveParameters.planning` (`mode_separation_m`, `max_modes`); R5 adds the rest there, with today's behavior
+  as the default: the clock separation, clocks kept per point, and merging modes across all cells. Choosing their
   values is PLAN.md G1.
 - **HMM tracker decoding:** `forward_backward.runs`, used by `hmm_tracker.hmm_posterior_track`, takes a per-frame
   argmax of the forward–backward posterior,
@@ -237,7 +249,6 @@ These change outputs and go in the ledger. Each gets a test.
   raw pools are in dated scripts, which stay. Add a test that fails on a raw `ProcessPoolExecutor` or
   `multiprocessing.Pool` outside `runtime/parallel.py` and `tools/experiments/`, so new study and benchmark code
   keeps to the wrapper.
-- **`python -m dopplertrack`** works.
 
 ### R6. Study runner: just enough for experiments
 

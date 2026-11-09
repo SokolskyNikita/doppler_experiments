@@ -20,8 +20,8 @@ from pathlib import Path
 
 import numpy as np
 
-from dopplertrack.result import (CONVENTIONS_V1, KIND, SCHEMA_VERSION, RecordError, file_entry, read_record,
-                                 unavailable, write_record)
+from dopplertrack.runtime.records import (CONVENTIONS_V1, KIND, SCHEMA_VERSION, RecordError, file_entry,
+                                          read_record, unavailable, write_record)
 
 from .cases import REPO, blind_case, case_labels, case_profiles, data_root, latest_case, resolve
 
@@ -186,7 +186,7 @@ def sound_speed(case: dict, use_weather: bool = False) -> tuple[dict, dict]:
     15 C default untouched), and the record's account of it. A case's station temperature is used only when the
     run asks for it (use_weather, `bench run --weather`); otherwise it is recorded and the 15 C default stands. With
     it, the geometry gives each flight its own speed from its height (geometry_kw)."""
-    from dopplertrack.doppler import speed_of_sound
+    from dopplertrack.core.propagation import speed_of_sound
     w = case.get("weather") or {}
     t = w.get("temperature_c")
     if t is None or not use_weather:
@@ -292,7 +292,7 @@ class Draft:
 
     def __init__(self, case: dict, code: dict, profile: str, log, overrides: dict | None = None,
                  clock_gate: bool = False):
-        from dopplertrack.coverage import padded_bbox
+        from dopplertrack.data.coverage import padded_bbox
         from dopplertrack.methods.parameters import to_dict
         assert "labels" not in case, "the runner must be given the blind case"
         self.case, self.code, self.stage, self.errors = case, code, Stages(log), []
@@ -396,7 +396,7 @@ class Draft:
         """Every hypothesis each stage kept, with its location, into a sidecar whose hash goes in the
         record: the comparison reads it after the hash check to see how near the truth they came.
         stages: name -> DataFrame with icao1, icao2, gidx, lat, lon (and score at the scored stage)."""
-        from dopplertrack.result import sha256_file
+        from dopplertrack.runtime.records import sha256_file
         arrays = {}
         for name, df in stages.items():
             arrays[f"{name}__icao1"] = df["icao1"].to_numpy(str)
@@ -432,7 +432,7 @@ class Draft:
                         "half_width_m": float(rf.half_width_m), "from_rank": int(rf.rank), "extra_flights": extra_flights}
 
     def record(self) -> dict:
-        from dopplertrack.coverage import ADS_B_LIMITATION
+        from dopplertrack.data.coverage import ADS_B_LIMITATION
         case = self.case
         return {
             "schema_version": SCHEMA_VERSION, "kind": KIND,
@@ -457,10 +457,10 @@ def execute_case(case: dict, case_dir: Path, log=print, code: dict | None = None
     """Run one blind case through this revision's pipeline in-process (spectrogram, events, flight data,
     CPA table, search, refine) and return its result record. It never sees the case's labels."""
     import pandas as pd
-    from dopplertrack import pipeline
-    from dopplertrack.audio import Spectrogram
-    from dopplertrack.search import Grid
-    from dopplertrack.terrain import Terrain
+    from dopplertrack.methods.grid_pair import pipeline
+    from dopplertrack.components.spectrogram import Spectrogram
+    from dopplertrack.components.search.grid import Grid
+    from dopplertrack.data.terrain import Terrain
     from dopplertrack.components.types import EventFit
 
     try:
@@ -555,7 +555,7 @@ def _stream(cmd: list[str], cwd: Path) -> str:
 
 def _tiles_covering(bbox, zoom=12) -> list[Path]:
     """The terrain tiles a grid over bbox reads: the revision doesn't report them, so they are derived."""
-    from dopplertrack.terrain import Terrain
+    from dopplertrack.data.terrain import Terrain
     t = Terrain(zoom)
     n = 2 ** zoom
     def tx(lon): return int((lon + 180.0) / 360.0 * n)
@@ -572,7 +572,7 @@ def execute_case_at(case: dict, case_dir: Path, rev, log=print, code: dict | Non
     writes into a result record. No code of that revision is imported here."""
     import re
     import pandas as pd
-    from dopplertrack.result import sha256_file
+    from dopplertrack.runtime.records import sha256_file
     from .revisions import file_lock, verify
 
     draft = Draft(case, code or rev.provenance(), profile, log)
@@ -705,7 +705,7 @@ def private_cache(case: dict):
 def bench_case(case_id: str, case_dir: Path, execute=execute_case, labels=case_labels, cases_path=None,
                log=print, code: dict | None = None, reveal: bool = False) -> dict:
     """Run one case blind, write result.json and its hash, and only then read the labels and score it. A private
-    case (bench/private.py) is resolved from $DOPPLERTRACK_DATA/private/, run with its caches there, and its record
+    case (evaluation/private.py) is resolved from $DOPPLERTRACK_DATA/private/, run with its caches there, and its record
     written in the site's frame unless reveal, after a check that no position near the site is left in it."""
     from .cases import is_private
     kw = {} if cases_path is None else {"path": cases_path}
@@ -734,12 +734,12 @@ def bench_case(case_id: str, case_dir: Path, execute=execute_case, labels=case_l
 
 
 def _distance_m(lat1, lon1, lat2, lon2) -> float:
-    from dopplertrack.geo import haversine_m
+    from dopplertrack.core.geometry import haversine_m
     return float(haversine_m(lat1, lon1, lat2, lon2))
 
 
 def _distances_m(lat, lon, lat0, lon0) -> np.ndarray:
-    from dopplertrack.geo import haversine_m
+    from dopplertrack.core.geometry import haversine_m
     return np.atleast_1d(np.asarray(haversine_m(np.asarray(lat), np.asarray(lon), lat0, lon0), float))
 
 
@@ -758,7 +758,7 @@ def compare_case(case_dir: Path, meta: dict, read_labels) -> dict:
     tf = record["funnel"].get("triples_file")
     triples = None
     if tf:
-        from dopplertrack.result import sha256_file
+        from dopplertrack.runtime.records import sha256_file
         try:
             ok = sha256_file(case_dir / tf["path"]) == tf["sha256"]
         except OSError:
@@ -873,7 +873,7 @@ def execute_case_locate(case: dict, case_dir: Path, log=print, code: dict | None
     overrides change the case: clock_gate (default true: the case's stated start time and its uncertainty gate each
     pair's clock; false turns it off), and for private cases box_m, box_offset_m, spacing_m, traces and
     extraction_box."""
-    from dopplertrack import locate as loc
+    from dopplertrack.methods.grid_pair import runner as loc
     assert "labels" not in case, "the runner must be given the blind case"
     overrides = dict(overrides or {})
     weather = bool(overrides.get(WEATHER_KEY, False))
@@ -1033,7 +1033,7 @@ def run_bench(case_ids: list[str], tier: str = "t2", run_dir: Path | None = None
               reveal: bool = False) -> Path:
     """Run cases into a new run folder (or `run_dir`) and collect their scoreboard entries in results.json.
     revision: None runs this checkout in-process; any other commit-ish is exported, verified and run
-    through its own CLI (bench/revisions.py). parallel > 1 runs that many cases at once, each in its own
+    through its own CLI (evaluation/revisions.py). parallel > 1 runs that many cases at once, each in its own
     process (`bench run-case`), so stage logs and timings never mix. shard "i/n" runs only that share of the
     cases, for n boxes; `merge_runs` puts the shards together. resume continues a stopped run in run_dir: a case
     with an entry.json is kept, and the rest run. results.json is rewritten as each case finishes."""
@@ -1084,7 +1084,7 @@ def run_bench(case_ids: list[str], tier: str = "t2", run_dir: Path | None = None
             write_results(run_dir, info, case_ids)
     else:
         # each case's own pools get an equal share of the cores, so N cases never start N full-size pools
-        from dopplertrack.parallel import JOBS_ENV, default_jobs
+        from dopplertrack.runtime.parallel import JOBS_ENV, default_jobs
         child_env = {**os.environ, JOBS_ENV: os.environ.get(JOBS_ENV) or str(max(1, default_jobs() // parallel))}
         info["jobs_per_case"] = int(child_env[JOBS_ENV])
         info_path.write_text(json.dumps(info, indent=1) + "\n")

@@ -5,8 +5,11 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from dopplertrack import audio, cache, locate, pipeline
-from dopplertrack.result import validate
+from dopplertrack.components import spectrogram as audio
+from dopplertrack.runtime import cache
+from dopplertrack.methods.grid_pair import runner as locate
+from dopplertrack.methods.grid_pair import pipeline
+from dopplertrack.runtime.records import validate
 import dopplertrack.components.types as components_types
 import dopplertrack.components.assignment.pick_flight as pick_flight
 from dopplertrack.components.search.clock_gate import clock_gate

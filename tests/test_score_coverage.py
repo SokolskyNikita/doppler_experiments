@@ -2,7 +2,7 @@
 that covers all of it, otherwise a flight that landed mid-pass can win on the bright half alone."""
 import numpy as np
 
-from dopplertrack.audio import Spectrogram
+from dopplertrack.components.spectrogram import Spectrogram
 from dopplertrack.components.scoring.curve_integral import EventWindow
 from dopplertrack.components.types import EventFit
 

@@ -58,7 +58,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import scipy.signal as ss
 
-from dopplertrack.audio import Spectrogram
+from dopplertrack.components.spectrogram import Spectrogram
 
 DATA = Path(os.environ.get("DOPPLERTRACK_DATA", Path.home() / "data" / "dopplertrack"))
 SR, NFFT, HOP = 4000, 8192, 1000
@@ -198,7 +198,7 @@ def passes(traces_path, site, t0_utc, span, max_range):
     """(heard t in recording s, ratio curve, heard-CPA time, slant, icao, registration) of every pass within
     max_range of the site that is heard during the span."""
     from dopplertrack.data.region_loading import load_traces
-    from dopplertrack.doppler import speed_of_sound
+    from dopplertrack.core.propagation import speed_of_sound
     from dopplertrack.components.scoring.modelled_curve import modelled_curve
     from dopplertrack.components.search.segments import build_segments
     c = speed_of_sound()

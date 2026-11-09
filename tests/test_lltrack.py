@@ -1,4 +1,4 @@
-"""The likelihood tracker (dopplertrack.lltrack): its log-likelihood ratio against the densities, forward-backward
+"""The likelihood tracker (dopplertrack.components.tracking.hmm_tracker): its log-likelihood ratio against the densities, forward-backward
 against enumeration, and round 2's behaviour cases (a missing fundamental, a steady tone, crossing passes, a dip,
 invalid frames, noise)."""
 import itertools
@@ -8,7 +8,8 @@ import pytest
 from scipy.ndimage import convolve1d
 from scipy.stats import ncx2
 
-from dopplertrack import doppler, lltrack as ll
+from dopplertrack.core import propagation as doppler
+from dopplertrack.components.tracking import hmm_tracker as ll
 import dopplertrack.components.tracking.forward_backward as forward_backward
 import dopplertrack.components.tracking.hmm_tracker_params as likelihood_params
 import dopplertrack.components.tracking.harmonic_llr as rician_evidence

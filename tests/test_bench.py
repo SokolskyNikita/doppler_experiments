@@ -7,8 +7,8 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from bench import cases, runner  # noqa: E402
-from dopplertrack.result import dumps  # noqa: E402
+from dopplertrack.evaluation import cases, runner  # noqa: E402
+from dopplertrack.runtime.records import dumps  # noqa: E402
 from test_result import example_record  # noqa: E402
 
 
@@ -163,9 +163,20 @@ def test_pick_detected_takes_the_two_best_scores_in_time_order():
         runner.pick_detected(det[:1])
 
 
+def test_a_revision_starts_the_cli_its_own_export_has(tmp_path):
+    from dopplertrack.evaluation import revisions
+    pkg = tmp_path / "src" / "src" / "dopplertrack"
+    pkg.mkdir(parents=True)
+    (pkg / "__main__.py").write_text("")
+    rev = revisions.Revision("a" * 40, "b" * 40, tmp_path)
+    assert rev.cli("detect")[-2:] == ["dopplertrack", "detect"]      # after readiness R3: python -m dopplertrack
+    (pkg / "cli.py").write_text("")
+    assert rev.cli("detect")[-2:] == ["dopplertrack.cli", "detect"]  # before it: python -m dopplertrack.cli
+
+
 def test_an_export_that_differs_from_its_commit_is_refused(tmp_path):
     import subprocess
-    from bench import revisions
+    from dopplertrack.evaluation import revisions
     commit = revisions._git("rev-parse", "HEAD")
     rev = revisions.Revision(commit, revisions._git("rev-parse", "HEAD^{tree}"), tmp_path / "rev")
     (rev.src).mkdir(parents=True)
@@ -189,7 +200,7 @@ def test_an_export_that_differs_from_its_commit_is_refused(tmp_path):
 
 
 def test_a_revision_that_fails_verification_yields_an_error_not_a_result(tmp_path):
-    from bench import revisions
+    from dopplertrack.evaluation import revisions
 
     class Stale:
         short = "deadbee"
@@ -412,7 +423,7 @@ def test_shards_split_the_cases_and_merge_into_one_run(tmp_path, fake_runs):
 
 
 def test_inputs_name_each_profiles_flight_data_and_cpa_table(monkeypatch):
-    from bench import inputs
+    from dopplertrack.evaluation import inputs
     v3 = next(c for c in cases.load_cases()["cases"] if c["id"] == "oyster-bay" and c["version"] == 3)
     monkeypatch.setattr(inputs, "latest_case", lambda cid: copy.deepcopy(v3))     # the version with locate_traces
     loc = inputs.run_inputs(["oyster-bay"], "locate")
@@ -440,7 +451,7 @@ def test_a_box_command_with_resume_starts_fresh_and_continues_alike(tmp_path, fa
 
 
 def test_the_box_environment_sets_the_run_folder_and_the_shard(tmp_path, monkeypatch):
-    from bench import __main__ as cli
+    from dopplertrack.evaluation import cli
     seen = {}
     monkeypatch.setattr(runner, "run_bench", lambda ids, **kw: seen.update(kw) or kw["run_dir"])
     monkeypatch.setenv("RUN", str(tmp_path))
@@ -452,8 +463,8 @@ def test_the_box_environment_sets_the_run_folder_and_the_shard(tmp_path, monkeyp
 
 def test_prepare_builds_a_cases_cpa_table_without_its_labels_and_reuses_it(tmp_path, monkeypatch, capsys):
     import numpy as np
-    from bench import prepare
-    from dopplertrack.adsb import Trace
+    from dopplertrack.evaluation import prepare
+    from dopplertrack.data.trajectories import Trace
     from dopplertrack.data.region_loading import save_traces
     t = np.arange(1.0e9, 1.0e9 + 600, 2.0)
     lon = np.linspace(-74.2, -73.8, len(t))
@@ -476,7 +487,7 @@ def test_prepare_builds_a_cases_cpa_table_without_its_labels_and_reuses_it(tmp_p
 
 
 def test_a_private_case_runs_with_its_caches_under_private(tmp_path, monkeypatch):
-    from dopplertrack.cache import cache_root
+    from dopplertrack.runtime.cache import cache_root
     monkeypatch.setenv("DOPPLERTRACK_DATA", str(tmp_path / "data"))
     monkeypatch.setenv("DOPPLERTRACK_CACHE", str(tmp_path / "shared"))
     seen = {}
@@ -531,7 +542,7 @@ def private_home(tmp_path, monkeypatch):
 def _private_execute(case, case_dir, log=print, code=None):
     """A record with absolute candidates near the site, and a triples sidecar, as a real run would write."""
     import numpy as np
-    from dopplertrack.result import sha256_file
+    from dopplertrack.runtime.records import sha256_file
     assert case["search"]["bbox"] == [40.4, 41.3, -74.4, -72.6]          # resolved from the private file
     rec = example_record()
     rec["provenance"]["parameters"]["search"]["bbox"] = case["search"]["bbox"]
@@ -544,7 +555,7 @@ def _private_execute(case, case_dir, log=print, code=None):
 
 
 def test_a_private_record_is_written_in_the_sites_frame_and_scored_from_it(tmp_path, private_home):
-    from dopplertrack.result import validate
+    from dopplertrack.runtime.records import validate
     entry = runner.bench_case("home-1", tmp_path / "out", execute=_private_execute, cases_path=private_home)
     text = (tmp_path / "out" / "result.json").read_text()
     rec = json.loads(text)
@@ -568,7 +579,7 @@ def test_reveal_keeps_absolute_coordinates_and_says_so(tmp_path, private_home):
 
 
 def test_a_position_near_the_site_under_any_name_is_refused(tmp_path, private_home):
-    from bench import private
+    from dopplertrack.evaluation import private
 
     def leaky(case, case_dir, log=print, code=None):
         rec = _private_execute(case, case_dir)
@@ -580,7 +591,7 @@ def test_a_position_near_the_site_under_any_name_is_refused(tmp_path, private_ho
 
 
 def test_a_private_case_never_lists_its_inputs_or_shares_a_run(private_home, monkeypatch):
-    from bench import inputs
+    from dopplertrack.evaluation import inputs
     case = json.loads(private_home.read_text())["cases"][0]
     monkeypatch.setattr(inputs, "latest_case", lambda cid: copy.deepcopy(case))
     with pytest.raises(ValueError, match="private"):
@@ -620,9 +631,9 @@ def test_a_box_override_squares_a_private_case_around_its_site_and_off_the_grid(
     """box_m (the box series): the box is a square of that side around the site, its centre box_offset_m away so the
     site is off every grid node, with a CPA table of its own; a public case refuses it."""
     import numpy as np
-    from bench import private
-    from dopplertrack import locate as loc
-    from dopplertrack.search import Grid
+    from dopplertrack.evaluation import private
+    from dopplertrack.methods.grid_pair import runner as loc
+    from dopplertrack.components.search.grid import Grid
     site = private.load_site("home")
     box = private.site_box(site, 8000.0, (73.0, 131.0))
     s, n, w, e = private._offset_box(box, site)
@@ -659,7 +670,7 @@ def test_a_box_override_squares_a_private_case_around_its_site_and_off_the_grid(
 
 
 def test_a_private_runs_log_and_summary_give_locates_point_only_as_an_offset(tmp_path, private_home):
-    from bench import private
+    from dopplertrack.evaluation import private
     site = private.load_site("home")
     line = f"refined {site['lat'] + 0.001:.5f}, {site['lon'] - 0.002:.5f} with 3 extra flyover(s); far 51.50000, -0.12000"
     out = private.redact(line, site)

@@ -4,8 +4,10 @@ import pandas as pd
 import pytest
 from PIL import Image
 
-from dopplertrack import pipeline, search, terrain
-from dopplertrack.audio import Spectrogram
+from dopplertrack.methods.grid_pair import pipeline
+from dopplertrack.components.search import grid as search
+from dopplertrack.data import terrain
+from dopplertrack.components.spectrogram import Spectrogram
 from dopplertrack.components.search.types import Segment
 from dopplertrack.components.types import EventFit
 

@@ -12,12 +12,12 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from dopplertrack import pipeline
+from dopplertrack.methods.grid_pair import pipeline
 from dopplertrack.data.region_loading import load_traces
-from dopplertrack.audio import Spectrogram
-from dopplertrack.search import Grid
-from dopplertrack.terrain import Terrain
-from dopplertrack.tracks import detect_events
+from dopplertrack.components.spectrogram import Spectrogram
+from dopplertrack.components.search.grid import Grid
+from dopplertrack.data.terrain import Terrain
+from dopplertrack.components.detection.grid_scan import detect_events
 from dopplertrack.components.detection.event_fit import fit_event
 
 DATA = os.environ.get("DOPPLERTRACK_OYSTER_BAY")

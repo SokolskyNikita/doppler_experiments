@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 
 from dopplertrack import __file__ as package_file
-from dopplertrack.audio import Spectrogram
+from dopplertrack.components.spectrogram import Spectrogram
 
 
 def main():

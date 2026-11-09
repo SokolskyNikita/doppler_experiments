@@ -3,9 +3,10 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from dopplertrack import atmosphere, doppler
+from dopplertrack.core import atmosphere
+from dopplertrack.core import propagation as doppler
 from dopplertrack.components.scoring.modelled_curve import modelled_curve
-from dopplertrack.search import Grid
+from dopplertrack.components.search.grid import Grid
 from dopplertrack.components.search.types import Segment
 import dopplertrack.components.search.cpa_storage as cpa_storage
 import dopplertrack.components.search.cpa_table as cpa_table

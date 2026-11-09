@@ -17,14 +17,14 @@ from dopplertrack.data.trajectories import Trace
 from dopplertrack.methods.collective import search as collective
 from dopplertrack.methods.collective.parameters import CollectiveParameters, resolve_collective
 from dopplertrack.methods.grid_pair import pipeline, runner as locate
-from dopplertrack.methods.grid_pair.parameters import GridPairParameters, choices, from_record, resolve
+from dopplertrack.methods.grid_pair.parameters import choices, from_record, resolve
 from dopplertrack.methods.parameters import arange_grid, geometric_grid, inclusive_grid, to_dict
 import dopplertrack.components.search.segments as segments
 import dopplertrack.components.stft as stft
 import dopplertrack.components.windows as windows
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from bench import cases, runner as bench  # noqa: E402
+from dopplertrack.evaluation import cases, runner as bench  # noqa: E402
 
 
 def _at(params, path):

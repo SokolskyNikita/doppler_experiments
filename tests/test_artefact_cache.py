@@ -1,4 +1,4 @@
-"""The derived-artefact cache (dopplertrack.cache): keyed on contents and producer source, atomic,
+"""The derived-artefact cache (dopplertrack.runtime.cache): keyed on contents and producer source, atomic,
 locked, and a damaged entry is a miss. The CPA table's own cache is tested in test_cache.py."""
 import subprocess
 import sys
@@ -7,8 +7,8 @@ import numpy as np
 import pytest
 import scipy.io.wavfile
 
-from dopplertrack import cache
-from dopplertrack.audio import Spectrogram
+from dopplertrack.runtime import cache
+from dopplertrack.components.spectrogram import Spectrogram
 import dopplertrack.components.spectrogram_cache as spectrogram_cache
 import dopplertrack.components.stft as stft
 
@@ -78,7 +78,7 @@ def test_detections_follow_spectrogram_params_and_detector_source(tmp_path, monk
 
 _CONTENDER = """
 import sys, time
-from dopplertrack import cache
+from dopplertrack.runtime import cache
 root, log = sys.argv[1], sys.argv[2]
 def produce():
     with open(log, "a") as f:

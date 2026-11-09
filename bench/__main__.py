@@ -1,9 +1,5 @@
-"""Compatibility entry point for the packaged evaluation harness."""
-import importlib
-import sys
+"""`python -m bench`: the benchmark's command line (dopplertrack.evaluation.cli)."""
+from dopplertrack.evaluation.cli import main
 
-_impl = importlib.import_module("dopplertrack.evaluation.cli")
 if __name__ == "__main__":
-    _impl.main()
-else:
-    sys.modules[__name__] = _impl
+    main()

@@ -31,11 +31,11 @@ from pathlib import Path
 
 import numpy as np
 
-from dopplertrack.adsb import Trace
+from dopplertrack.data.trajectories import Trace
 from dopplertrack.data.trace_parsing import FT, KT, parse_trace_bytes
 from dopplertrack.data.aircraft_types import AircraftTypes
 from dopplertrack.data.region_loading import save_traces
-from dopplertrack.coverage import ScanReport, extraction_metadata
+from dopplertrack.data.coverage import ScanReport, extraction_metadata
 
 ORIGINS = {"adsbx": "https://globe.adsbexchange.com", "adsbfi": "https://globe.adsb.fi",
            "airplaneslive": "https://globe.airplanes.live", "adsblol": "https://adsb.lol"}

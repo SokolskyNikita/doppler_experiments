@@ -1,4 +1,4 @@
-"""Frequency tracks (dopplertrack.freqtrack): sub-bin estimators, the off state, gaps, harmonic links
+"""Frequency tracks (dopplertrack.components.tracking.viterbi): sub-bin estimators, the off state, gaps, harmonic links
 and each segment rule on its own."""
 import numpy as np
 import pytest

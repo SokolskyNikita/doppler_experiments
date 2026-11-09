@@ -19,7 +19,7 @@ from pathlib import Path
 import numpy as np
 
 from dopplertrack.data.aircraft_types import AircraftTypes
-from dopplertrack.fetch import iter_tar_traces
+from dopplertrack.data.providers.adsblol import iter_tar_traces
 
 
 class Chained(io.RawIOBase):

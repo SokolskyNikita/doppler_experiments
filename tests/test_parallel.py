@@ -3,7 +3,7 @@ import os
 
 import pytest
 
-from dopplertrack import parallel
+from dopplertrack.runtime import parallel
 
 
 def _thread_vars(_):

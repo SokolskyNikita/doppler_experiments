@@ -1,9 +1,10 @@
-"""The hysteresis-in-states tracker (dopplertrack.hmmtrack): a missing fundamental, crossing lines,
+"""The hysteresis-in-states tracker (dopplertrack.components.tracking.hysteresis_viterbi): a missing fundamental, crossing lines,
 hysteresis through a dip, a short tone never born, and a gap of invalid frames."""
 import numpy as np
 import pytest
 
-from dopplertrack import doppler, hmmtrack as hm
+from dopplertrack.core import propagation as doppler
+from dopplertrack.components.tracking import hysteresis_viterbi as hm
 import dopplertrack.components.stft as stft
 import dopplertrack.components.tracking.types as tracking_types
 

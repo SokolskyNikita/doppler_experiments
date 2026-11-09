@@ -4,8 +4,9 @@ import json
 
 import pytest
 
-from dopplertrack.result import (CONVENTIONS_V1, KIND, SCHEMA_VERSION, RecordError, dumps, is_unavailable,
-                                 read_record, sha256_bytes, unavailable, validate, write_record)
+from dopplertrack.runtime.records import (CONVENTIONS_V1, KIND, SCHEMA_VERSION, RecordError, dumps,
+                                          is_unavailable, read_record, sha256_bytes, unavailable, validate,
+                                          write_record)
 
 
 def example_record():

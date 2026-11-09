@@ -193,7 +193,7 @@ def pull_caches(bucket: str, kinds: list[str], cache: Path, work: Path) -> int:
 
 
 # public files a tool fetches into the cache root on first use from a host the boxes can't reach: each comes from
-# the bucket's copy instead (dopplertrack.adsb.AircraftTypes reads opensky-network.org's Doc 8643 table)
+# the bucket's copy instead (dopplertrack.data.aircraft_types.AircraftTypes reads opensky-network.org's Doc 8643 table)
 CACHE_ROOT_FILES = {"doc8643AircraftTypes.csv": "data/raw/aux/opensky/doc8643AircraftTypes.csv"}
 
 

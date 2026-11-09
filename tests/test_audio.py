@@ -1,5 +1,6 @@
 import numpy as np
-from dopplertrack import audio, doppler
+from dopplertrack.components import spectrogram as audio
+from dopplertrack.core import propagation as doppler
 import dopplertrack.components.stft as stft
 
 

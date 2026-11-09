@@ -55,35 +55,11 @@ def array_sha256(*arrays) -> str:
 
 
 def _module_source_path(name: str) -> Path:
-    """Resolve a module's source file, following a compatibility shim without importing it."""
-    import ast
+    """A module's source file, found without importing it."""
     spec = importlib.util.find_spec(name)
     if spec is None or spec.origin is None:
         raise ValueError(f"no source for module {name}")
-    origin = Path(spec.origin)
-    # Once imported, a shim's sys.modules entry already points to the implementation. Before import,
-    # find_spec sees the wrapper file, so follow its literal import_module target from the AST instead.
-    if origin.suffix == ".py":
-        tree = ast.parse(origin.read_text())
-        first = tree.body[0] if tree.body else None
-        doc = first.value.value if (isinstance(first, ast.Expr) and isinstance(first.value, ast.Constant)
-                                    and isinstance(first.value.value, str)) else ""
-        if doc.startswith("Compatibility"):
-            target = next((node.value.args[0].value for node in tree.body
-                           if isinstance(node, ast.Assign)
-                           and isinstance(node.value, ast.Call)
-                           and isinstance(node.value.func, ast.Attribute)
-                           and isinstance(node.value.func.value, ast.Name)
-                           and node.value.func.value.id == "importlib"
-                           and node.value.func.attr == "import_module"
-                           and node.value.args
-                           and isinstance(node.value.args[0], ast.Constant)
-                           and isinstance(node.value.args[0].value, str)), None)
-            if target is not None:
-                target_spec = importlib.util.find_spec(target)
-                if target_spec is not None and target_spec.origin is not None:
-                    origin = Path(target_spec.origin)
-    return origin
+    return Path(spec.origin)
 
 
 def source_sha256(*modules: str) -> str:

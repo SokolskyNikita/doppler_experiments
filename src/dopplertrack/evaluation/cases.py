@@ -19,7 +19,7 @@ import threading
 from datetime import datetime
 from pathlib import Path
 
-from dopplertrack.result import sha256_file
+from dopplertrack.runtime.records import sha256_file
 
 from dopplertrack.runtime.paths import repository_root
 
@@ -28,7 +28,7 @@ CASES = REPO / "bench" / "cases.json"
 MANIFEST = REPO / "bench" / "manifest.json"
 SETS = ("development", "calibration", "evaluation")
 OUTCOMES = ("located", "not_located", "located_or_abstain")
-# the runner's profiles (bench.runner.PROFILES); a case may name the ones it runs under, else it runs under all
+# the runner's profiles (evaluation.runner.PROFILES); a case may name the ones it runs under, else it runs under all
 PROFILE_NAMES = ("saved-fit", "raw-audio", "locate")
 
 
@@ -94,7 +94,7 @@ REQUIRED = ("id", "version", "group", "set", "expected_outcome", "description", 
 
 
 # A private case keeps its audio, derived files, spectrogram, flight data and search box in its private file
-# (bench/private.py), so it needs everything else.
+# (evaluation/private.py), so it needs everything else.
 PRIVATE_HELD = ("audio.", "derived", "spectrogram", "flight_data.traces", "flight_data.extraction_box", "search.bbox",
                 "labels.reference")
 REQUIRED_PRIVATE = tuple(f for f in REQUIRED if not f.startswith(PRIVATE_HELD)) + ("site", "labels.reference.site")
@@ -294,7 +294,7 @@ def _expand(argv: list[str], out: Path) -> list[str]:
             "out_dir": str(out)}
     cmd = [a.format(**subs) for a in argv]
     if cmd[0] == "dopplertrack":
-        cmd = [sys.executable, "-m", "dopplertrack.cli", *cmd[1:]]
+        cmd = [sys.executable, "-m", "dopplertrack", *cmd[1:]]
     elif cmd[0] == "python":
         cmd = [sys.executable, *cmd[1:]]
     return cmd

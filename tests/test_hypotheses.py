@@ -3,8 +3,11 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from dopplertrack import audio, hypotheses as H, pipeline, search
-from dopplertrack.doppler import ideal_curve
+from dopplertrack.components import spectrogram as audio
+from dopplertrack.components.fitting import profile_intervals as H
+from dopplertrack.methods.grid_pair import pipeline
+from dopplertrack.components.search import grid as search
+from dopplertrack.core.propagation import ideal_curve
 from dopplertrack.components.scoring.curve_integral import EventWindow
 from dopplertrack.components.types import EventFit
 import dopplertrack.components.fitting.fit_event_hypotheses as fit_event_hypotheses

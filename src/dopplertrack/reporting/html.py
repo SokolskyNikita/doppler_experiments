@@ -234,7 +234,7 @@ def _top(rec):
 
 
 def _relative(rec: dict) -> bool:
-    """A private case's record (bench/private.py): positions are offsets from its site, never coordinates."""
+    """A private case's record (evaluation/private.py): positions are offsets from its site, never coordinates."""
     return rec.get("frame") == "site-relative"
 
 

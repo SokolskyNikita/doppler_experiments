@@ -5,7 +5,11 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from dopplertrack import audio, cli, doppler, pipeline, tracks
+from dopplertrack.components import spectrogram as audio
+from dopplertrack.commands import main as cli
+from dopplertrack.core import propagation as doppler
+from dopplertrack.methods.grid_pair import pipeline
+from dopplertrack.components.detection import grid_scan as tracks
 import dopplertrack.components.audio_input as audio_input
 import dopplertrack.components.types as components_types
 import dopplertrack.data.region_loading as region_loading

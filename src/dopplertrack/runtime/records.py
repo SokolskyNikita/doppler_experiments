@@ -165,7 +165,7 @@ SCHEMA_V2 = {**SCHEMA_V1,
                                          "top_score": Maybe(NUMBER), "margin_pct": Maybe(NUMBER),
                                          "wall_s": NUMBER, "chosen": bool}))}
 SCHEMAS = {1: SCHEMA_V1, 2: SCHEMA_V2}
-# A private case's record (bench/private.py): candidates and the refined point as east and north offsets in metres from
+# A private case's record (evaluation/private.py): candidates and the refined point as east and north offsets in metres from
 # the case's site, never latitude and longitude; chosen by the record's own "frame".
 OFFSET = {"east": NUMBER, "north": NUMBER}
 _REL_CANDIDATE = {k: v for k, v in CANDIDATE.items() if k not in ("lat", "lon")} | {"offset_m": OFFSET}

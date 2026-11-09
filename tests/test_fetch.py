@@ -2,7 +2,7 @@ import io
 import tarfile
 from pathlib import Path
 
-from dopplertrack import fetch
+from dopplertrack.data.providers import adsblol as fetch
 
 FIX = Path(__file__).parent / "data" / "trace_full_a2f38b.json"
 

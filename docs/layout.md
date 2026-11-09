@@ -13,19 +13,28 @@ This is the package's current organization after the independence refactor. The 
 | `components/` | Reusable algorithm pieces: spectrogram handling, detection, fitting, scoring, candidate grid search, and tracking. |
 | `core/` | Shared geometry, atmospheric calculations, and Doppler propagation. |
 | `data/` | ADS-B providers and trajectory parsing, coverage, and terrain access. |
-| `evaluation/` | Benchmark cases, input preparation, evaluation runs, private-case handling, and reports. The `bench/` command and case files remain as compatibility entry points and manifests. |
+| `evaluation/` | Benchmark cases, input preparation, evaluation runs, private-case handling, and reports. `bench/` keeps the `python -m bench` entry point, the case manifest, the labels and the raw-input manifest. |
 | `reporting/` | HTML reports and plotting helpers. |
 | `runtime/` | Shared paths, caches (including CPA tables), parallel execution, and result-record handling. |
 
-The package and installed command are still named `dopplertrack`. The top-level modules below remain compatibility aliases so existing imports continue to resolve; new code should use the canonical package paths.
+The package and installed command are named `dopplertrack`; `python -m dopplertrack` runs the same command line
+(`commands/main.py`), and `python -m bench` runs the benchmark (`evaluation/cli.py`). Code is imported from the
+paths above only: the top-level compatibility modules (`dopplertrack.tracks`, `.score`, `.search` and the rest) and
+the `bench/` module shims were removed in research readiness R3. Earlier commits are run at their own revision with
+`bench run --revision <commit>`, which starts a pre-R3 export as `-m dopplertrack.cli`. A definition or module that
+moved keeps an `# old name:` or `# old module:` comment, the link from the dated experiments to the current names.
+The dated experiments' imports map to the current modules as follows (`dopplertrack.<name>` before R3, `dopplertrack.<module>` now):
 
-| Compatibility import | Implementation |
+| Name before R3 | Module now |
 |---|---|
 | `adsb`, `coverage`, `fetch`, `terrain` | `data.trajectories`, `data.coverage`, `data.providers.adsblol`, `data.terrain` |
 | `atmosphere`, `doppler`, `geo` | `core.atmosphere`, `core.propagation`, `core.geometry` |
 | `audio`, `freqtrack`, `hmmtrack`, `hypotheses`, `lltrack`, `score`, `search`, `tracks`, `warp` | `components.spectrogram`, `components.tracking.viterbi`, `components.tracking.hysteresis_viterbi`, `components.fitting.profile_intervals`, `components.tracking.hmm_tracker`, `components.scoring.trajectory_score`, `components.search.grid`, `components.detection.grid_scan`, `components.scoring.dedoppler_tone` |
 | `cache`, `parallel`, `result` | `runtime.cache`, `runtime.parallel`, `runtime.records` |
 | `collective`, `locate`, `pipeline`, `plots`, `report` | `methods.collective.search`, `methods.grid_pair.runner`, `methods.grid_pair.pipeline`, `reporting.plots`, `reporting.html` |
+| `cli` | `commands.main` |
+| `bench.<module>` (`cases`, `inputs`, `prepare`, `private`, `report`, `revisions`, `runner`, `tier1`) | `evaluation.<module>` |
+
 
 ## Running methods
 
@@ -50,7 +59,7 @@ The output directory must not already exist. Collective windows are supplied as 
 
 The refactor changed code organization only. Existing files remain in their external roots: `$DOPPLERTRACK_DATA` (default `~/data/dopplertrack`) for raw and derived inputs, run outputs, references, and private data; `$DOPPLERTRACK_CACHE` (default `~/.cache/dopplertrack`) for regenerable caches. No recordings, ADS-B data, benchmark inputs, or cache files were moved.
 
-Each statistical, signal-processing or data-science method has its own file (research readiness R1): under `components/` by job (`detection/`, `whitening/`, `fitting/`, `scoring/`, `tracking/`, `search/`, `nulls/`, `assignment/`, `selection/`, `planning/`), under `data/` for trace parsing, region loading, day seams and the aircraft-type filter, and under `evaluation/` for label matching, the ROC curves and the fit-error reference. Shared result types are in `components/types.py` (`EventFit`, `Track`), `components/search/types.py` (`Segment`), `components/tracking/types.py`, `components/fitting/hypothesis.py` and `components/windows.py`. Names follow the reference literature (R1's naming pass, `naming-review.md` in the ledger run folder): a standard method has its standard name, a standard method with our own departure has the standard name and states the departure in its docstring, and a method with no standard counterpart has a generic name prefixed `custom_`. A renamed definition keeps an `# old name:` comment. The recipes in `methods/` compose these; `evaluation/runner.py` and `reporting/html.py` are plumbing and reporting, not methods. The compatibility aliases in the table above still resolve to the modules they name, but a name that moved to its own file is imported from that file (R3 removes the aliases).
+Each statistical, signal-processing or data-science method has its own file (research readiness R1): under `components/` by job (`detection/`, `whitening/`, `fitting/`, `scoring/`, `tracking/`, `search/`, `nulls/`, `assignment/`, `selection/`, `planning/`), under `data/` for trace parsing, region loading, day seams and the aircraft-type filter, and under `evaluation/` for label matching, the ROC curves and the fit-error reference. Shared result types are in `components/types.py` (`EventFit`, `Track`), `components/search/types.py` (`Segment`), `components/tracking/types.py`, `components/fitting/hypothesis.py` and `components/windows.py`. Names follow the reference literature (R1's naming pass, `naming-review.md` in the ledger run folder): a standard method has its standard name, a standard method with our own departure has the standard name and states the departure in its docstring, and a method with no standard counterpart has a generic name prefixed `custom_`. A renamed definition keeps an `# old name:` comment. The recipes in `methods/` compose these; `evaluation/runner.py` and `reporting/html.py` are plumbing and reporting, not methods.
 
 Dated experiment records under `docs/experiments/` and historical recipes under `tools/experiments/` are retained deliberately so prior runs can be interpreted and, where possible, reproduced against their recorded code and inputs. The package changes do not rewrite those records or imply that their results validate the current methods.
 

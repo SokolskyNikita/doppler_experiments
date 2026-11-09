@@ -4,8 +4,8 @@ edges and at most about half the level at them, so the two cannot be confused.""
 import numpy as np
 import pytest
 
-from dopplertrack import cli
-from dopplertrack.audio import Spectrogram
+from dopplertrack.commands import main as cli
+from dopplertrack.components.spectrogram import Spectrogram
 from dopplertrack.components.types import EventFit
 from dopplertrack.components.detection.event_fit import fit_event
 from dopplertrack.components.detection.grid_search import grid_search
@@ -63,7 +63,7 @@ def test_a_band_with_nothing_to_search_gives_a_weak_fit():
 def test_a_band_narrower_than_the_f0_margins_around_a_real_tone_gives_a_weak_fit():
     """grid_search searches f0 from 1.15 f_lo to 0.85 f_hi, empty whenever f_hi/f_lo < 1.15/0.85 = 1.353, whatever
     the curve: the model-error study's Livermore R35, R08, R51 and 654 Alaska crossings. A band of ratio 1.3 around a real tone."""
-    from dopplertrack.doppler import ideal_curve
+    from dopplertrack.core.propagation import ideal_curve
     t, f = np.arange(0, 400, 0.5), np.arange(40, 300, 0.5)
     S = np.zeros((len(f), len(t)), np.float32)
     curve = ideal_curve(t, 120.0, 60.0, 1500.0, 200.0, c=340.0)

@@ -131,7 +131,7 @@ def _boxes_to_offsets(obj, site):
 def to_site_relative(record: dict, site_id: str, site: dict, case_dir: Path) -> dict:
     """The record in the site's frame: candidates and refined point as offsets, boxes as offset boxes, the triples
     sidecar rewritten with east and north arrays and its hash updated."""
-    from dopplertrack.result import sha256_file
+    from dopplertrack.runtime.records import sha256_file
     rec = json.loads(json.dumps(record))
     for c in rec.get("candidates", []):
         c["offset_m"] = _offset(c.pop("lat"), c.pop("lon"), site)

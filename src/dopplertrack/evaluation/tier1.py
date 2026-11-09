@@ -16,8 +16,8 @@ from pathlib import Path
 
 import numpy as np
 
-from dopplertrack.result import (CONVENTIONS_V1, ListOf, Maybe, OneOf, RecordError, _check, dumps, sha256_bytes,
-                                 unavailable)
+from dopplertrack.runtime.records import (CONVENTIONS_V1, ListOf, Maybe, OneOf, RecordError, _check, dumps,
+                                          sha256_bytes, unavailable)
 
 from .cases import REPO, resolve
 from dopplertrack.evaluation.fit_reference import fit_errors, line_f0, trajectory_reference
@@ -99,10 +99,10 @@ def span_inputs(labels: dict) -> tuple[list[float], list[dict]]:
 
 def execute_span(span: dict, out_dir: Path, code: dict, log=print, workers: int | None = None) -> dict:
     """detect and window fits on one span, as a span record. Reads no class, association or reference."""
-    from dopplertrack.audio import Spectrogram
-    from dopplertrack.cache import cached_detections
-    from dopplertrack.result import file_entry
-    from dopplertrack.tracks import detect_events
+    from dopplertrack.components.spectrogram import Spectrogram
+    from dopplertrack.runtime.cache import cached_detections
+    from dopplertrack.runtime.records import file_entry
+    from dopplertrack.components.detection.grid_scan import detect_events
 
     from .runner import PROFILES, Stages
     stage, errors = Stages(log), []
@@ -136,9 +136,9 @@ def execute_span(span: dict, out_dir: Path, code: dict, log=print, workers: int 
                         slots.append(None)
                         tasks.append((w["window"], j, w["start"], w["end"], lo, hi, objective))
         with stage("window_fits"):
-            from dopplertrack.parallel import ordered_map, resolve_jobs
+            from dopplertrack.runtime.parallel import ordered_map, resolve_jobs
             jobs = min(resolve_jobs(workers), max(len(tasks), 1))
-            from dopplertrack.cache import spectrogram_sha256
+            from dopplertrack.runtime.cache import spectrogram_sha256
             done = iter(list(ordered_map(_fit_window, tasks, jobs, _set_fit_crop, (crop, spectrogram_sha256(crop)))))
             fits = [x if x is not None else next(done) for x in slots]
     except Exception as exc:
@@ -165,7 +165,7 @@ def _fit_window(task) -> dict:
     on the crop's contents, the window, the band, the objective and fit_event's source, under the cache rules."""
     import scipy
 
-    from dopplertrack.cache import DETECTOR_CODE, cached, code_sha256
+    from dopplertrack.runtime.cache import DETECTOR_CODE, cached, code_sha256
     from dopplertrack.components.detection.event_fit import fit_event
     window, line, t0, t1, lo, hi, objective = task
 
@@ -240,7 +240,7 @@ def score_fits(record: dict, windows: list[dict], associations: list[dict], refe
 
 def compare_span(out_dir: Path, read_labels, reference_context=None) -> dict:
     """Score a span record against its labels, only once its bytes still match the hash written beside it."""
-    from dopplertrack.result import sha256_bytes as _sha
+    from dopplertrack.runtime.records import sha256_bytes as _sha
     try:
         expected = (out_dir / SPAN_HASH).read_text().split()[0]
         data = (out_dir / SPAN_FILE).read_bytes()
@@ -309,10 +309,10 @@ def _read_hashed(path: Path) -> dict:
 
 def case_events(case: dict, profile: str, out_dir: Path, code: dict, workers: int | None = None) -> dict:
     """The case's two search events under a profile, chosen without the labels, written with their hash."""
-    from dopplertrack.audio import Spectrogram
-    from dopplertrack.cache import cached_detections, detection_key
-    from dopplertrack.result import file_entry
-    from dopplertrack.tracks import detect_events
+    from dopplertrack.components.spectrogram import Spectrogram
+    from dopplertrack.runtime.cache import cached_detections, detection_key
+    from dopplertrack.runtime.records import file_entry
+    from dopplertrack.components.detection.grid_scan import detect_events
 
     from .runner import PROFILES, pick_detected, saved_fit_dicts, search_harmonics, sound_speed
     assert "labels" not in case, "the known point's events must be chosen blind"
@@ -357,11 +357,11 @@ def case_events(case: dict, profile: str, out_dir: Path, code: dict, workers: in
 def known_point(case: dict, out_dir: Path, reference: dict, true_pair, log=print) -> dict:
     """After the events' hash check: every flight pair scored at the reference, written as a truth-conditioned
     table with its own hash, and the scoreboard's summary of it."""
-    from dopplertrack import pipeline
+    from dopplertrack.methods.grid_pair import pipeline
     from dopplertrack.data.day_seams import join_days
-    from dopplertrack.audio import Spectrogram
-    from dopplertrack.search import Grid
-    from dopplertrack.terrain import Terrain
+    from dopplertrack.components.spectrogram import Spectrogram
+    from dopplertrack.components.search.grid import Grid
+    from dopplertrack.data.terrain import Terrain
     from dopplertrack.components.types import EventFit
 
     from .runner import case_resolved, trace_paths
@@ -402,7 +402,7 @@ def reference_context(span: dict, labels: dict):
     """For the comparison step only: the span's flight data, observer and clock, from its reference case's
     labels and the label file's own clock (both truth)."""
     from dopplertrack.data.day_seams import join_days
-    from dopplertrack.terrain import Terrain
+    from dopplertrack.data.terrain import Terrain
 
     from .cases import case_labels, latest_case
     from .runner import sound_speed, trace_paths

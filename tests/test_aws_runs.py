@@ -20,7 +20,7 @@ def _load(name, path):
 
 
 sys.path.insert(0, str(AWS.parent.parent))
-from bench import cases  # noqa: E402  (the case manifest, for the latest version of a case)
+from dopplertrack.evaluation import cases  # noqa: E402  (the case manifest, for the latest version of a case)
 
 runs = _load("aws_runs", AWS / "runs.py")
 supervisor = _load("aws_supervisor", AWS / "box" / "supervisor.py")

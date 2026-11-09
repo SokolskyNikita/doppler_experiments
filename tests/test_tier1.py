@@ -1,4 +1,4 @@
-"""Tier 1's span matching and its record discipline (bench/tier1.py). No data needed."""
+"""Tier 1's span matching and its record discipline (evaluation/tier1.py). No data needed."""
 import json
 import sys
 from pathlib import Path
@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from bench import tier1  # noqa: E402
+from dopplertrack.evaluation import tier1  # noqa: E402
 import dopplertrack.components.types as components_types
 import dopplertrack.components.detection.event_fit as event_fit
 
@@ -94,8 +94,8 @@ def test_line_f0_inverts_a_straight_pass():
 
 def test_the_trajectory_reference_of_a_straight_pass():
     import numpy as np
-    from dopplertrack.adsb import Trace
-    from dopplertrack.geo import enu_to_lla
+    from dopplertrack.data.trajectories import Trace
+    from dopplertrack.core.geometry import enu_to_lla
     c, v, t_cpa, y = 343.0, 60.0, 1_700_000_100.0, 2000.0
     t = np.arange(t_cpa - 300, t_cpa + 300, 1.0)
     lat, lon, _ = enu_to_lla(v * (t - t_cpa), np.full_like(t, y), np.zeros_like(t), 40.0, -84.0)
@@ -141,8 +141,8 @@ def test_a_fundamental_needs_its_harmonic_and_an_unambiguous_line():
 
 def test_window_fits_are_cached_on_their_inputs(tmp_path, monkeypatch):
     import numpy as np
-    from dopplertrack.audio import Spectrogram
-    from dopplertrack.cache import spectrogram_sha256
+    from dopplertrack.components.spectrogram import Spectrogram
+    from dopplertrack.runtime.cache import spectrogram_sha256
     monkeypatch.setenv("DOPPLERTRACK_CACHE", str(tmp_path))
     calls = []
 
@@ -180,8 +180,8 @@ def test_pooled_curves_sum_extras_over_spans_and_leave_matches_undefined_without
 
 def test_a_non_finite_fit_is_a_missing_fit(tmp_path, monkeypatch):
     import numpy as np
-    from dopplertrack.audio import Spectrogram
-    from dopplertrack.cache import spectrogram_sha256
+    from dopplertrack.components.spectrogram import Spectrogram
+    from dopplertrack.runtime.cache import spectrogram_sha256
     monkeypatch.setenv("DOPPLERTRACK_CACHE", str(tmp_path))
 
     class Fit:
@@ -196,8 +196,8 @@ def test_a_non_finite_fit_is_a_missing_fit(tmp_path, monkeypatch):
 
 def test_a_weak_fit_is_a_missing_fit_with_its_reason(tmp_path, monkeypatch):
     import numpy as np
-    from dopplertrack.audio import Spectrogram
-    from dopplertrack.cache import spectrogram_sha256
+    from dopplertrack.components.spectrogram import Spectrogram
+    from dopplertrack.runtime.cache import spectrogram_sha256
     monkeypatch.setenv("DOPPLERTRACK_CACHE", str(tmp_path))
     monkeypatch.setattr(event_fit, "fit_event", lambda *a, **k: components_types.EventFit.unfit(1.0, 8.0, "band too narrow"))
     sp = Spectrogram(np.arange(10.0), np.arange(5.0), np.zeros((5, 10), np.float32))
@@ -207,7 +207,7 @@ def test_a_weak_fit_is_a_missing_fit_with_its_reason(tmp_path, monkeypatch):
 
 
 def test_shards_of_spans_merge_and_one_resumed_run_compares(tmp_path, monkeypatch):
-    from bench import runner
+    from dopplertrack.evaluation import runner
     spans = [{"id": f"s{k}", "set": "development", "group": "g", "family": "f", "labels": str(tmp_path / "lab.json"),
               "spectrogram": {"path": "derived/x.npz", "sha256": "0" * 64}} for k in range(3)]
     (tmp_path / "lab.json").write_text("{}")

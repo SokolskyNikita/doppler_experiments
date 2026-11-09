@@ -27,11 +27,11 @@ def prepare_case(case_id: str, use_weather: bool = False, workers: int | None = 
 
 def _prepare(case: dict, use_weather: bool, workers: int | None, log) -> dict:
     from dopplertrack.data.day_seams import join_days
-    from dopplertrack.doppler import speed_of_sound
-    from dopplertrack.pipeline import cached_cpa_table
-    from dopplertrack.search import Grid
+    from dopplertrack.core.propagation import speed_of_sound
+    from dopplertrack.methods.grid_pair.pipeline import cached_cpa_table
+    from dopplertrack.components.search.grid import Grid
     from dopplertrack.components.search.segments import build_segments
-    from dopplertrack.terrain import Terrain
+    from dopplertrack.data.terrain import Terrain
 
     from .runner import cpa_cache_path, geometry_kw, trace_paths
     case_id = case["id"]

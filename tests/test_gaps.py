@@ -6,9 +6,9 @@ import numpy as np
 import pytest
 import scipy.io.wavfile
 
-from dopplertrack import doppler
-from dopplertrack.audio import Spectrogram
-from dopplertrack.parallel import process_pool
+from dopplertrack.core import propagation as doppler
+from dopplertrack.components.spectrogram import Spectrogram
+from dopplertrack.runtime.parallel import process_pool
 import dopplertrack.components.audio_input as audio_input
 import dopplertrack.components.detection.event_fit as event_fit
 import dopplertrack.components.whitening.local_median as local_median

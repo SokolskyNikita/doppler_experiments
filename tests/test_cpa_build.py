@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 from scipy.spatial import cKDTree
 
-from dopplertrack.search import Grid
+from dopplertrack.components.search.grid import Grid
 from dopplertrack.components.search.types import Segment
 import dopplertrack.components.search.cpa_table as cpa_table
 

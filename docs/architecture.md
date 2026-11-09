@@ -8,9 +8,9 @@ A path being installed or unit-tested does not establish acoustic accuracy or a 
 
 | Surface | Entry point | Behavior |
 |---|---|---|
-| Installed CLI | `pyproject.toml` → [cli.main](../src/dopplertrack/cli.py) | `spectrogram`, `fit`, `detect`, `extract-region`, `fetch-day`, `search`, `refine`, `search-single`, `locate` |
-| Audio-to-record orchestration | `cli._locate` → [locate.locate](../src/dopplertrack/locate.py) | Detection, coverage preflight, pair searches, winner refinement, schema-v2 record/hash; never emits `located` |
-| Repository benchmark | `python -m bench` → [bench/runner.py](../bench/runner.py) | `saved-fit`, `raw-audio`, `locate`; record/hash before labels, revision exports, shards/resume, comparison; `bench report` renders HTML |
+| Installed CLI | `pyproject.toml` → [commands.main.main](../src/dopplertrack/commands/main.py) (also `python -m dopplertrack`) | `spectrogram`, `fit`, `detect`, `extract-region`, `fetch-day`, `search`, `refine`, `search-single`, `locate` |
+| Audio-to-record orchestration | `commands.main._locate` → [grid_pair.runner.locate](../src/dopplertrack/methods/grid_pair/runner.py) | Detection, coverage preflight, pair searches, winner refinement, schema-v2 record/hash; never emits `located` |
+| Repository benchmark | `python -m bench` → [evaluation/runner.py](../src/dopplertrack/evaluation/runner.py) | `saved-fit`, `raw-audio`, `locate`; record/hash before labels, revision exports, shards/resume, comparison; `bench report` renders HTML |
 | Collective search | [collective_detection](../src/dopplertrack/methods/collective/search.py), `tools/experiments/2026-11-04/collective_run.py` | Experimental alternative; separate result dictionary, outside CLI locate, benchmark profiles and versioned verdicts |
 
 Installed defaults:
@@ -31,7 +31,7 @@ Installed defaults:
   Two usable events are required even with a stated start.
 - Sound speed defaults to 15 °C. CLI `--temperature` opts into temperature-based fits and height-dependent
   propagation in search/refinement. `--jobs` overrides `DOPPLERTRACK_JOBS`, otherwise the physical/performance-core
-  default from [parallel.py](../src/dopplertrack/parallel.py).
+  default from [runtime/parallel.py](../src/dopplertrack/runtime/parallel.py).
 
 Benchmark profiles are part of a result's identity. `saved-fit` (default) uses the case's fits and harmonics.
 `raw-audio` uses detection's top two by score, earlier first, with one harmonic. The `locate` profile uses the
@@ -42,20 +42,20 @@ Every setting that can change a result is a field of one frozen parameters datac
 R2): `GridPairParameters` in [methods/grid_pair/parameters.py](../src/dopplertrack/methods/grid_pair/parameters.py)
 and `CollectiveParameters` in [methods/collective/parameters.py](../src/dopplertrack/methods/collective/parameters.py),
 nested by stage, with the functions' keyword defaults as defaults. Resolution runs default, then profile (`PROFILES`,
-data: `saved-fit`, `raw-audio`, `locate`), then the case (`bench/runner.case_parameters`: its search and refine blocks,
+data: `saved-fit`, `raw-audio`, `locate`), then the case (`evaluation/runner.case_parameters`: its search and refine blocks,
 harmonics under saved-fit, the station temperature with `--weather`, the stated start under locate), then the run's
 explicit overrides (`bench run --search-param`, CLI flags then `--param`, the collective config's `parameters`), and
-unknown names are refused. A method choice is a name looked up in a dict in the recipe module (`pipeline.py`:
+unknown names are refused. A method choice is a name looked up in a dict in the recipe module (`grid_pair/pipeline.py`:
 `DETECTION_STATISTICS`, `TIME_CONVENTIONS`, `EVENT_GATES`, `SCORE_NORMALISATIONS`, `CLOCK_ANCHORS`; `runner.py`:
 `EVENT_SOURCES`; `collective/search.py`: `VIEWS`, `ASSIGNMENTS`; `methods/parameters.py`: `WHITENINGS`). Each record
 keeps the fully resolved set: grid_pair under `provenance.parameters.resolved`, collective under `parameters`
 (`--revision` runs record that another revision's CLI ran instead). The `locate` profile still runs through
-`execute_case_locate` and `locate.locate` (usability, coverage and verdict), saved-fit and raw-audio through
+`execute_case_locate` and `grid_pair.runner.locate` (usability, coverage and verdict), saved-fit and raw-audio through
 `execute_case`.
 
 ## Results, coverage and abstention
 
-[locate.py](../src/dopplertrack/locate.py) returns `insufficient_evidence` for too few usable events, excessive
+[grid_pair/runner.py](../src/dopplertrack/methods/grid_pair/runner.py) returns `insufficient_evidence` for too few usable events, excessive
 recording gaps, missing geographic/time coverage or no surviving candidate. It checks the winning clock's
 recording span against supplied days. Supplied files still need to cover the requested times; `--days 1` drives
 next-day fetching, not automatic loading of an omitted trace file. A completed winner refinement returns
@@ -69,7 +69,7 @@ continuous coverage. Pair search's candidate-gap warnings and trajectory support
 that every audible aircraft is present in ADS-B. Geometry can interpolate 30–90 s gaps to propose a CPA while
 modelled curves contribute no evidence over gaps longer than 30 s.
 
-[result.py](../src/dopplertrack/result.py) writes schema **2**, validates schemas 1 and 2, and supports a
+[runtime/records.py](../src/dopplertrack/runtime/records.py) writes schema **2**, validates schemas 1 and 2, and supports a
 site-relative frame. Version 2 allows `located`, `ambiguous` and `insufficient_evidence` structurally;
 `locate` never emits the first. Uncomputed fields carry `unavailable(reason)`. Schema validation checks required
 fields, types, enumerations and finite floats; it permits extra fields and does not prove cross-field scientific
@@ -77,7 +77,7 @@ validity. `write_record` validates and writes canonical bytes atomically, return
 writes the record/hash before opening labels and refuses altered records/sidecars. This is procedural blinding,
 not evidence that development data became held-out evaluation. Schema v3 was never adopted; the readiness plan adds a minimal collective record (R6.6).
 
-The installed CLI produces no HTML report. `bench report` uses [report.py](../src/dopplertrack/report.py),
+The installed CLI produces no HTML report. `bench report` uses [reporting/html.py](../src/dopplertrack/reporting/html.py),
 local result records and optional sidecars to render reports into a new run folder. Execution errors are distinct
 from evidence verdicts; unreadable audio, missing ffmpeg or network failures are not scientific abstentions.
 
@@ -112,7 +112,7 @@ Repeated positions choose the earliest trajectory sample. Endpoint CPAs and out-
 Rows hold `gidx`, `seg`, `t_emit`, `t_heard`, slant distance `d` and ground speed `v`.
 
 The table is independent of event fits. Pairing gates its rows, then `custom_locked_score` samples trajectory-derived
-curves. Search and refinement dispatch scoring chunks through `parallel.ordered_map`, passing immutable scoring
+curves. Search and refinement dispatch scoring chunks through `runtime.parallel.ordered_map`, passing immutable scoring
 state with an initializer and restoring task order. Package process pools use spawn and pin numerical threads to
 one. These guarantees do not automatically apply to experiment scripts' own executors.
 
@@ -130,11 +130,11 @@ also supported. Keep caches outside the repository. Cache policies differ:
 
 | Artifact | Key/invalidation | Storage and recovery |
 |---|---|---|
-| Spectrogram, `audio.cached_spectrogram` | File names, SHA-256 and offsets; start, snap, sample rate, filled-in STFT parameters; whole `audio.py` source; ffmpeg/numpy/scipy versions | `cache.cached` joblib entry, per-key file lock; bad entries rebuilt |
-| Detections, `cache.cached_detections` | Spectrogram t/f/power/mask/start; supplied detector parameters except workers/progress; producer name; selected executable AST definitions and referenced constants in tracks/doppler/audio; numpy/scipy versions | Same joblib/lock path; CLI detect and locate call it |
-| CPA, `pipeline.cached_cpa_table` | Grid coordinates/elevations/ENU and origin; segments' ICAO/times/positions/speeds; range, sound speed, optional ground temperature, `CPA_CACHE_VERSION` | Explicit NPZ path, atomic replacement, `<path>.lock` via fcntl; unreadable/mismatched file is a miss |
+| Spectrogram, `components.spectrogram_cache.cached_spectrogram` | File names, SHA-256 and offsets; start, snap, sample rate, filled-in STFT parameters; whole source of the modules in `SPECTROGRAM_MODULES`; ffmpeg/numpy/scipy versions | `runtime.cache.cached` joblib entry, per-key file lock; bad entries rebuilt |
+| Detections, `runtime.cache.cached_detections` | Spectrogram t/f/power/mask/start; supplied detector parameters except workers/progress; producer name; selected executable AST definitions and referenced constants in the modules `DETECTOR_CODE` lists; numpy/scipy versions | Same joblib/lock path; CLI detect and locate call it |
+| CPA, `methods.grid_pair.pipeline.cached_cpa_table` | Grid coordinates/elevations/ENU and origin; segments' ICAO/times/positions/speeds; range, sound speed, optional ground temperature, `CPA_CACHE_VERSION` | Explicit NPZ path, atomic replacement, `<path>.lock` via fcntl; unreadable/mismatched file is a miss |
 | Terrarium terrain | Zoom/tile coordinates; no content/code/version hash | Atomic tile downloads, corrupt images fetched again, in-process memory cache; no per-tile lock |
-| Aircraft types, `adsb.AircraftTypes` | Existing file, no freshness/content/version check | Download-once CSV; no equivalent lock/atomic-repair policy |
+| Aircraft types, `data.aircraft_types.AircraftTypes` | Existing file, no freshness/content/version check | Download-once CSV; no equivalent lock/atomic-repair policy |
 
 The detection key intentionally ignores docstrings and error/warning messages, rather than hashing whole modules.
 `tests/test_cache.py` checks the selected dependency list and AST key. Supplied parameter dictionaries are not
@@ -143,7 +143,7 @@ The CPA key has no automatic source/library hash: **bump `CPA_CACHE_VERSION` whe
 the same inputs**. Give input combinations separate files to avoid repeated rebuilds when alternating them.
 Where fcntl is unavailable, the CPA lock is a no-op; atomic replacement still prevents partial-table reads.
 
-`cache.cached(kind, parts, produce)` uses canonical JSON (arrays represented by hashes) to identify entries.
+`runtime.cache.cached(kind, parts, produce)` uses canonical JSON (arrays represented by hashes) to identify entries.
 The stored description is checked on load. Callers must describe all semantic dependencies in `parts`; the helper
 does not discover them. [tests/test_artefact_cache.py](../tests/test_artefact_cache.py) covers content/parameter
 misses, corrupt entries, concurrent builders and spectrogram equality. These policies do not make a cached

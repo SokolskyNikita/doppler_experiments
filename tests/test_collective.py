@@ -5,9 +5,10 @@ The windows stand in for detection's: each true pass's heard CPA and tone, off b
 leaves (+4 s, +3 %), so the clock vote and the f0 sweep have real work. A +-4 % sweep and 60 null draws keep it fast."""
 import numpy as np
 
-from dopplertrack import collective, doppler
-from dopplertrack.adsb import Trace
-from dopplertrack.geo import enu_to_lla, haversine_m
+from dopplertrack.methods.collective import search as collective
+from dopplertrack.core import propagation as doppler
+from dopplertrack.data.trajectories import Trace
+from dopplertrack.core.geometry import enu_to_lla, haversine_m
 import dopplertrack.components.search.segments as segments
 import dopplertrack.components.stft as stft
 import dopplertrack.components.scoring.point_score as point_score

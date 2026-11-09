@@ -46,7 +46,13 @@ class Revision:
         # -I keeps the user's site and the working directory off sys.path. -B writes no bytecode, so running
         # the revision never changes the tree that is verified; unlike -X pycache_prefix, multiprocessing
         # passes -B on to the worker processes detect starts
-        return [str(self.python), "-I", "-B", "-m", "dopplertrack.cli", *args]
+        return [str(self.python), "-I", "-B", "-m", self.cli_module, *args]
+
+    @property
+    def cli_module(self) -> str:
+        # commits before readiness R3 start their CLI only as dopplertrack.cli; later ones only as dopplertrack
+        legacy = self.src / "src" / "dopplertrack" / "cli.py"
+        return "dopplertrack.cli" if legacy.is_file() else "dopplertrack"
 
     def provenance(self) -> dict:
         info = json.loads((self.root / "export.json").read_text())

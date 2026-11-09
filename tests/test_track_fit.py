@@ -3,8 +3,8 @@ import numpy as np
 import pytest
 from scipy.optimize import least_squares
 
-from dopplertrack import audio
-from dopplertrack.doppler import ideal_curve
+from dopplertrack.components import spectrogram as audio
+from dopplertrack.core.propagation import ideal_curve
 import dopplertrack.components.types as components_types
 import dopplertrack.components.detection.ridge as ridge
 import dopplertrack.components.fitting.track_regression as track_regression

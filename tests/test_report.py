@@ -6,8 +6,10 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from dopplertrack import adsb, audio, report
-from dopplertrack.geo import enu_to_lla
+from dopplertrack.data import trajectories as adsb
+from dopplertrack.components import spectrogram as audio
+from dopplertrack.reporting import html as report
+from dopplertrack.core.geometry import enu_to_lla
 import dopplertrack.data.region_loading as region_loading
 
 FIXTURES = Path(__file__).parent / "fixtures" / "records"

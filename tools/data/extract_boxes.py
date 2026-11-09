@@ -20,8 +20,8 @@ from pathlib import Path
 
 from dopplertrack.data.aircraft_types import AircraftTypes
 from dopplertrack.data.region_loading import in_bbox, save_traces
-from dopplertrack.coverage import ScanReport, extraction_metadata, padded_bbox
-from dopplertrack.fetch import _ChainedHTTP, iter_tar_traces, release_asset_urls
+from dopplertrack.data.coverage import ScanReport, extraction_metadata, padded_bbox
+from dopplertrack.data.providers.adsblol import _ChainedHTTP, iter_tar_traces, release_asset_urls
 
 
 class Chained(io.RawIOBase):

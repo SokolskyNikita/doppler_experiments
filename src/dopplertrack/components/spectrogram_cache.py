@@ -19,7 +19,7 @@ SPECTROGRAM_MODULES = ("dopplertrack.components.audio_input", "dopplertrack.comp
 def cached_spectrogram(audio: str | Path, sr: int = 4000, snap_s: float | None = None,
                        root: str | Path | None = None, **kw) -> Spectrogram:
     """The spectrogram of one file, or of an AudioMoth folder placed by its UTC names, from the
-    cache (dopplertrack.cache, kind "spectrogram") when one was built from identical inputs.
+    cache (dopplertrack.runtime.cache, kind "spectrogram") when one was built from identical inputs.
 
     The key holds each audio file's name, SHA-256 and offset, the start time, every parameter
     (keyword arguments are spectrogram_from_blocks's, defaults filled in), the source of every module the

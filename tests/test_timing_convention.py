@@ -3,8 +3,10 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from dopplertrack import doppler, pipeline, search
-from dopplertrack.doppler import ideal_curve
+from dopplertrack.core import propagation as doppler
+from dopplertrack.methods.grid_pair import pipeline
+from dopplertrack.components.search import grid as search
+from dopplertrack.core.propagation import ideal_curve
 from dopplertrack.components.scoring.doppler_inflection import INFLECTION_FLAT_RATIO, doppler_inflection
 from dopplertrack.components.types import EventFit
 import dopplertrack.components.search.pair_gate as pair_gate

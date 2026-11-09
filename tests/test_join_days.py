@@ -2,11 +2,11 @@
 import numpy as np
 import pytest
 
-from dopplertrack.adsb import Trace
+from dopplertrack.data.trajectories import Trace
 from dopplertrack.data.day_seams import join_days
 from dopplertrack.data.region_loading import load_traces, save_traces
-from dopplertrack.geo import enu_to_lla
-from dopplertrack.search import Grid
+from dopplertrack.core.geometry import enu_to_lla
+from dopplertrack.components.search.grid import Grid
 from dopplertrack.components.search.segments import build_segments
 from dopplertrack.components.search.cpa_storage import cpa_fingerprint
 from dopplertrack.components.search.cpa_table import cpa_table

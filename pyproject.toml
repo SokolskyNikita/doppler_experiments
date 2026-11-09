@@ -34,7 +34,7 @@ Homepage = "https://github.com/SokolskyNikita/doppler_experiments"
 Issues = "https://github.com/SokolskyNikita/doppler_experiments/issues"
 
 [project.scripts]
-dopplertrack = "dopplertrack.cli:main"
+dopplertrack = "dopplertrack.commands.main:main"
 
 [build-system]
 requires = ["uv_build>=0.8.3,<0.9.0"]
@@ -47,3 +47,7 @@ dev = [
     "ruff>=0.17.3",
     "ssqueezepy>=0.6.6",
 ]
+
+[tool.pytest.ini_options]
+# the dated scripts under tools/experiments/ are records of their revision, not tests (find_test.py is one)
+testpaths = ["tests"]

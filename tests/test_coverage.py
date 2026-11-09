@@ -7,9 +7,12 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from dopplertrack import coverage, fetch, pipeline, search
-from dopplertrack.audio import Spectrogram
-from dopplertrack.geo import enu_to_lla
+from dopplertrack.data import coverage
+from dopplertrack.data.providers import adsblol as fetch
+from dopplertrack.methods.grid_pair import pipeline
+from dopplertrack.components.search import grid as search
+from dopplertrack.components.spectrogram import Spectrogram
+from dopplertrack.core.geometry import enu_to_lla
 from dopplertrack.components.types import EventFit
 import dopplertrack.components.search.cpa_table as cpa_table
 import dopplertrack.data.region_loading as region_loading

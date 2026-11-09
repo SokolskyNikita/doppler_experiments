@@ -1,7 +1,9 @@
 # Research readiness
 
 **Status:** written 2026-11-07. R1 done and merged to `main` on 2026-11-07 (the split and the naming in standard terms; checked locally, the dev-box `tools/check.sh` runs in R8 per AGENTS.md) (its ledger entries are in `$DOPPLERTRACK_DATA/runs/2026-11-07-readiness-ledger/`). R2 done and merged to `main` on 2026-11-09
-(checked locally, synthetic outputs equal R1's apart from the new keys; ledger entries 14–21). R3–R9 not started. This is the first of two plans. No research in
+(checked locally, synthetic outputs equal R1's apart from the new keys; ledger entries 14–21). R3 done on 2026-11-09 on branch
+`claude/stage-r3-9c4730`, not yet merged (checked locally; no output changes, ledger section R3; a full `bench run --revision` case at a
+pre-R3 commit is left for R8, its CLI start is checked). R4–R9 not started. This is the first of two plans. No research in
 [PLAN.md](../../PLAN.md) starts until every exit check in §5 passes. Implementation is authorized by the owner's
 implementation instruction; status changes are recorded here only.
 
@@ -180,7 +182,7 @@ Finished when:
 
 Delete the top-level alias modules (`dopplertrack.tracks`, `.score`, `.search` and the rest), the
 `sys.modules` redirects, the `bench/` module shims (keeping `python -m bench` as the entry point),
-[refactor-module-map.json](../refactor-module-map.json) and the alias and pickle tests in `tests/test_layout.py`.
+`docs/refactor-module-map.json` (its table is kept in [layout.md](../layout.md)) and the alias and pickle tests in `tests/test_layout.py`.
 Update the remaining internal users. After R2, `evaluation/tier1.py`, `prepare.py`, `report.py`, `private.py`,
 `cases.py` and `runner.py` still import legacy module paths, and so do 38 files in `tests/`, `bench/` and `tools/`
 (dated experiments excepted). R1 already re-pointed the aliases at its renamed modules, so a legacy name that R1

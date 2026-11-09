@@ -3,7 +3,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from dopplertrack import pipeline, search
+from dopplertrack.methods.grid_pair import pipeline
+from dopplertrack.components.search import grid as search
 from dopplertrack.components.scoring.curve_integral import EventWindow
 from dopplertrack.components.types import EventFit
 import dopplertrack.components.search.types as search_types

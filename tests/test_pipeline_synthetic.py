@@ -2,9 +2,12 @@
 and a small grid. The true observer must rank first."""
 import numpy as np
 
-from dopplertrack import doppler, search, score, tracks
-from dopplertrack.adsb import Trace
-from dopplertrack.geo import enu_to_lla
+from dopplertrack.core import propagation as doppler
+from dopplertrack.components.search import grid as search
+from dopplertrack.components.scoring import trajectory_score as score
+from dopplertrack.components.detection import grid_scan as tracks
+from dopplertrack.data.trajectories import Trace
+from dopplertrack.core.geometry import enu_to_lla
 import dopplertrack.components.search.cpa_table as cpa_table
 import dopplertrack.components.scoring.curve_integral as curve_brightness
 import dopplertrack.components.detection.event_fit as event_fit
@@ -86,7 +89,7 @@ def test_true_observer_ranks_first(monkeypatch):
     # refine around the winner with event 2 passed again as an "extra" event: pick_flight must
     # choose flight 2, and its locked score must equal s2 at every fine point
     import pandas as pd
-    from dopplertrack import pipeline
+    from dopplertrack.methods.grid_pair import pipeline
     p = pairs[pairs.gidx == best_g].iloc[0]
     tot, s1, s2, sh = score.custom_locked_score(w1, w2, segs[int(p.seg1)], segs[int(p.seg2)], grid.enu[best_g], float(p.t_heard1), c=c)
     row = pd.Series({"lat": grid.lat[best_g], "lon": grid.lon[best_g], "seg1": int(p.seg1), "seg2": int(p.seg2), "icao1": "aaa001", "icao2": "aaa002",

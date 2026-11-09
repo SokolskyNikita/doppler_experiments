@@ -7,9 +7,11 @@ import pandas as pd
 import pytest
 from PIL import Image
 
-from dopplertrack import pipeline, search, terrain
-from dopplertrack.adsb import Trace
-from dopplertrack.geo import enu_to_lla
+from dopplertrack.methods.grid_pair import pipeline
+from dopplertrack.components.search import grid as search
+from dopplertrack.data import terrain
+from dopplertrack.data.trajectories import Trace
+from dopplertrack.core.geometry import enu_to_lla
 import dopplertrack.components.search.cpa_storage as cpa_storage
 import dopplertrack.components.search.cpa_table as cpa_table
 import dopplertrack.components.search.segments as segments
@@ -116,7 +118,7 @@ def _reachable(roots, modules):
 
 
 def test_the_detector_code_key_lists_everything_detect_and_fit_can_reach():
-    from dopplertrack.cache import DETECTOR_CODE
+    from dopplertrack.runtime.cache import DETECTOR_CODE
     reach = _reachable([("dopplertrack.components.detection.grid_scan", "detect_events"),
                         ("dopplertrack.components.detection.event_fit", "fit_event")],
                        list(DETECTOR_CODE))
@@ -128,7 +130,7 @@ def test_the_detector_code_key_lists_everything_detect_and_fit_can_reach():
 def test_the_code_key_ignores_docstrings_and_messages_but_not_code_or_constants(tmp_path, monkeypatch):
     import importlib
     import sys
-    from dopplertrack.cache import code_sha256
+    from dopplertrack.runtime.cache import code_sha256
     monkeypatch.syspath_prepend(str(tmp_path))
 
     def key(src):
@@ -140,35 +142,3 @@ def test_the_code_key_ignores_docstrings_and_messages_but_not_code_or_constants(
     assert key('K = 2\n\ndef f(x):\n    """Another doc."""\n    if x < 0:\n        raise ValueError(f"x must be >= 0, got {x}")\n    return K * x  # a comment\n') == base
     assert key('K = 2\n\ndef f(x):\n    """Doc."""\n    if x < 0:\n        raise ValueError(f"bad {x}")\n    return K * x + 1\n') != base
     assert key('K = 3\n\ndef f(x):\n    """Doc."""\n    if x < 0:\n        raise ValueError(f"bad {x}")\n    return K * x\n') != base
-
-
-def test_source_hash_of_compatibility_alias_is_stable_before_import(tmp_path, monkeypatch):
-    import hashlib
-    import importlib
-    import sys
-    from dopplertrack.cache import source_sha256
-
-    package = tmp_path / "hash_alias_fixture"
-    package.mkdir()
-    (package / "__init__.py").write_text("")
-    implementation = package / "implementation.py"
-    implementation.write_text("VALUE = 1\ndef f():\n    return VALUE\n")
-    (package / "legacy.py").write_text(
-        '"""Compatibility alias; implementation: hash_alias_fixture.implementation."""\n'
-        "import importlib\nimport sys\n"
-        "sys.modules[__name__] = importlib.import_module('hash_alias_fixture.implementation')\n"
-    )
-    monkeypatch.syspath_prepend(str(tmp_path))
-    importlib.invalidate_caches()
-
-    before_import = source_sha256("hash_alias_fixture.legacy")
-    from dopplertrack.cache import code_sha256
-    before_code = code_sha256({"hash_alias_fixture.legacy": ("f",)})
-    expected = hashlib.sha256(b"hash_alias_fixture.legacy;" + implementation.read_bytes()).hexdigest()
-    importlib.import_module("hash_alias_fixture.legacy")
-    after_import = source_sha256("hash_alias_fixture.legacy")
-    after_code = code_sha256({"hash_alias_fixture.legacy": ("f",)})
-    assert before_import == after_import == expected
-    assert before_code == after_code
-    for name in ("hash_alias_fixture.legacy", "hash_alias_fixture.implementation"):
-        sys.modules.pop(name, None)

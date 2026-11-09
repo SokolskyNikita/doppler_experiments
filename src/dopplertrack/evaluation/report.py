@@ -21,7 +21,7 @@ def report_run(run_dir: Path, case_ids: list[str] | None = None, out_dir: Path |
     """Render each case's result.json in run_dir (all of them, or case_ids) into out_dir/<case>/ (default: a new
     run folder), then out_dir/index.html. A case whose page fails is listed in the index with the error, and the
     others still render."""
-    from dopplertrack.report import render_index, render_report
+    from dopplertrack.reporting.html import render_index, render_report
 
     from .runner import new_run
     doc = load_cases()

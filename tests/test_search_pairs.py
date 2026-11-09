@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-from dopplertrack import search
+from dopplertrack.components.search import grid as search
 import dopplertrack.components.search.cpa_storage as cpa_storage
 import dopplertrack.components.search.cpa_table as cpa_table
 import dopplertrack.components.search.pair_gate as pair_gate
@@ -62,7 +62,7 @@ def test_cpa_cache_roundtrip(tmp_path):
 
 
 def test_run_search_reports_stage_timings_and_funnel(monkeypatch):
-    from dopplertrack import pipeline
+    from dopplertrack.methods.grid_pair import pipeline
     from dopplertrack.components.types import EventFit
     cpa = _cpa([(0, 1, 0, 1000.0, 3000, 100), (0, 2, 0, 1918.0, 3000, 100),
                 (1, 1, 0, 1000.0, 3000, 100), (1, 2, 0, 1918.0, 3000, 100), (1, 3, 0, 1500.0, 500, 100)])

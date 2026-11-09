@@ -1,9 +1,9 @@
-"""Emission-time resampling (dopplertrack.warp): the interpolator's floor on a synthetic flyover, the
+"""Emission-time resampling (dopplertrack.components.scoring.dedoppler_tone): the interpolator's floor on a synthetic flyover, the
 anti-alias filter, the refusal of geometries that would alias, and the tone path."""
 import numpy as np
 import pytest
 
-from dopplertrack import warp as W
+from dopplertrack.components.scoring import dedoppler_tone as W
 import dopplertrack.components.scoring.block_spectra as block_spectra
 import dopplertrack.components.scoring.dedoppler_warp as dedoppler_warp
 import dopplertrack.components.harmonic_sum as harmonic_pooling

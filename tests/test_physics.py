@@ -1,7 +1,8 @@
 import numpy as np
 import pytest
 
-from dopplertrack import doppler, geo
+from dopplertrack.core import propagation as doppler
+from dopplertrack.core import geometry as geo
 
 
 def test_enu_round_trip():

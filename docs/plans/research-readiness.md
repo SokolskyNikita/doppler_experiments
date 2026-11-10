@@ -129,8 +129,8 @@ Settings that become fields, by where they live today:
   (`coarse_sweep`, `fine_sweep`), the view crops (pad 40 s, 0.45–2.0 × f0), `MODE_SEPARATION_M`, `MAX_MODES`,
   `NULL_N`, `max_range_m`; and R5's mode-rule settings.
 
-Plumbing constants (`SCORE_CHUNK`, `CHUNK`, `CPA_TILE_M`, `CPA_COLUMNS`, `CPA_CACHE_VERSION`, `STATISTIC`) stay
-constants. A setting found later that changes a result is added to its dataclass in the same way.
+Plumbing constants (`SCORE_CHUNK`, `CHUNK`, `CPA_TILE_M`, `CPA_COLUMNS`, `STATISTIC`, and `CPA_CACHE_VERSION` until
+R4 deletes it) stay constants. A setting found later that changes a result is added to its dataclass in the same way.
 
 **Method choices.** A choice is a field holding a name, looked up in a small dict in the recipe module. Seams go
 only where two methods exist today or where PLAN.md's next gates need one. Each dict holds today's choice as its
@@ -205,19 +205,61 @@ and `bench run --revision` at a pre-R3 commit all work, and `docs/architecture.m
 
 ### R4. Cache identity per method
 
-The detection cache key is an AST hash over a hand-maintained list of definitions in `runtime/cache.py`
-(`DETECTOR_CODE`, nine modules since R1). The spectrogram cache hashes the six modules listed by hand in
-`components/spectrogram_cache.py` (`SPECTROGRAM_MODULES`). The CPA table has no code hash and depends on a manual
-`CPA_CACHE_VERSION` bump (`components/search/cpa_storage.py`, version 2). R1 and R2 kept the two lists in step by
-hand. Since R2 the recipes pass every detection setting from the resolved parameters, so the detection key already
-covers them (ledger entry 14); what remains is the hand-kept code lists and the CPA table's manual version.
+Four caches hold derived results, and each identifies its producer's code differently:
 
-Key each cache by the source of the method files its producer uses, plus resolved parameters and input hashes,
-declared next to the producer. Give the CPA table the same kind of key. Keep the existing test that checks the
-key covers everything the producer can reach.
+| Cache | Producer | Code in the key today |
+|---|---|---|
+| Spectrogram (`components/spectrogram_cache.py`) | `spectrogram_from_files` | the raw bytes of six modules listed by hand (`SPECTROGRAM_MODULES`) |
+| Detections (`runtime/cache.py`) | `detect_events` | an AST hash, docstrings and messages removed, of definitions listed by hand (`DETECTOR_CODE`, nine modules since R1) |
+| Window fits (`evaluation/tier1.py`, kind `window_fits`) | `fit_event` | `DETECTOR_CODE` again, under the legacy label `tracks.fit_event` |
+| CPA table (`components/search/cpa_storage.py`) | `cpa_table` | none: a manual `CPA_CACHE_VERSION` (2) |
 
-Finished when moving or editing a method file invalidates exactly the caches that use it, and the CPA table no
-longer needs a manual version bump.
+R1 and R2 kept the two lists in step by hand. Since R2 the recipes pass every detection setting from the resolved
+parameters, so the detection key already covers them (ledger entry 14). What remains is the code part of each key:
+the hand-kept lists, the two ways of hashing a file, and the CPA table's manual version. The test that guards
+`DETECTOR_CODE` traces only inside the modules the list already names, so a detector that starts importing a new
+module passes it with a stale key; the other three caches have no such test.
+
+One rule replaces all four, in `runtime/cache.py`:
+
+- **The files are derived, not listed.** A producer's code is every `dopplertrack` module its own module imports,
+  directly or through another, counting imports inside functions and relative ones, found by reading the source
+  without importing it. `dopplertrack.runtime` is left out: it is plumbing (pools, paths, the cache itself) and no
+  result may depend on it, which R7's serial-against-parallel tests check. Today this gives the nine detector
+  modules and the five a spectrogram build runs, the same files the hand lists name, and six for the CPA table. The
+  walk starts at the producer that is actually passed (`cached_detections`'s `produce`, `cached_cpa_table`'s
+  `build`), so a variant producer gets its own code in its key. `cached_spectrogram` also starts it at its own
+  module, because that entry point fills in the build's defaults (ledger entry 13).
+- **One way to hash a file.** Each file contributes its module name and its whole AST with docstrings and the
+  messages of `raise` and `warnings.warn` removed (the existing `_without_text`). A comment, docstring or message
+  edit keeps every entry; any other edit to a file rebuilds the caches whose producer imports it. This is coarser
+  than today's per-definition detection key: an edit to an unrelated definition in a shared file such as
+  `components/types.py` rebuilds detections too. With one method per file that is accepted.
+- **The rest of a key is unchanged in kind:** input hashes, the resolved parameters, the producer's qualified name,
+  and the library versions that can change the result. The Python minor version joins them, since an AST dump
+  differs between versions.
+- **CPA table.** `cpa_fingerprint` gains the code hash of the builder passed and the numpy, scipy and pandas
+  versions, and `CPA_CACHE_VERSION` is deleted. The table stays at its explicit `--cpa-cache` path with the
+  fingerprint stored in the file; a mismatch rebuilds and replaces it, as now. `workers` stays out of the key: R5
+  makes `jobs=1` and `jobs=N` build the same table.
+- **Window fits** are keyed on `fit_event`'s own derived code, under its current name.
+
+`DETECTOR_CODE`, the unused `DETECTOR_MODULES`, `SPECTROGRAM_MODULES` and the per-definition `code_sha256` go, with
+the test that guards the list. Tests replace it:
+
+- on a small package written to a temporary folder: a code edit to an imported file changes the key; a docstring,
+  comment or message edit does not; an edit to a file the producer does not import does not; a new import, at
+  module level or inside a function, brings its file into the key; a `runtime` import does not;
+- for each real producer, its derived files include a module it reaches only through another (`doppler_curve` for
+  detections, `core.geometry` for the CPA table), so the walk is known to follow imports in the package itself;
+- a CPA table saved under one builder's code is a miss after that code changes.
+
+Every key changes, so all four caches rebuild once and the detection keys recorded in results change; values do
+not. That is one ledger entry. Update the cache table and the manual-bump paragraph in
+[architecture.md](../architecture.md) and the module docstring of `runtime/cache.py`.
+
+Finished when no cache key depends on a hand-kept code list or a manual version, the tests above pass, and the
+synthetic outputs equal R3's apart from the recorded keys.
 
 ### R5. Fix the known defects
 
@@ -329,7 +371,8 @@ and remove the marker; it is not an accuracy result.
 Research may start when all of these hold:
 
 1. R1–R3: no file holds two methods; methods are named and described in standard terms; both recipes are compositions with a parameters dataclass; no legacy imports.
-2. R4: caches are keyed per method and parameters; the CPA table has a code-derived key.
+2. R4: every cache key is derived from its producer's code, parameters and inputs; no hand-kept code list or manual
+   version remains.
 3. R5: every listed defect is fixed and tested.
 4. R6: the study runner runs baseline, variants and controls with complete accounting, locally and on the fleet.
 5. R7: the known-answer tests pass.

@@ -130,22 +130,33 @@ also supported. Keep caches outside the repository. Cache policies differ:
 
 | Artifact | Key/invalidation | Storage and recovery |
 |---|---|---|
-| Spectrogram, `components.spectrogram_cache.cached_spectrogram` | File names, SHA-256 and offsets; start, snap, sample rate, filled-in STFT parameters; whole source of the modules in `SPECTROGRAM_MODULES`; ffmpeg/numpy/scipy versions | `runtime.cache.cached` joblib entry, per-key file lock; bad entries rebuilt |
-| Detections, `runtime.cache.cached_detections` | Spectrogram t/f/power/mask/start; supplied detector parameters except workers/progress; producer name; selected executable AST definitions and referenced constants in the modules `DETECTOR_CODE` lists; numpy/scipy versions | Same joblib/lock path; CLI detect and locate call it |
-| CPA, `methods.grid_pair.pipeline.cached_cpa_table` | Grid coordinates/elevations/ENU and origin; segments' ICAO/times/positions/speeds; range, sound speed, optional ground temperature, `CPA_CACHE_VERSION` | Explicit NPZ path, atomic replacement, `<path>.lock` via fcntl; unreadable/mismatched file is a miss |
+| Spectrogram, `components.spectrogram_cache.cached_spectrogram` | File names, SHA-256 and offsets; start, snap, sample rate, filled-in STFT parameters; producer name and derived code of `spectrogram_from_files` and of the entry point's own module; ffmpeg/Python/numpy/scipy versions | `runtime.cache.cached` joblib entry, per-key file lock; bad entries rebuilt |
+| Detections, `runtime.cache.cached_detections` | Spectrogram t/f/power/mask/start; supplied detector parameters except workers/progress; name and derived code of the producer passed; Python/numpy/scipy versions | Same joblib/lock path; CLI detect and locate call it |
+| Window fits, `evaluation.tier1._fit_window` (kind `window_fits`) | Crop contents; window, band, objective; name and derived code of `fit_event`; Python/numpy/scipy versions | Same joblib/lock path |
+| CPA, `runtime.cpa_cache.cached_cpa_table` | Grid coordinates/elevations/ENU and origin; segments' ICAO/times/positions/speeds; range, sound speed, optional ground temperature; name and derived code of the builder passed; Python/numpy/scipy/pandas versions; not the number of workers | Explicit NPZ path, atomic replacement, `<path>.lock` via fcntl; unreadable/mismatched file is a miss |
 | Terrarium terrain | Zoom/tile coordinates; no content/code/version hash | Atomic tile downloads, corrupt images fetched again, in-process memory cache; no per-tile lock |
 | Aircraft types, `data.aircraft_types.AircraftTypes` | Existing file, no freshness/content/version check | Download-once CSV; no equivalent lock/atomic-repair policy |
 
-The detection key intentionally ignores docstrings and error/warning messages, rather than hashing whole modules.
-`tests/test_cache.py` checks the selected dependency list and AST key. Supplied parameter dictionaries are not
-normalized to filled-in detector defaults. Equivalent calls can therefore occupy different entries.
-The CPA key has no automatic source/library hash: **bump `CPA_CACHE_VERSION` when construction changes output for
-the same inputs**. Give input combinations separate files to avoid repeated rebuilds when alternating them.
+The four derived caches identify their producer's code by one rule, `runtime.cache.code_sha256`. The files are
+derived, not listed: the producer's own module and every `dopplertrack` module it imports, directly or through
+another, counting imports inside functions and relative ones, read from source without importing anything
+(`runtime.cache.code_modules`). `dopplertrack.runtime` is left out: it is plumbing (pools, paths, the cache) and no
+result may depend on it. Each file counts as its module name and its whole AST less docstrings and the messages of
+`raise` and `warnings.warn`. A comment, docstring or message edit therefore keeps every entry, and any other edit
+to a file rebuilds the caches whose producer imports it, including an edit to an unrelated definition in a shared
+file such as `components/types.py`. The walk starts at the producer that is actually passed, so a variant detector
+or table builder has its own key. There is no code list to keep in step and no version to bump.
+[tests/test_artefact_cache.py](../tests/test_artefact_cache.py) checks the rule on a small package and on each
+real producer; [tests/test_cache.py](../tests/test_cache.py) checks that a CPA table is a miss after its builder's
+code changes. Supplied parameter dictionaries are not normalized to filled-in detector defaults, so equivalent
+calls can occupy different entries; the recipes pass every detection setting from their resolved parameters.
+A CPA table stays at its explicit path with the fingerprint stored in the file; a mismatch rebuilds and replaces
+it. Give input combinations separate files to avoid repeated rebuilds when alternating them.
 Where fcntl is unavailable, the CPA lock is a no-op; atomic replacement still prevents partial-table reads.
 
 `runtime.cache.cached(kind, parts, produce)` uses canonical JSON (arrays represented by hashes) to identify entries.
-The stored description is checked on load. Callers must describe all semantic dependencies in `parts`; the helper
-does not discover them. [tests/test_artefact_cache.py](../tests/test_artefact_cache.py) covers content/parameter
+The stored description is checked on load. Callers must describe all semantic dependencies in `parts`: inputs,
+parameters, `producer_name`, `code_sha256` and `versions`. The helper discovers the code, not the rest. [tests/test_artefact_cache.py](../tests/test_artefact_cache.py) covers content/parameter
 misses, corrupt entries, concurrent builders and spectrogram equality. These policies do not make a cached
 experimental statistic scientifically accepted.
 

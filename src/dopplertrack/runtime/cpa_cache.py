@@ -31,12 +31,13 @@ def _file_lock(path):
 
 def cached_cpa_table(grid: Grid, segs: list[Segment], max_range_m: float, c: float, path=None,
                      workers: int | None = None, temperature_c: float | None = None, *, build=None) -> pd.DataFrame:
-    """cpa_table(), reusing the table saved at `path` if it was built from identical inputs (cpa_fingerprint).
+    """build() (cpa_table unless another builder is passed), reusing the table saved at `path` if it was built
+    from identical inputs by the same code (cpa_fingerprint, which hashes the code of the builder passed).
     A lock file next to it makes a second process wait for the first instead of computing the same table."""
     build = cpa_table if build is None else build
     if not path:
         return build(grid, segs, max_range_m=max_range_m, c=c, workers=workers, temperature_c=temperature_c)
-    fp = cpa_fingerprint(grid, segs, max_range_m, c, temperature_c)
+    fp = cpa_fingerprint(grid, segs, max_range_m, c, temperature_c, build)
     with _file_lock(f"{path}.lock"):
         if os.path.exists(path):
             cpa = load_cpa_table(path, fp)

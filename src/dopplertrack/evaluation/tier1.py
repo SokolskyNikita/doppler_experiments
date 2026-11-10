@@ -162,10 +162,8 @@ def _set_fit_crop(crop, crop_sha256):
 
 def _fit_window(task) -> dict:
     """One labelled line fitted in its window and band; a line the fitter can't follow is a missing fit. Cached
-    on the crop's contents, the window, the band, the objective and fit_event's source, under the cache rules."""
-    import scipy
-
-    from dopplertrack.runtime.cache import DETECTOR_CODE, cached, code_sha256
+    on the crop's contents, the window, the band, the objective and fit_event's code, under the cache rules."""
+    from dopplertrack.runtime.cache import cached, code_sha256, producer_name, versions
     from dopplertrack.components.detection.event_fit import fit_event
     window, line, t0, t1, lo, hi, objective = task
 
@@ -175,8 +173,8 @@ def _fit_window(task) -> dict:
         except Exception as exc:
             return unavailable(f"{type(exc).__name__}: {exc}")
     parts = {"spectrogram": _FIT_CROP["sha256"], "window_s": [t0, t1], "band_hz": [lo, hi], "objective": objective,
-             "producer": "tracks.fit_event", "code": code_sha256(DETECTOR_CODE),
-             "versions": {"numpy": np.__version__, "scipy": scipy.__version__}}
+             "producer": producer_name(fit_event), "code": code_sha256(fit_event),
+             "versions": versions("numpy", "scipy")}
     fit = cached("window_fits", parts, produce)
     if "unavailable" not in fit and fit.get("weak"):
         fit = unavailable(f"fit_event's weak fit: {fit['weak']}")

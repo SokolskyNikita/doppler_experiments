@@ -1,4 +1,4 @@
-"""CPA table storage: the fingerprint of its inputs, and atomic save and checked load."""
+"""CPA table storage: the fingerprint of its inputs and its builder's code, and atomic save and checked load."""
 from __future__ import annotations
 
 import hashlib
@@ -10,21 +10,23 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from dopplertrack.components.search.cpa_table import CPA_COLUMNS
+from dopplertrack.components.search.cpa_table import CPA_COLUMNS, cpa_table
 from dopplertrack.components.search.grid import Grid
 from dopplertrack.components.search.types import Segment
 
-CPA_CACHE_VERSION = 2      # bump when cpa_table's output changes for the same inputs (2: tied positions)
-
 
 def cpa_fingerprint(grid: Grid, segs: list[Segment], max_range_m: float, c: float,
-                    temperature_c: float | None = None) -> str:
-    """SHA-256 of everything cpa_table depends on: the grid's coordinates and elevations, every segment's
+                    temperature_c: float | None = None, build=cpa_table) -> str:
+    """SHA-256 of everything a CPA table depends on: the grid's coordinates and elevations, every segment's
     times, positions and speeds, max_range, the speed of sound (and the ground temperature, when one sets
-    each CPA's own) and the format version. Changing any of them, e.g. running with and without a DEM,
-    changes the fingerprint even when no array changes size. Without a temperature it is as before."""
+    each CPA's own), the builder (`build`, cpa_table unless another is passed) with its code (cache.code_sha256),
+    and the Python, numpy, scipy and pandas versions. Changing any of them, e.g. running with and without a DEM
+    or editing the builder, changes the fingerprint even when no array changes size. The number of workers is
+    not part of it."""
+    from dopplertrack.runtime.cache import code_sha256, describe, producer_name, versions
     air = "" if temperature_c is None else f" ground {float(temperature_c)!r} C"
-    h = hashlib.sha256(f"cpa-table v{CPA_CACHE_VERSION} {float(max_range_m)!r} {float(c)!r}{air} "
+    code = f"{producer_name(build)} {code_sha256(build)} {describe(versions('numpy', 'scipy', 'pandas'))}"
+    h = hashlib.sha256(f"cpa-table {code} {float(max_range_m)!r} {float(c)!r}{air} "
                        f"{float(grid.lat0)!r} {float(grid.lon0)!r} {len(grid)} {len(segs)}".encode())
     for a in (grid.lat, grid.lon, grid.elev, grid.enu):
         h.update(np.ascontiguousarray(a, np.float64).tobytes())

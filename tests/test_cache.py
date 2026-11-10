@@ -1,5 +1,6 @@
 """CPA tables and terrain tiles are cached on disk and may be shared by several processes: a cached table
-must only be reused for identical inputs, and no reader may see a file that is still being written."""
+must only be reused for identical inputs and the same builder code, and no reader may see a file that is still
+being written. The rule that derives a producer's code is tested in test_artefact_cache.py."""
 import io
 
 import numpy as np
@@ -87,58 +88,38 @@ def test_unreadable_tile_is_fetched_again(tmp_path, monkeypatch):
     assert [p.name for p in t.cache.iterdir()] == ["1_2.png"]
 
 
-def _reachable(roots, modules):
-    """(module, name) of every top-level definition in `modules` that the roots can reach, by following each name a
-    definition reads to a definition of its own module or to one imported from another listed module."""
-    import ast
-    import importlib.util
-    from pathlib import Path
-    trees = {m: ast.parse(Path(importlib.util.find_spec(m).origin).read_text()) for m in modules}
-    defs = {m: {n.name: n for n in t.body if isinstance(n, (ast.FunctionDef, ast.ClassDef))} for m, t in trees.items()}
-    imports = {m: {} for m in modules}
-    for m, t in trees.items():
-        for n in t.body:
-            if isinstance(n, ast.ImportFrom) and n.level == 0 and (n.module or "").startswith("dopplertrack."):
-                src = n.module
-                for alias in n.names:
-                    imports[m][alias.asname or alias.name] = (src, alias.name)
-    seen, todo = set(), list(roots)
-    while todo:
-        m, name = todo.pop()
-        if (m, name) in seen or m not in defs or name not in defs[m]:
-            continue
-        seen.add((m, name))
-        for n in ast.walk(defs[m][name]):
-            if isinstance(n, ast.Name):
-                if n.id in defs[m]:
-                    todo.append((m, n.id))
-                elif n.id in imports[m]:
-                    todo.append(imports[m][n.id])
-    return seen
-
-
-def test_the_detector_code_key_lists_everything_detect_and_fit_can_reach():
-    from dopplertrack.runtime.cache import DETECTOR_CODE
-    reach = _reachable([("dopplertrack.components.detection.grid_scan", "detect_events"),
-                        ("dopplertrack.components.detection.event_fit", "fit_event")],
-                       list(DETECTOR_CODE))
-    listed = {(m, n) for m, names in DETECTOR_CODE.items() for n in names}
-    assert ("dopplertrack.components.detection.grid_search", "grid_search") in reach     # the trace follows imports
-    assert reach <= listed, f"add to DETECTOR_CODE: {sorted(reach - listed)}"
-
-
-def test_the_code_key_ignores_docstrings_and_messages_but_not_code_or_constants(tmp_path, monkeypatch):
+def test_a_table_is_a_miss_after_its_builders_code_changes(tmp_path, monkeypatch):
     import importlib
     import sys
-    from dopplertrack.runtime.cache import code_sha256
+    from dopplertrack.runtime.cpa_cache import cached_cpa_table
+    source = ("from dopplertrack.components.search.cpa_table import cpa_table\n\nBUILT = []\n\n\n"
+              "def build(*a, **k):\n    BUILT.append(1)\n    return cpa_table(*a, **k)\n")
+    module = tmp_path / "kbuilder.py"
+    module.write_text(source)
     monkeypatch.syspath_prepend(str(tmp_path))
+    importlib.invalidate_caches()
+    kbuilder = importlib.import_module("kbuilder")
+    monkeypatch.delitem(sys.modules, "kbuilder")              # gone again after the test
+    sys.modules["kbuilder"] = kbuilder
+    path = tmp_path / "cpa.npz"
 
-    def key(src):
-        (tmp_path / "kmod.py").write_text(src)
-        importlib.invalidate_caches()
-        sys.modules.pop("kmod", None)
-        return code_sha256({"kmod": ("f",)})
-    base = key('K = 2\n\ndef f(x):\n    """Doc."""\n    if x < 0:\n        raise ValueError(f"bad {x}")\n    return K * x\n')
-    assert key('K = 2\n\ndef f(x):\n    """Another doc."""\n    if x < 0:\n        raise ValueError(f"x must be >= 0, got {x}")\n    return K * x  # a comment\n') == base
-    assert key('K = 2\n\ndef f(x):\n    """Doc."""\n    if x < 0:\n        raise ValueError(f"bad {x}")\n    return K * x + 1\n') != base
-    assert key('K = 3\n\ndef f(x):\n    """Doc."""\n    if x < 0:\n        raise ValueError(f"bad {x}")\n    return K * x\n') != base
+    def table():
+        return cached_cpa_table(*_setup(), 12000, 340.0, path, build=kbuilder.build)
+    first = table()
+    pd.testing.assert_frame_equal(table(), first)
+    assert len(kbuilder.BUILT) == 1
+    module.write_text(source.replace("def build", "# a comment\ndef build"))
+    table(); assert len(kbuilder.BUILT) == 1                  # the same code: still a hit
+    module.write_text(source.replace("BUILT.append(1)", "BUILT.append(2)"))
+    table(); assert len(kbuilder.BUILT) == 2                  # the builder's code changed: rebuilt and replaced
+    table(); assert len(kbuilder.BUILT) == 2
+    grid, segs = _setup()
+    assert cpa_storage.cpa_fingerprint(grid, segs, 12000, 340.0, build=kbuilder.build) != \
+        cpa_storage.cpa_fingerprint(grid, segs, 12000, 340.0)                       # another builder, another table
+
+
+def test_the_fingerprint_follows_the_library_versions(monkeypatch):
+    grid, segs = _setup()
+    fp = cpa_storage.cpa_fingerprint(grid, segs, 12000, 340.0)
+    monkeypatch.setattr(pd, "__version__", "0.0.0")
+    assert cpa_storage.cpa_fingerprint(grid, segs, 12000, 340.0) != fp

@@ -1,5 +1,6 @@
-"""The derived-artefact cache (dopplertrack.runtime.cache): keyed on contents and producer source, atomic,
-locked, and a damaged entry is a miss. The CPA table's own cache is tested in test_cache.py."""
+"""The derived-artefact cache (dopplertrack.runtime.cache): keyed on contents and on the producer's code, which is
+derived from its imports; atomic, locked, and a damaged entry is a miss. The CPA table's own cache is tested in
+test_cache.py."""
 import subprocess
 import sys
 
@@ -50,30 +51,146 @@ def test_truncated_entry_is_rebuilt(tmp_path):
     assert len(calls) == 2
 
 
-def _fake_detect(sp, f_lo, f_hi, top=10, workers=None, progress=None):
-    _fake_detect.calls += 1
-    return [("event", float(sp.S.sum()), f_lo, f_hi, top)]
+_DETECTOR = """THRESHOLD = 1
+CALLS = []
+
+
+def detect(sp, f_lo, f_hi, top=10, workers=None, progress=None):
+    CALLS.append(1)
+    return [("event", float(sp.S.sum()), f_lo, f_hi, top, THRESHOLD)]
+"""
 
 
 def test_detections_follow_spectrogram_params_and_detector_source(tmp_path, monkeypatch):
+    import importlib
     mod = tmp_path / "fake_detector_mod.py"
-    mod.write_text("THRESHOLD = 1\n\ndef detect():\n    return THRESHOLD\n")
+    mod.write_text(_DETECTOR)
     monkeypatch.syspath_prepend(str(tmp_path))
-    monkeypatch.setattr(cache, "DETECTOR_CODE", {"fake_detector_mod": ("detect",)})
-    _fake_detect.calls = 0
+    importlib.invalidate_caches()
+    fake = importlib.import_module("fake_detector_mod")
+    monkeypatch.delitem(sys.modules, "fake_detector_mod")     # gone again after the test
+    sys.modules["fake_detector_mod"] = fake
     sp = Spectrogram(np.arange(5) * 0.5, np.array([50.0, 51.0]), np.ones((2, 5), np.float32))
 
     def detect(sp, **kw):
-        return cache.cached_detections(sp, _fake_detect, root=tmp_path / "c", f_lo=60, f_hi=300, **kw)
+        return cache.cached_detections(sp, fake.detect, root=tmp_path / "c", f_lo=60, f_hi=300, **kw)
 
     first = detect(sp)
-    assert detect(sp, workers=4, progress=print) == first and _fake_detect.calls == 1   # how, not what
-    detect(sp, top=5); assert _fake_detect.calls == 2
+    assert detect(sp, workers=4, progress=print) == first and len(fake.CALLS) == 1      # how, not what
+    detect(sp, top=5); assert len(fake.CALLS) == 2
     other = Spectrogram(sp.t, sp.f, sp.S, np.array([1, 1, 0, 1, 1], bool))              # only the mask differs
-    detect(other); assert _fake_detect.calls == 3
-    mod.write_text("THRESHOLD = 2\n\ndef detect():\n    return THRESHOLD\n")             # a constant the detector reads changes
-    detect(sp); assert _fake_detect.calls == 4
-    detect(sp); assert _fake_detect.calls == 4
+    detect(other); assert len(fake.CALLS) == 3
+    mod.write_text(_DETECTOR.replace("THRESHOLD = 1", "THRESHOLD = 2"))                 # the producer passed is the code keyed
+    detect(sp); assert len(fake.CALLS) == 4
+    detect(sp); assert len(fake.CALLS) == 4
+    key = cache.detection_key(sp, fake.detect, f_lo=60, f_hi=300)
+    monkeypatch.setattr(cache.sys, "version_info", (3, 99, 0))                          # an AST dump differs between Pythons
+    assert cache.detection_key(sp, fake.detect, f_lo=60, f_hi=300) != key
+
+
+# ---- a producer's code: derived from its imports, not listed ----------------------------------------------------
+
+_PACKAGE = {
+    "__init__.py": "",
+    "produce.py": ("from kpkg.method import step\nfrom kpkg.runtime import pool\n\n\n"
+                   'def produce(x):\n    """Doc."""\n    if x < 0:\n        raise ValueError(f"bad {x}")\n'
+                   "    return step(x) if pool.WORKERS else None\n"),
+    "method.py": "from . import constants\n\n\ndef step(x):\n    return constants.K * x\n",      # a relative import
+    "constants.py": "K = 2\n",
+    "extra.py": "E = 1\n",
+    "unused.py": "Z = 1\n",
+    "runtime/__init__.py": "",
+    "runtime/pool.py": "WORKERS = 1\n",
+}
+
+
+@pytest.fixture
+def package(tmp_path, monkeypatch):
+    """A small package, kpkg, on sys.path and never imported. write(file, source) edits one of its files;
+    key() and modules() are its producer's code hash and derived files."""
+    import importlib
+    import types
+    root = tmp_path / "kpkg"
+
+    def write(name, source):
+        (root / name).parent.mkdir(parents=True, exist_ok=True)
+        (root / name).write_text(source)
+    for name, source in _PACKAGE.items():
+        write(name, source)
+    monkeypatch.syspath_prepend(str(tmp_path))
+    importlib.invalidate_caches()
+    yield types.SimpleNamespace(write=write, key=lambda: cache.code_sha256("kpkg.produce"),
+                                modules=lambda: set(cache.code_modules("kpkg.produce")))
+    assert "kpkg" not in sys.modules                                    # read from source, never imported
+
+
+def test_a_producers_code_is_what_its_module_imports_without_the_runtime(package):
+    assert package.modules() == {"kpkg.produce", "kpkg.method", "kpkg.constants"}
+
+
+def test_a_code_edit_to_an_imported_file_changes_the_key(package):
+    base = package.key()
+    package.write("constants.py", "K = 3\n")                            # reached through method.py only
+    changed = package.key()
+    assert changed != base
+    package.write("method.py", _PACKAGE["method.py"].replace("constants.K * x", "constants.K * x + 1"))
+    assert package.key() not in (base, changed)
+
+
+def test_docstring_comment_and_message_edits_keep_the_key(package):
+    base = package.key()
+    package.write("produce.py", _PACKAGE["produce.py"].replace('"""Doc."""', '"""Another doc."""  # and a comment')
+                  .replace('f"bad {x}"', 'f"x must be >= 0, got {x}"'))
+    package.write("constants.py", '"""The constants."""\nK = 2  # the gain\n')
+    assert package.key() == base
+
+
+def test_files_the_producer_does_not_import_stay_out_of_the_key(package):
+    base = package.key()
+    package.write("unused.py", "Z = 2\n")
+    package.write("runtime/pool.py", "WORKERS = 8\n")                   # imported, but plumbing
+    assert package.key() == base
+
+
+@pytest.mark.parametrize("file, old, new", [
+    ("method.py", "from . import constants\n", "from . import constants\nimport kpkg.extra\n"),                # module level
+    ("produce.py", '    """Doc."""\n', '    """Doc."""\n    from kpkg import extra\n'),                          # in a function
+    ("produce.py", '    """Doc."""\n', '    """Doc."""\n    from .extra import E\n'),                            # relative, a name
+])
+def test_a_new_import_brings_its_file_into_the_key(package, file, old, new):
+    assert "kpkg.extra" not in package.modules()
+    package.write(file, _PACKAGE[file].replace(old, new))
+    assert package.modules() == {"kpkg.produce", "kpkg.method", "kpkg.constants", "kpkg.extra"}
+    with_import = package.key()
+    package.write("extra.py", "E = 2\n")
+    assert package.key() != with_import
+
+
+def test_a_callable_producer_is_keyed_on_its_own_module_and_a_sourceless_one_is_refused():
+    import functools
+    from dopplertrack.components.detection.grid_scan import detect_events
+    by_name = cache.code_sha256("dopplertrack.components.detection.grid_scan")
+    assert cache.code_sha256(detect_events) == by_name == cache.code_sha256(functools.partial(detect_events, top=3))
+    assert cache.producer_name(functools.partial(detect_events, top=3)) == \
+        "dopplertrack.components.detection.grid_scan.detect_events"
+    with pytest.raises(ValueError, match="no source file"):
+        cache.code_sha256(len)
+
+
+def test_each_real_producers_code_follows_imports_through_other_modules():
+    from dopplertrack.components.detection.event_fit import fit_event
+    from dopplertrack.components.detection.grid_scan import detect_events
+    from dopplertrack.components.search.cpa_table import cpa_table
+    detect, fit, cpa = (set(cache.code_modules(f)) for f in (detect_events, fit_event, cpa_table))
+    spectrogram = set(cache.code_modules(stft.spectrogram_from_files, spectrogram_cache.__name__))
+    # each reached only through another module: grid_scan and event_fit don't import doppler_curve, cpa_table doesn't
+    # import geometry, and spectrogram_cache doesn't import the whitenings
+    assert "dopplertrack.components.detection.doppler_curve" in detect & fit
+    assert "dopplertrack.components.detection.grid_scan" in detect - fit
+    assert "dopplertrack.core.geometry" in cpa
+    assert {"dopplertrack.components.whitening.time_median", "dopplertrack.components.spectrogram_cache"} <= spectrogram
+    for modules in (detect, fit, cpa, spectrogram):
+        assert not [m for m in modules if m.startswith("dopplertrack.runtime")]     # pools are imported by two of them
 
 
 _CONTENDER = """

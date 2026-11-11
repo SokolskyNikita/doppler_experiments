@@ -4,7 +4,7 @@
 (checked locally, synthetic outputs equal R1's apart from the new keys; ledger entries 14–21). R3 done and merged to `main` on 2026-11-09
 (checked locally; no output changes, ledger section R3; a full `bench run --revision` case at a
 pre-R3 commit is left for R8, its CLI start is checked). R4 done and merged to `main` on 2026-11-09
-(checked locally; every cache key changes and no value does, ledger entry 22). R5 done on 2026-11-10
+(checked locally; every cache key changes and no value does, ledger entry 22). R5 done on 2026-11-10 and merged to `main` on 2026-11-11
 (checked locally; ledger entries 23–30; its section below is R5 as it landed, with the adjustments R1–R4 made
 necessary). R6–R9 not started. This is the first of two plans. No research in
 [PLAN.md](../../PLAN.md) starts until every exit check in §5 passes. Implementation is authorized by the owner's

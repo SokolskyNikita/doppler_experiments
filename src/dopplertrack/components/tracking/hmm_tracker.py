@@ -5,7 +5,8 @@ Each cell's power over the frame's noise level across frequency, z = P / sigma^2
 with a tone of per-cell SNR a; the cell's log-likelihood ratio is l(z; a) = -a + ln I0(2 sqrt(a z))
 (Kay 1998 Problem 7.22; Eddy 1980 eq. 14). On a grid of fundamentals, each observable harmonic h = 1..3 is present
 with prior q, so the frame's log-likelihood ratio for fundamental k is sum_h ln(1 - q + q e^l_h) (Eddy eq. 22).
-A hidden Markov model with OFF (Streit & Barrett's zero state), ON(k) and DIP(k) is decoded by forward-backward.
+A hidden Markov model with OFF (Streit & Barrett's zero state), ON(k) and DIP(k) is decoded by forward-backward
+(the default) or, with decoder="viterbi", by Viterbi with backtracking (hmm_viterbi.py).
 DIP, a tone still there but under the noise, is a fade state of our own (ours): S&B have only the zero state. A track
 is a run of frames whose posterior P(ON or DIP), S&B's gate occupancy probability, exceeds 0.5 and that holds an
 ON frame. Transitions per frame: birth OFF -> ON(k) at a rate per Hz per second, the end of a pass at dt/T_pass, into and out of a dip at dt/T_run and
@@ -24,11 +25,22 @@ import numpy as np
 from dopplertrack.components.spectrogram import Spectrogram
 from dopplertrack.components.tracking.forward_backward import posterior, runs
 from dopplertrack.components.tracking.hmm_tracker_params import HMMTrackerParams
+from dopplertrack.components.tracking.hmm_viterbi import viterbi_runs
 from dopplertrack.components.tracking.harmonic_llr import harmonic_llr, normalised_power
 from dopplertrack.components.tracking.frequency_estimators import refine
 from dopplertrack.components.tracking.harmonic_links import harmonic_groups, harmonic_links
 from dopplertrack.components.tracking.segment_rules import resolve_crossings
 from dopplertrack.components.tracking.types import EventTracks, SampleSTFT, Track, TrackParams
+
+
+def _posterior_argmax(E, valid, dt, step_hz, f0s, p: HMMTrackerParams):
+    g_on, g_dip, _ = posterior(E, valid, dt, step_hz, f0s, p)
+    return runs(g_on, g_dip)
+
+
+# The decoders, a method choice (HMMTrackerParams.decoder): the runs of frames a tone is held over, and its grid
+# index in each. posterior_argmax can step farther between frames than the transitions allow; viterbi cannot.
+DECODERS = {"posterior_argmax": _posterior_argmax, "viterbi": viterbi_runs}
 
 
 def _measure(win: Spectrogram, stft: SampleSTFT, k0: int, path: np.ndarray, f0s: np.ndarray, E: np.ndarray,
@@ -60,7 +72,10 @@ def _measure(win: Spectrogram, stft: SampleSTFT, k0: int, path: np.ndarray, f0s:
 def hmm_posterior_track(sp: Spectrogram, stft: SampleSTFT, t_start: float, t_end: float, f_lo: float, f_hi: float,
              p: HMMTrackerParams = HMMTrackerParams()) -> EventTracks:
     """Families of tracks whose fundamental lies in [f_lo, f_hi] between t_start and t_end; sp is whitened across
-    frequency."""
+    frequency. p.decoder picks the decoding (DECODERS)."""
+    if p.decoder not in DECODERS:
+        raise ValueError(f"decoder must be one of {sorted(DECODERS)}, not {p.decoder!r}")
+    decode = DECODERS[p.decoder]
     top = min(sp.f[-1], p.harmonics * f_hi + 2 * sp.df)
     win = sp.crop(t_start, t_end, max(f_lo - 2 * sp.df, sp.f[0]), top)
     z = normalised_power(win)
@@ -71,8 +86,7 @@ def hmm_posterior_track(sp: Spectrogram, stft: SampleSTFT, t_start: float, t_end
     tracks: list[Track] = []
     for _ in range(p.families):
         E = harmonic_llr(z, win.f, f0s, p, exclude=excl)
-        g_on, g_dip, _ = posterior(E, win.valid, dt, step, f0s, p)
-        found = [r for r in runs(g_on, g_dip) if win.t[r[1]] - win.t[r[0]] >= p.min_track_s]
+        found = [r for r in decode(E, win.valid, dt, step, f0s, p) if win.t[r[1]] - win.t[r[0]] >= p.min_track_s]
         if not found:
             break
         for k0, k1, path in found:

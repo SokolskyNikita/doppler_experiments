@@ -210,3 +210,21 @@ def test_the_clock_gate_counts_what_it_drops():
     out = clock_gate(res, 100.0, start_utc=900.0, start_tol_s=60.0, tol_s=resolve("locate").gates.time_gate_s)
     assert list(out.t_heard1) == [1000.0] and out.attrs["funnel"]["clock_gate"]["after"] == 1
     assert out.attrs["funnel"]["scored"] == 3
+
+
+def test_a_gap_between_the_flight_data_files_is_not_covered(monkeypatch, spec, tmp_path):
+    """Two files whose outer bounds span the day but leave DAY0 + 30000 to DAY0 + 50000 uncovered: the preflight used
+    to take the minimum start and the maximum end and pass."""
+    _detections(monkeypatch, [_event(1000, 5.0), _event(2000, 4.0)])
+    _search_returning(monkeypatch, DAY0 + 72000.0)
+    parts = [_traces(tmp_path, covered=[DAY0, DAY0 + 30000.0], name="a.npz"),
+             _traces(tmp_path, covered=[DAY0 + 50000.0, DAY0 + 86400.0], name="b.npz")]
+    out = _locate(spec, parts, tmp_path)
+    validate(out.record)
+    v, flight = out.record["verdict"], out.record["data_limitations"]["flight_data"]
+    assert v["reason_codes"] == ["flight_data_missing_time"] and "missing" in v["reasons"][0]
+    assert flight["covered_utc"] == [DAY0, DAY0 + 86400.0]
+    assert flight["covered_intervals_utc"] == [[DAY0, DAY0 + 30000.0], [DAY0 + 50000.0, DAY0 + 86400.0]]
+    assert flight["coverage_gaps_utc"] == [[DAY0 + 30000.0, DAY0 + 50000.0]]
+    whole = [_traces(tmp_path, covered=[DAY0, DAY0 + 50000.0], name="c.npz"), parts[1]]     # touching: one interval
+    assert _run(spec, whole, tmp_path / "2")["outcome"] == "ambiguous"

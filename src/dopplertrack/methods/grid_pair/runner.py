@@ -75,14 +75,15 @@ def _day_bounds(date: str) -> tuple[float, float]:
     return d.timestamp(), d.timestamp() + 86400.0
 
 
-def _covered_days(paths, metas: list[dict], traces, declared_date=None) -> tuple[float, float]:
-    """The UTC span the flight data declares it covers: each file's covered_utc if it states one, else the UTC day
-    of its archive (metadata date, or the archive folder's name), else declared_date for a file without metadata
-    whose envelope was declared, else the span of its traces' own times."""
+def _covered_days(paths, metas: list[dict], traces, declared_date=None) -> list[tuple[float, float]]:
+    """The UTC intervals the flight data declares it covers, earliest first: each file's covered_utc if it states one,
+    else the UTC day of its archive (metadata date, or the archive folder's name), else declared_date for a file
+    without metadata whose envelope was declared, else the span of its traces' own times. Intervals that touch or
+    overlap are one interval; separated ones stay apart, so a gap between two files' days is not counted as covered."""
     spans = []
     for p, m in zip(paths, metas):
         if m.get("covered_utc"):
-            spans.append(tuple(m["covered_utc"]))
+            spans.append(tuple(float(x) for x in m["covered_utc"]))
             continue
         day = m.get("date") or Path(str(m.get("archive_dir", ""))).name or (declared_date if not m else "")
         try:
@@ -91,9 +92,29 @@ def _covered_days(paths, metas: list[dict], traces, declared_date=None) -> tuple
             ts = [float(t.t[0]) for t in traces if len(t)] + [float(t.t[-1]) for t in traces if len(t)]
             if ts:
                 spans.append((min(ts), max(ts)))
-    if not spans:
-        return (np.inf, -np.inf)
-    return min(a for a, _ in spans), max(b for _, b in spans)
+    merged: list[tuple[float, float]] = []
+    for a, b in sorted(spans):
+        if merged and a <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], b))
+        else:
+            merged.append((a, b))
+    return merged
+
+
+def _coverage_gaps(covered: list[tuple[float, float]], need: tuple[float, float]) -> list[tuple[float, float]]:
+    """The parts of the needed span no interval covers, earliest first; empty when one interval holds all of it."""
+    gaps, at = [], need[0]
+    for a, b in covered:
+        if b <= at:
+            continue
+        if a >= need[1]:
+            break
+        if a > at:
+            gaps.append((at, a))
+        at = max(at, b)
+    if at < need[1]:
+        gaps.append((at, need[1]))
+    return gaps
 
 
 def _envelopes(metas, run: RunSettings):
@@ -277,7 +298,9 @@ def locate(spec_path, date: str, bbox, trace_paths, params: GridPairParameters |
         return finish("insufficient_evidence", ["flight_data_missing_box"],
                       [f"the flight data's envelope doesn't cover the box plus {g.max_range_m:g} m"])
     covered = _covered_days(paths, metas, traces, declared_date=date if run.envelope else None)
-    flight["covered_utc"] = list(covered)
+    # covered_utc keeps the outer bounds it has always held; the intervals and the gaps say what lies between them
+    flight["covered_utc"] = [covered[0][0], covered[-1][1]] if covered else [np.inf, -np.inf]
+    flight["covered_intervals_utc"] = [list(x) for x in covered]
     day0, day1 = _day_bounds(date)
     need_t, what = (day0 + es.day_slack_s, day1 - es.day_slack_s), f"the whole of {date}"
     if es.start_utc is not None:   # the clock gate keeps only clocks near the stated start: the data need cover just
@@ -285,9 +308,13 @@ def locate(spec_path, date: str, bbox, trace_paths, params: GridPairParameters |
         need_t = (max(es.start_utc + float(sp.t[0]) - pad, need_t[0]), min(es.start_utc + float(sp.t[-1]) + pad, need_t[1]))
         what = f"the recording at its stated start, {_iso(need_t[0])} to {_iso(need_t[1])}"
     flight["needed_utc"] = list(need_t)
-    if covered[0] > need_t[0] or covered[1] < need_t[1]:
+    gaps = _coverage_gaps(covered, need_t)
+    flight["coverage_gaps_utc"] = [list(x) for x in gaps]
+    if gaps:
+        has = ", ".join(f"{_iso(a)} to {_iso(b)}" for a, b in covered) or "no time"
         return finish("insufficient_evidence", ["flight_data_missing_time"],
-                      [f"the flight data covers {_iso(covered[0])} to {_iso(covered[1])}, not {what}"])
+                      [f"the flight data covers {has}, not {what}: missing "
+                       + ", ".join(f"{_iso(a)} to {_iso(b)}" for a, b in gaps)])
 
     # 3. the grid, then each pair rule's search
     elevation = Terrain().elevation if p.grid.dem else None
@@ -361,16 +388,23 @@ def locate(spec_path, date: str, bbox, trace_paths, params: GridPairParameters |
                     "t_emission_cpa": e["fit"]["t_emission_cpa_audio_s"] - off, "basis": "the top-ranked candidate's clock"}
     span = (float(sp.t[0]) - off, float(sp.t[-1]) - off)
     flight["recording_utc"] = list(span)
-    if span[1] > covered[1] + 1.0:
-        if covered[1] <= day1 + 1.0:
+    first, last = covered[0][0], covered[-1][1]
+    if span[1] > last + 1.0:
+        if last <= day1 + 1.0:
             return finish("insufficient_evidence", ["past_utc_midnight"],
                           [f"the matched clock puts the recording's end at {_iso(span[1])}, past UTC midnight; "
                            "rerun with --days 1 for the next day's flight data"])
         return finish("insufficient_evidence", ["flight_data_missing_time"],
                       [f"the matched clock puts the recording at {_iso(span[0])}–{_iso(span[1])}, past the flight data"])
-    if span[0] < covered[0] - 1.0:
+    if span[0] < first - 1.0:
         return finish("insufficient_evidence", ["flight_data_missing_time"],
                       [f"the matched clock puts the recording's start at {_iso(span[0])}, before the flight data"])
+    inside = _coverage_gaps(covered, (span[0] + 1.0, span[1] - 1.0))
+    if inside:
+        flight["coverage_gaps_utc"] = [list(x) for x in inside]
+        return finish("insufficient_evidence", ["flight_data_missing_time"],
+                      [f"the matched clock puts the recording at {_iso(span[0])}–{_iso(span[1])}, across a gap in the "
+                       "flight data: " + ", ".join(f"{_iso(a)} to {_iso(b)}" for a, b in inside)])
 
     # 5. refine the winner with the other usable flyovers it can place
     t0 = start()

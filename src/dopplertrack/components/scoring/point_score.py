@@ -9,20 +9,37 @@ import pandas as pd
 from dopplertrack.components.assignment.pass_window import AGREE_S, PASS_FALLBACK, greedy_assignment
 
 
+SPREAD_BINS = 2                # greedy_assignment spreads each match over this many clock bins either side
+
+
 def point_scores(scored: pd.DataFrame, n_windows: int, one_pass: bool = True, agree_s: float = AGREE_S,
-                 pass_fallback: int = PASS_FALLBACK, assign=greedy_assignment) -> pd.DataFrame:
+                 pass_fallback: int = PASS_FALLBACK, assign=greedy_assignment, clocks: int = 1) -> pd.DataFrame:
     """Z(x) = max over clocks of sum over windows of max(z, 0) (key Z), the windows' best clocks agreeing within
     +-AGREE_S: clocks are binned at AGREE_S / 2, and a window's z at a bin is its best within two bins either side.
     With one_pass (the design's section 1, enforced from the fourth step), a pass, a segment's CPA at the point,
     explains only its best window at a point and clock, by greedy assignment (Blackman & Popoli 1999 p. 46); a
     window whose best pass is taken falls back to its next (of pass_fallback). assign is the window-pass assignment
-    (greedy_assignment's signature)."""
+    (greedy_assignment's signature). With clocks > 1 a point keeps up to that many clocks, one row each: its best
+    bins by Z, each more than 2 * SPREAD_BINS bins from every better kept one, so that no two kept clocks share a
+    match."""
     per = assign(scored, one_pass, agree_s=agree_s, pass_fallback=pass_fallback)
     if not len(per):
         return pd.DataFrame(columns=["gidx", "Z", "b", "n_matched"])
     step = agree_s / 2
     tot = per.groupby(["gidx", "bin"]).agg(Z=("z", "sum"), n_matched=("w", "nunique")).reset_index()
-    top = tot.sort_values("Z", ascending=False).drop_duplicates("gidx")
+    top = tot.sort_values("Z", ascending=False)
+    if clocks == 1:
+        top = top.drop_duplicates("gidx")
+    else:
+        keep = []
+        for _, at in top.groupby("gidx", sort=False):
+            bins: list[int] = []
+            for i, k in zip(at.index, at["bin"].to_numpy()):
+                if all(abs(int(k) - q) > 2 * SPREAD_BINS for q in bins):
+                    bins.append(int(k)); keep.append(i)
+                if len(bins) == clocks:
+                    break
+        top = top.loc[keep].sort_values("Z", ascending=False, kind="stable")
     top["b"] = (top["bin"] + 0.5) * step
     return top[["gidx", "Z", "b", "n_matched"]].reset_index(drop=True)
 

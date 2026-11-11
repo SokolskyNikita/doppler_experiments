@@ -57,6 +57,9 @@ STATISTIC = "collective-Z-greedy-v1"
 # The collective recipe's method choices: the name in the parameters, and the method it selects.
 VIEWS = {"log_view": LogView, "event_window": EventWindowView}      # the curve integral each window scores a pass by
 ASSIGNMENTS = {"greedy_assignment": greedy_assignment}              # windows to passes; exact matching joins in G4
+# How a result merged from only_cells units takes its modes (merge.merge_units): the winning unit's own list, as the
+# dated merge took the best cell's record, or the mode rule applied again across every unit's list.
+MODE_MERGES = ("best_unit", "all_units")
 
 
 def _sweep(s: SweepParameters, params: CollectiveParameters) -> Sweep:
@@ -70,6 +73,32 @@ def _shown(sweep: Sweep) -> dict:
     return {f.name: getattr(sweep, f.name) for f in dataclasses.fields(sweep) if f.repr}
 
 
+def statistic_identity(params: CollectiveParameters) -> dict:
+    """What a collective Z is a value of: the statistic's name, the hash of the code that computes and merges it
+    (cache.code_sha256 of collective_detection and merge_units: every dopplertrack module they import, runtime
+    left out), the hash of the fully resolved parameters, and `id`, the hash of those three. Two results are values
+    of one statistic, and so may be merged or set against one another as own day and null, only when their
+    identities are equal. Written into every output."""
+    from dopplertrack.methods.collective.merge import merge_units
+    from dopplertrack.runtime.cache import code_sha256, entry_key
+    ident = {"name": STATISTIC, "code_sha256": code_sha256(collective_detection, merge_units),
+             "parameters_sha256": entry_key(to_dict(check(params)))}
+    return {**ident, "id": entry_key(ident)}
+
+
+def statistic_label(identity: dict) -> str:
+    """The identity as a launcher label (a run topic, a unit name): the name and the first 12 digits of its id."""
+    return f"{identity['name']}-{identity['id'][:12]}"
+
+
+def search_domain(wins: list[Window], bbox, elevation) -> dict:
+    """What a search ran over besides the recording and the traffic: the box, whether the grids sit on terrain, and
+    the windows. An own-day search and its null draws must share it."""
+    from dopplertrack.runtime.cache import entry_key
+    return {"bbox": [float(x) for x in bbox], "terrain": elevation is not None,
+            "windows_sha256": entry_key({"windows": [dataclasses.asdict(w) for w in wins]})}
+
+
 # old name: collective_find
 def collective_detection(sp: Spectrogram, wins: list[Window], traces, bbox, params: CollectiveParameters | None = None,
                          *, elevation=None, workers=None, log=print, cpa_cache=None, only_cells=None) -> dict:
@@ -78,7 +107,11 @@ def collective_detection(sp: Spectrogram, wins: list[Window], traces, bbox, para
     `modes`) and the stages' counts, with the fully resolved parameters under `parameters`. Every setting is a field of
     params (CollectiveParameters; the defaults when None). With only_cells (ranks into the kept cells, 0 the highest),
     the fine stage visits just those cells: the coarse stage and every null are the same as the full run's, so the
-    cells' results combine by maximum."""
+    cells' results combine by maximum (merge.merge_units).
+
+    Empty inputs end in winner None with a reason, never an exception: no windows, no flight pass within range of
+    the box, no point with two windows' clocks agreeing, and no fine point with terrain elevation. A fine point
+    without terrain elevation is left out and counted (counts.fine_points_without_terrain)."""
     import time
     from dopplertrack.runtime.cpa_cache import cached_cpa_table
     p = check(params or CollectiveParameters())
@@ -93,28 +126,37 @@ def collective_detection(sp: Spectrogram, wins: list[Window], traces, bbox, para
                      f_hi=sc.crop_f_hi, log_du=log_du, sub_s=sc.sub_s, spectral_floor=p.spectrogram.spectral_floor)
                 for w in wins]
     counts, walls = {}, {}
+    sw_c, sw_f = _sweep(sc.coarse_sweep, p), _sweep(sc.fine_sweep, p)
+    base = dict(statistic=STATISTIC, statistic_identity=statistic_identity(p), domain=search_domain(wins, bbox, elevation),
+                coarse_map=dict(lat=[], lon=[], Z=[], clock=[], n_matched=[]), counts=counts, walls=walls,
+                windows=[w.__dict__ for w in wins], sweeps={"coarse": _shown(sw_c), "fine": _shown(sw_f)},
+                parameters=to_dict(p))
+    if not wins:
+        return dict(base, winner=None, reason="no windows were given")
     t = time.perf_counter()
     coarse = Grid.make(*bbox, pl.coarse_m, elevation)
     segs = build_segments(traces, coarse.lat0, coarse.lon0, clip_enu=clip_box(coarse.enu, p.max_range_m + pl.coarse_m))
     cpa_c = cached_cpa_table(coarse, segs, p.max_range_m, c, cpa_cache, workers=workers)
-    sw_c, sw_f = _sweep(sc.coarse_sweep, p), _sweep(sc.fine_sweep, p)
-    views_c = views(sw_c)
     walls["coarse_cpa"] = time.perf_counter() - t; counts["coarse_points"] = len(coarse); counts["coarse_cpa_rows"] = len(cpa_c)
+    if not len(cpa_c):                      # no traffic, or none near: there is no row to draw a window's null from
+        return dict(base, winner=None, reason="no flight pass within range of the box")
+    views_c = views(sw_c)
     t = time.perf_counter()
     nulls_c = window_decoy_nulls(views_c, wins, cpa_c, segs, coarse.enu, c, sw_c, workers, p.null.null_n)
     cand = clock_votes(cpa_c, wins, a.clock_bin_s)
     counts["coarse_candidates"] = len(cand)
+    if not len(cand):
+        counts["coarse_max_without_pass_rule"] = 0.0
+        return dict(base, winner=None, reason="no point has two windows whose clocks agree")
     scored_c = pass_zscores(cand, cpa_c, views_c, nulls_c, segs, coarse.enu, c, sw_c, workers)
     pts_c = point_scores(scored_c, len(wins), **assign)
     counts["coarse_max_without_pass_rule"] = (float(point_scores(scored_c, len(wins), one_pass=False, **assign).Z.max())
-                                              if len(scored_c) else 0.0)
+                                              if len(pts_c) else 0.0)
     walls["coarse"] = time.perf_counter() - t
     log(f"coarse: {len(coarse)} points, {len(cand)} candidates, best Z {pts_c.Z.max() if len(pts_c) else 0:.2f}")
-    coarse_map = dict(lat=[float(coarse.lat[g]) for g in pts_c.gidx], lon=[float(coarse.lon[g]) for g in pts_c.gidx],
-                      Z=pts_c.Z.astype(float).tolist(), clock=pts_c.b.astype(float).tolist(),
-                      n_matched=pts_c.n_matched.astype(int).tolist())
-    base = dict(statistic=STATISTIC, coarse_map=coarse_map, counts=counts, walls=walls, windows=[w.__dict__ for w in wins],
-                sweeps={"coarse": _shown(sw_c), "fine": _shown(sw_f)}, parameters=to_dict(p))
+    base["coarse_map"] = dict(lat=[float(coarse.lat[g]) for g in pts_c.gidx], lon=[float(coarse.lon[g]) for g in pts_c.gidx],
+                              Z=pts_c.Z.astype(float).tolist(), clock=pts_c.b.astype(float).tolist(),
+                              n_matched=pts_c.n_matched.astype(int).tolist())
     if not len(pts_c):
         return dict(base, winner=None, reason="no point has a window above its null")
     keep, margin = keep_cells(pts_c, pl.margin_sigma, pl.max_cells)
@@ -132,14 +174,19 @@ def collective_detection(sp: Spectrogram, wins: list[Window], traces, bbox, para
     nulls_f = window_decoy_nulls(views_f, wins, cpa_c, segs, coarse.enu, c, sw_f, workers, p.null.null_n)  # over the whole box
     fine, cell_of = fine_grid(coarse, keep.gidx.to_numpy()[ranks], elevation, coarse.lat0, coarse.lon0, pl.coarse_m,
                               pl.fine_m)
+    asked = len(ranks) * int(round(pl.coarse_m / pl.fine_m)) ** 2
+    counts.update(fine_points=len(fine), fine_cells=len(ranks), fine_points_without_terrain=asked - len(fine))
+    base["nulls"] = {"coarse": nulls_c, "fine": nulls_f}
+    if not len(fine):
+        return dict(base, winner=None, reason="no fine point has terrain elevation")
     cpa_f = cpa_table(fine, segs, max_range_m=p.max_range_m, c=c, workers=workers)
     cand_f = clock_votes(cpa_f, wins, a.clock_bin_s)
-    scored_f = pass_zscores(cand_f, cpa_f, views_f, nulls_f, segs, fine.enu, c, sw_f, workers)
-    pts_f = point_scores(scored_f, len(wins), **assign)
+    scored_f = (pass_zscores(cand_f, cpa_f, views_f, nulls_f, segs, fine.enu, c, sw_f, workers) if len(cand_f)
+                else None)
+    pts_f = point_scores(scored_f, len(wins), **assign) if scored_f is not None else []
     walls["fine"] = time.perf_counter() - t
-    counts.update(fine_points=len(fine), fine_cells=len(ranks), fine_cpa_rows=len(cpa_f), fine_candidates=len(cand_f))
+    counts.update(fine_cpa_rows=len(cpa_f), fine_candidates=len(cand_f))
     log(f"fine: {len(fine)} points in {len(ranks)} cells, {len(cand_f)} candidates, best Z {pts_f.Z.max() if len(pts_f) else 0:.2f}")
-    base["nulls"] = {"coarse": nulls_c, "fine": nulls_f}
     if not len(pts_f):
         return dict(base, winner=None, reason="no fine point has a window above its null")
     pts_f = pts_f.sort_values("Z", ascending=False).reset_index(drop=True)
@@ -147,7 +194,8 @@ def collective_detection(sp: Spectrogram, wins: list[Window], traces, bbox, para
     matched, voters = matched_at(scored_f, int(w0.gidx), float(w0.b), segs, wins, **assign)
     winner = dict(lat=float(fine.lat[int(w0.gidx)]), lon=float(fine.lon[int(w0.gidx)]), Z=float(w0.Z), clock_audio_minus_unix=float(w0.b),
                   n_matched=int(w0.n_matched), windows=matched, voters=voters)
-    found = modes(pts_f, fine.lat, fine.lon, pl.mode_separation_m, pl.max_modes)
+    offered = pts_f if pl.clocks_per_point == 1 else point_scores(scored_f, len(wins), clocks=pl.clocks_per_point, **assign)
+    found = modes(offered, fine.lat, fine.lon, pl.mode_separation_m, pl.max_modes, pl.mode_clock_separation_s)
     cell_best = pts_f.assign(cell=cell_of[pts_f.gidx.to_numpy()]).drop_duplicates("cell")
     base["fine_cells"] = [dict(coarse_lat=float(coarse.lat[int(r.cell)]), coarse_lon=float(coarse.lon[int(r.cell)]),
                                lat=float(fine.lat[int(r.gidx)]), lon=float(fine.lon[int(r.gidx)]), Z=float(r.Z))

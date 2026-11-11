@@ -11,7 +11,9 @@ COARSE_M, FINE_M = 1000.0, 200.0   # the third design step (collective/search.py
 
 def fine_grid(grid: Grid, gidx, elevation, lat0, lon0, coarse_m: float = COARSE_M,
               fine_m: float = FINE_M) -> tuple[Grid, np.ndarray]:
-    """Points fine_m apart (FINE_M) inside each coarse_m (COARSE_M) cell, and each point's coarse cell."""
+    """Points fine_m apart (FINE_M) inside each coarse_m (COARSE_M) cell, and each point's coarse cell. A point where
+    the terrain elevation is unavailable is left out, as Grid.make leaves it out of the coarse grid; the grid can then
+    be empty, and round(coarse_m / fine_m) ** 2 points per cell less its length is how many were left out."""
     k = int(round(coarse_m / fine_m))
     offs = (np.arange(k) - (k - 1) / 2) * fine_m
     lat, lon, cell = [], [], []
@@ -21,5 +23,7 @@ def fine_grid(grid: Grid, gidx, elevation, lat0, lon0, coarse_m: float = COARSE_
         LA, LO = np.meshgrid(la0 + dla, lo0 + dlo, indexing="ij")
         lat.append(LA.ravel()); lon.append(LO.ravel()); cell.append(np.full(LA.size, int(gi)))
     lat, lon = np.concatenate(lat), np.concatenate(lon)
-    elev = elevation(lat, lon) if elevation else np.zeros_like(lat)
-    return Grid.points(lat, lon, np.where(np.isfinite(elev), elev, 0.0), lat0=lat0, lon0=lon0), np.concatenate(cell)
+    cell = np.concatenate(cell)
+    elev = np.asarray(elevation(lat, lon), float) if elevation else np.zeros_like(lat)
+    ok = np.isfinite(elev)
+    return Grid.points(lat[ok], lon[ok], elev[ok], lat0=lat0, lon0=lon0), cell[ok]

@@ -22,6 +22,11 @@ from dopplertrack.components.types import EventFit
 from dopplertrack.components.detection.event_fit import fit_event
 
 
+def load_event(path) -> EventFit:
+    with open(path) as fh:
+        return EventFit(**json.load(fh))
+
+
 def load_events(files, picks=None):
     """Read two individual fits or one ranked detect list with two 1-based ranks."""
     if picks is None and len(files) != 2:
@@ -229,7 +234,8 @@ def main(argv=None):
         js = json.dumps(ef.to_dict(), indent=1)
         print(js)
         if a.out:
-            open(a.out, "w").write(js)
+            with open(a.out, "w") as fh:
+                fh.write(js)
     elif a.cmd == "detect":
         sp = Spectrogram.load(a.spec)
         # cached on the spectrogram's contents, the parameters and the detector's source ($DOPPLERTRACK_CACHE)
@@ -242,7 +248,8 @@ def main(argv=None):
         for i, e in enumerate(evs):
             print(f"{i + 1:>4} {e.t_cpa:>9.1f} {e.f0:>7.1f} {e.v:>6.0f} {e.d:>7.0f} {e.score:>6.2f}")
         if a.out:
-            json.dump([e.to_dict() for e in evs], open(a.out, "w"), indent=1)
+            with open(a.out, "w") as fh:
+                json.dump([e.to_dict() for e in evs], fh, indent=1)
     elif a.cmd == "extract-region":
         pipeline.extract_region(a.archive_dir, tuple(a.bbox), a.out, prop_only=not a.keep_jets, max_range_m=a.max_range)
     elif a.cmd == "fetch-day":
@@ -268,7 +275,7 @@ def main(argv=None):
     elif a.cmd == "refine":
         import pandas as pd
         sp = Spectrogram.load(a.spec)
-        extra = [EventFit(**json.load(open(p))) for p in a.extra]
+        extra = [load_event(p) for p in a.extra]
         res = pd.read_csv(a.results)
         best = res.sort_values("score", ascending=False).drop_duplicates(["icao1", "icao2"]).reset_index(drop=True)
         row = best.iloc[params.refinement.rank - 1]
@@ -289,7 +296,7 @@ def main(argv=None):
     elif a.cmd == "search-single":
         from datetime import datetime, timezone
         sp = Spectrogram.load(a.spec)
-        ev = EventFit(**json.load(open(a.event)))
+        ev = load_event(a.event)
         traces, trace_meta = join_days(a.traces)
         try:
             t_unix = float(a.utc)

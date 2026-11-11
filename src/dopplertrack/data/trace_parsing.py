@@ -12,8 +12,11 @@ from dopplertrack.data.trajectories import Trace
 
 FT = 0.3048
 KT = 0.514444
-TRACE_ERRORS = (ValueError, TypeError, KeyError, IndexError, AttributeError, OSError, EOFError,
-                OverflowError, zlib.error)
+# What a corrupt or unreadable trace document raises (upstream's TRACE_PARSE_ERRORS, plus OverflowError: the readsb
+# flags are parsed here, and int() of an infinite one overflows). KeyError is a trace row that is a dict. A document
+# that is not a JSON object raises ValueError below, so AttributeError, which would also hide a programming error, is
+# not in the list.
+TRACE_ERRORS = (OSError, ValueError, IndexError, KeyError, TypeError, zlib.error, EOFError, OverflowError)
 
 
 def parse_trace_file(path: str | Path) -> Trace | None:
@@ -31,6 +34,8 @@ def parse_trace_bytes(raw: bytes, fallback_icao: str = "") -> Trace | None:
     if raw[:2] == b"\x1f\x8b":
         raw = gzip.decompress(raw)
     d = json.loads(raw)
+    if not isinstance(d, dict):       # upstream returns None here; ours raises, so the scan counts it as malformed
+        raise ValueError("a trace document must be a JSON object")
     base = float(d.get("timestamp", 0.0))
     rows = d.get("trace") or []
     t, lat, lon, alt, gs, grd = [], [], [], [], [], []

@@ -25,6 +25,7 @@ class HMMTrackerParams:
     families: int = 2
     min_track_s: float = 1.0
     estimator: str = "quinn2"
+    decoder: str = "posterior_argmax"  # hmm_tracker.DECODERS: per-frame maximum posterior, or "viterbi" (one allowed sequence)
     harmonic_tol: float = 0.01
     max_order: int = 6
 

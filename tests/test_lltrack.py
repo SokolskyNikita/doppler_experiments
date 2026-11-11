@@ -148,3 +148,62 @@ def test_invalid_frames_are_crossed_without_a_measurement():
     _, ev = _run(x, 110, 160, [(x[:a], True), (x[a:b], False), (x[b:], True)], p=likelihood_params.with_params(P, harmonics=1, families=1))
     (tr,) = ev.tracks
     assert (~tr.measured).sum() >= 8 and tr.end - tr.start > 50
+
+
+def test_viterbi_matches_enumeration():
+    """The most probable sequence over every one of (2K + 1)^T, against viterbi_path."""
+    import dopplertrack.components.tracking.hmm_viterbi as hmm_viterbi
+    rng = np.random.default_rng(3)
+    T, K, dt, step = 5, 3, 0.25, 0.5
+    f0s = 100.0 + step * np.arange(K)
+    p = likelihood_params.with_params(P, birth_rate=0.05, t_pass_s=2.0, t_run_s=1.0, t_dip_s=0.5, slope_scale=0.05)
+    A = _matrix(K, p, step, f0s, dt)
+    S = 2 * K + 1
+    init = np.r_[1 - p.birth_rate * step * dt * K, np.full(K, p.birth_rate * step * dt), np.zeros(K)]
+    valid = np.array([True, True, False, True, True])
+    for _ in range(5):
+        E = rng.normal(0, 3, (T, K))
+        emit = np.ones((T, S))
+        emit[:, 1:K + 1] = np.exp(np.where(valid[:, None], E, 0.0))
+        best, best_w = None, -1.0
+        for seq in itertools.product(range(S), repeat=T):
+            w = init[seq[0]] * emit[0, seq[0]]
+            for n in range(1, T):
+                w *= A[seq[n - 1], seq[n]] * emit[n, seq[n]]
+            if w > best_w:
+                best, best_w = seq, w
+        assert tuple(hmm_viterbi.viterbi_path(E, valid, dt, step, f0s, p)) == best
+
+
+def test_viterbi_keeps_the_transition_limit_where_the_posterior_argmax_breaks_it():
+    """Two lines far apart on the grid, each the stronger in alternate stretches: the per-frame maximum posterior jumps
+    between them, farther than the transition kernel allows in one frame; the Viterbi sequence never does."""
+    import dopplertrack.components.tracking.hmm_viterbi as hmm_viterbi
+    T, K, dt, step = 80, 60, 0.25, 0.25
+    f0s = 100.0 + step * np.arange(K)
+    p = likelihood_params.with_params(P, max_rel_slope=0.02)
+    cap = len(forward_backward._kernel(step, float(f0s[-1]), dt, p)) // 2
+    assert cap < 10
+    E = np.full((T, K), -1.0)
+    strong = (np.arange(T) // 10) % 2 == 0
+    E[:, 10] = np.where(strong, 9.0, 6.0)
+    E[:, 45] = np.where(strong, 6.0, 9.0)
+    valid = np.ones(T, bool)
+    g_on, g_dip, _ = forward_backward.posterior(E, valid, dt, step, f0s, p)
+    jumps = [np.abs(np.diff(path)).max() for _, _, path in forward_backward.runs(g_on, g_dip)]
+    assert max(jumps) > cap                                    # the defect: a sequence the model gives probability 0
+    found = hmm_viterbi.viterbi_runs(E, valid, dt, step, f0s, p)
+    assert found and all(np.abs(np.diff(path)).max() <= cap for _, _, path in found)
+    assert all(set(path) <= {10, 45} for _, _, path in found)
+
+
+def test_viterbi_decoder_tracks_a_pass_like_the_default():
+    g = _pass(120.0)
+    x = _audio(120.0, [(g, 0.2, 0, 120)])
+    for decoder in ("posterior_argmax", "viterbi"):
+        _, ev = _run(x, 95, 150, p=likelihood_params.with_params(P, harmonics=1, families=1, decoder=decoder))
+        tr = max(ev.tracks, key=lambda q: q.measured.sum())
+        ok = tr.measured & (tr.t > 10) & (tr.t < 110)
+        assert np.median(np.abs(tr.f[ok] - g(tr.t[ok]))) < 0.5 and tr.measured.mean() > 0.8, decoder
+    with pytest.raises(ValueError, match="decoder"):
+        _run(x[:SR * 20], 95, 150, p=likelihood_params.with_params(P, decoder="nope"))

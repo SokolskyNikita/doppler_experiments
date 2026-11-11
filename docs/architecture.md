@@ -11,7 +11,7 @@ A path being installed or unit-tested does not establish acoustic accuracy or a 
 | Installed CLI | `pyproject.toml` → [commands.main.main](../src/dopplertrack/commands/main.py) (also `python -m dopplertrack`) | `spectrogram`, `fit`, `detect`, `extract-region`, `fetch-day`, `search`, `refine`, `search-single`, `locate` |
 | Audio-to-record orchestration | `commands.main._locate` → [grid_pair.runner.locate](../src/dopplertrack/methods/grid_pair/runner.py) | Detection, coverage preflight, pair searches, winner refinement, schema-v2 record/hash; never emits `located` |
 | Repository benchmark | `python -m bench` → [evaluation/runner.py](../src/dopplertrack/evaluation/runner.py) | `saved-fit`, `raw-audio`, `locate`; record/hash before labels, revision exports, shards/resume, comparison; `bench report` renders HTML |
-| Collective search | [collective_detection](../src/dopplertrack/methods/collective/search.py), `tools/experiments/2026-11-04/collective_run.py` | Experimental alternative; separate result dictionary, outside CLI locate, benchmark profiles and versioned verdicts |
+| Collective search | [collective_detection](../src/dopplertrack/methods/collective/search.py) with its units, merge and control draws (`dopplertrack run collective`, `collective-merge`, `collective-null`); the dated `tools/experiments/2026-11-04/collective_run.py` is a record | Experimental alternative; separate result dictionary, outside CLI locate, benchmark profiles and versioned verdicts |
 
 Installed defaults:
 
@@ -63,9 +63,11 @@ next-day fetching, not automatic loading of an omitted trace file. A completed w
 region or a false-location probability. Comparable event-null normalization is not the null of a whole search's
 maximum.
 
-Coverage checks use extraction envelopes and declared/observed outer time bounds. `_covered_days` takes the
-minimum start and maximum end: separated intervals are treated as one span, so passing preflight does not prove
-continuous coverage. Pair search's candidate-gap warnings and trajectory support masks also cannot establish
+Coverage checks use extraction envelopes and declared/observed time intervals. `_covered_days` returns the intervals
+the files cover, joined where they touch or overlap; the preflight and the matched clock's recording span must lie
+inside them, and a gap between files is `flight_data_missing_time` with the gap named (`coverage_gaps_utc`;
+`covered_utc` keeps the outer bounds, `covered_intervals_utc` the intervals). This is coverage as the files declare
+it, not a check of each aircraft's own trace. Pair search's candidate-gap warnings and trajectory support masks also cannot establish
 that every audible aircraft is present in ADS-B. Geometry can interpolate 30–90 s gaps to propose a CPA while
 modelled curves contribute no evidence over gaps longer than 30 s.
 
@@ -176,9 +178,29 @@ greedy selector reserves a window and pass only on accepting both. Scoring/repor
 identity and the three-row fallback cap per window/source clock bin. This is not optimal assignment. It can change
 Z, winners and retained cells, so it requires new positives and a same-design maximum-over-search null. Preserve
 v4's historical identity; old v3/v4 outcomes and nulls cannot be relabelled as calibration of the repair.
-The historical experiment launcher still names run topics `v4`; inspect the emitted statistic and code provenance,
-not just a folder label. Its merged summaries and NPZ null exports omit that identifier; they do not enforce
-statistic compatibility. No real-data result for the repaired statistic is established by this page.
+The historical experiment launcher still names run topics `v4`, and its merged summaries and NPZ null exports omit
+the statistic; those dated scripts stay as records. The package's own path (readiness R5) carries a
+**statistic identity** in every output: the name, the hash of the code that computes and merges Z
+(`cache.code_sha256` of `collective_detection` and `merge_units`), the hash of the resolved parameters, and an `id`
+over the three (`search.statistic_identity`; `statistic_label` is the launcher label). `dopplertrack run collective`
+writes it into `request.json` before the search and into `result.json`, with the search `domain` (box, terrain,
+windows). A run folder is a complete unit only with its request, result, matching hash and completion marker
+([units.py](../src/dopplertrack/methods/collective/units.py)). `run collective-merge`
+([merge.py](../src/dopplertrack/methods/collective/merge.py)) combines the `only_cells` units of one search and refuses
+an unfinished, foreign, missing or repeated one; `run collective-null`
+([null.py](../src/dopplertrack/methods/collective/null.py)) collects control draws into an NPZ that names the identity,
+and refuses a missing day, a partial or incompatible draw, and on reading an export without the identity or with
+another one. A control draw is the config's `control` field: another day's traffic shifted by whole days onto the
+recording's date ([day_mapping.py](../src/dopplertrack/data/day_mapping.py)). The collective search has no clock gate,
+so today the shift changes only the reported clock. No threshold is fitted here, and no real-data result for the
+repaired statistic is established by this page.
+
+The mode rule's settings are `planning` fields with the rule as it ran as the default: modes separated by distance
+only (`mode_clock_separation_s` unset), one clock per point (`clocks_per_point`), and a merged result taking the
+winning unit's modes (`merge_modes: best_unit`; `all_units` applies the rule again across the units' lists, which
+sees at most `max_modes` per unit). Empty inputs end in `winner: null` with a reason: no windows, no flight pass in
+range, no two windows agreeing on a clock, no fine point with terrain. A fine point without terrain elevation is
+left out and counted, as the coarse grid leaves it out; it used to be put at sea level.
 
 [tests/test_collective.py](../tests/test_collective.py) contains a synthetic search with reduced tone/null settings
 and serial workers, plus small fallback/report consistency regressions. It does not establish collective
@@ -186,7 +208,9 @@ serial/pool equivalence, full-default real-data performance or a calibrated maxi
 record reports v4's smoke cancelled without results; that is recorded history, not a fresh run inspection.
 
 The trackers (`viterbi`, `hysteresis_viterbi`, `hmm_tracker`), the de-Dopplerised tone score, track fitting and the
-hypotheses remain library/research code. The hypotheses are the `gates.event_gate=profile_intervals` choice; CLI detect
+hypotheses remain library/research code. `hmm_tracker` decodes by per-frame maximum posterior by default, which can
+step farther between frames than its transitions allow; `HMMTrackerParams.decoder="viterbi"`
+([hmm_viterbi.py](../src/dopplertrack/components/tracking/hmm_viterbi.py)) decodes one allowed sequence instead. The hypotheses are the `gates.event_gate=profile_intervals` choice; CLI detect
 selects none of these trackers. `custom_rescore_zscore` (S1) and `rescore_surrogate` (S2's D) are the
 `detection.statistic` choices beside the default contrast. Their tests demonstrate mechanics,
 not adoption of a failed or unfinished experiment.
@@ -201,11 +225,12 @@ two multiprocessing deprecation warnings; equality in this bounded check does no
 The [verification note](experiments/2026-11-04-research-reset.md#engineering-verification-2026-11-04)
 records its tested tree and limits. S2's interrupted scientific gate remains unjudged.
 
-The separate `collective_null.py` experiment fits a 1% other-day maximum threshold (Gumbel with a KS-based
+The separate dated `collective_null.py` experiment fits a 1% other-day maximum threshold (Gumbel with a KS-based
 empirical fallback), writes experimental verdict labels including `located`, then reveals labels. Those outputs
 use proposed v3-style null fields, not the implemented result schema, and never feed CLI locate. Commit strings
-and a generic statistic description are recorded; readers still need to establish that own-day and null searches
-used the same algorithm, parameters and search domain.
+and a generic statistic description are recorded; for those runs readers still need to establish that own-day and
+null searches used the same algorithm, parameters and search domain. The package's `run collective-null` checks
+exactly that and fits nothing.
 
 ## Check boundaries
 

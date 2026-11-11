@@ -1,8 +1,7 @@
 """The collective recipe's parameters (research readiness R2): every setting that can change its result, by stage, with
 today's library defaults, and their resolution, default then the config's `parameters` (the run's explicit
 overrides). A method choice is a name looked up in a small dict in methods/collective/search.py. Run settings that
-cannot change a result (workers, the CPA cache file, the log) and the fleet split (only_cells) are not parameters.
-R5's mode-rule settings join the planning stage when R5 adds them."""
+cannot change a result (workers, the CPA cache file, the log) and the fleet split (only_cells) are not parameters."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -62,13 +61,17 @@ class AssignmentParameters:
 @dataclass(frozen=True)
 class PlanningParameters:
     """The coarse-to-fine grids (fine_grid), the cells the fine stage visits (coarse_cells.keep_cells) and the
-    distinct peaks (modes)."""
+    distinct peaks (modes): their separation in distance and, optionally, in clock, the clocks each point offers, and
+    how units of one search merge them. The defaults are the rule as it has always run; its values are PLAN.md G1."""
     coarse_m: float = COARSE_M
     fine_m: float = FINE_M
     margin_sigma: float = MARGIN_SIGMA
     max_cells: int = MAX_CELLS
     mode_separation_m: float = MODE_SEPARATION_M
     max_modes: int = MAX_MODES
+    mode_clock_separation_s: float | None = None   # None: modes are distinct by distance only; else also by clock
+    clocks_per_point: int = 1                      # clocks a fine point offers the mode rule (point_scores' clocks)
+    merge_modes: str = "best_unit"                 # MODE_MERGES: the modes of a result merged from only_cells units
 
 
 @dataclass(frozen=True)
@@ -93,7 +96,13 @@ def check(params: CollectiveParameters) -> CollectiveParameters:
     from dopplertrack.methods.collective import search
     from dopplertrack.methods.parameters import WHITENINGS
     check_choices(params, {"spectrogram.whitening": WHITENINGS, "scoring.view": search.VIEWS,
-                           "assignment.method": search.ASSIGNMENTS})
+                           "assignment.method": search.ASSIGNMENTS, "planning.merge_modes": search.MODE_MERGES})
+    pl = params.planning
+    if pl.clocks_per_point < 1:
+        raise ValueError(f"planning.clocks_per_point must be at least 1, not {pl.clocks_per_point}")
+    if pl.clocks_per_point > 1 and pl.mode_clock_separation_s is None:
+        raise ValueError("planning.clocks_per_point above 1 needs planning.mode_clock_separation_s: without it a "
+                         "point's second clock is never a distinct mode")
     return params
 
 

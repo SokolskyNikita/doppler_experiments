@@ -4,7 +4,9 @@
 (checked locally, synthetic outputs equal R1's apart from the new keys; ledger entries 14–21). R3 done and merged to `main` on 2026-11-09
 (checked locally; no output changes, ledger section R3; a full `bench run --revision` case at a
 pre-R3 commit is left for R8, its CLI start is checked). R4 done and merged to `main` on 2026-11-09
-(checked locally; every cache key changes and no value does, ledger entry 22). R5–R9 not started. This is the first of two plans. No research in
+(checked locally; every cache key changes and no value does, ledger entry 22). R5 done on 2026-11-10
+(checked locally; ledger entries 23–30; its section below is R5 as it landed, with the adjustments R1–R4 made
+necessary). R6–R9 not started. This is the first of two plans. No research in
 [PLAN.md](../../PLAN.md) starts until every exit check in §5 passes. Implementation is authorized by the owner's
 implementation instruction; status changes are recorded here only.
 
@@ -241,8 +243,8 @@ One rule replaces all four, in `runtime/cache.py`:
   differs between versions.
 - **CPA table.** `cpa_fingerprint` gains the code hash of the builder passed and the numpy, scipy and pandas
   versions, and `CPA_CACHE_VERSION` is deleted. The table stays at its explicit `--cpa-cache` path with the
-  fingerprint stored in the file; a mismatch rebuilds and replaces it, as now. `workers` stays out of the key: R5
-  makes `jobs=1` and `jobs=N` build the same table.
+  fingerprint stored in the file; a mismatch rebuilds and replaces it, as now. `workers` stays out of the key:
+  `jobs=1` and `jobs=N` build the same table (R5).
 - **Window fits** are keyed on `fit_event`'s own derived code, under its current name.
 
 `DETECTOR_CODE`, the unused `DETECTOR_MODULES`, `SPECTROGRAM_MODULES` and the per-definition `code_sha256` go, with
@@ -264,36 +266,71 @@ synthetic outputs equal R3's apart from the recorded keys.
 
 ### R5. Fix the known defects
 
-These change outputs and go in the ledger. Each gets a test.
+These change outputs and go in the ledger. Each gets a test (`tests/test_readiness_defects.py` unless another file
+is named). The items below are R5 as it landed: where R1–R4 or a closer reading of the code changed what an item
+meant, the item says so.
 
-- **Collective search:** complete-unit enforcement (extra-cell merging currently accepts any `result.json`); the
-  statistic identity written into every output, including launcher labels, NPZ null exports and merged summaries;
-  null tooling that refuses incompatible or missing draws (it currently reads only `null_draws.npz` and skips units
-  without it). Today the merging and the null tooling exist only in the dated scripts
-  `tools/experiments/2026-11-04/collective_run.py` and `collective_null.py`, which stay as records (rule 4). The
-  fixes go into the package's collective path, which R6.1's profile and R6.6's record run on. R2 made the mode rule's spatial separation and number of modes fields of
-  `CollectiveParameters.planning` (`mode_separation_m`, `max_modes`); R5 adds the rest there, with today's behavior
-  as the default: the clock separation, clocks kept per point, and merging modes across all cells. Choosing their
-  values is PLAN.md G1.
-- **HMM tracker decoding:** `forward_backward.runs`, used by `hmm_tracker.hmm_posterior_track`, takes a per-frame
-  argmax of the forward–backward posterior,
-  which can return a frequency sequence that breaks the transition limits
-  ([review](../reference/course-reading-review.md)). Add Viterbi decoding with backtracking as a selectable decoder,
-  a field of `HMMTrackerParams`. The default stays as it is, because the tracker rounds are closed research.
-  Adopting it is PLAN.md G4.
-- **Trace parsing and file handles:** compare ours (`data/trace_parsing.py`, whose `TRACE_ERRORS` already
-  includes `KeyError`, and `data/providers/adsblol.py`) with upstream's fixes in `upstream/main`'s `adsb.py` and
-  `fetch.py`: trace rows that are dicts, the narrowed `TRACE_PARSE_ERRORS`, and explicitly closed CLI file
-  handles. Import what ours lacks as explicit method imports.
-- **Coverage preflight:** `_covered_days` (`methods/grid_pair/runner.py`) treats separated intervals as one span;
-  report gaps instead.
-- **Null-day mapping** onto the recording date for metadata-gated runs.
-- **CPA build:** `jobs=1` and `jobs=N` produce the same table.
-- **Empty inputs:** define behavior for empty CPA or window paths and for fine grids with missing terrain.
-- **Process pools:** the package already uses its spawn wrapper (`runtime/parallel.process_pool`) everywhere; the
-  raw pools are in dated scripts, which stay. Add a test that fails on a raw `ProcessPoolExecutor` or
-  `multiprocessing.Pool` outside `runtime/parallel.py` and `tools/experiments/`, so new study and benchmark code
-  keeps to the wrapper.
+- **Collective search.** Before R5 the package held only the search itself: the merging and the null tooling
+  existed in the dated scripts `tools/experiments/2026-11-04/collective_run.py` and `collective_null.py`, which stay
+  as records (rule 4). The fixes are therefore new package code in `methods/collective/`, which R6.1's profile and
+  R6.6's record run on, with three commands (`dopplertrack run collective`, `collective-merge`, `collective-null`):
+  - *The statistic identity* (`search.statistic_identity`): the statistic's name, R4's derived code hash of
+    `collective_detection` and `merge_units`, the hash of the resolved parameters, and an `id` over the three. It is
+    in every result, every merged result, the request written before a search starts, and the NPZ null export;
+    `statistic_label` is the launcher label R6.7's launches use. Each result also records its search `domain` (box,
+    terrain, windows).
+  - *Complete units* (`units.py`): a run folder counts only with its request, its result, a matching hash and its
+    completion marker. `merge_units` refuses an unfinished unit, one of another statistic, domain or inputs, and a
+    set that does not cover every kept cell exactly once.
+  - *Null tooling* (`null.py`): `collect_draws` takes the own-day search, the control draws and the list of days
+    expected, and refuses a missing, repeated or unasked day, an unfinished or partial draw, and a draw of another
+    statistic, domain or recording. A draw with no winner is kept as NaN, not dropped. `load_draws` refuses an NPZ
+    without the identity or with another one. Fitting a threshold to the draws is research (§6) and is not here.
+  - *The mode rule.* R2 made the spatial separation and the number of modes fields of
+    `CollectiveParameters.planning`; R5 adds `mode_clock_separation_s` (unset: distance only), `clocks_per_point`
+    (1) and `merge_modes` (`best_unit`; `all_units` applies the rule again across the units' mode lists). The
+    defaults are the rule as it ran. A point's further clocks are its best clock bins that share no match with a
+    better kept one. Choosing the values is PLAN.md G1.
+- **HMM tracker decoding.** `forward_backward.runs`, used by `hmm_tracker.hmm_posterior_track`, takes a per-frame
+  argmax of the forward–backward posterior, which can return a frequency sequence that breaks the transition limits
+  ([review](../reference/course-reading-review.md)). Viterbi decoding with backtracking is its own method file
+  (`components/tracking/hmm_viterbi.py`), selected by `HMMTrackerParams.decoder` (`hmm_tracker.DECODERS`). The
+  default stays `posterior_argmax`, because the tracker rounds are closed research. Adopting it is PLAN.md G4.
+  Tests in `tests/test_lltrack.py`: against enumeration of every sequence, and a case where the argmax breaks the
+  limit and Viterbi does not.
+- **Trace parsing and file handles.** Compared with `upstream/main`'s `adsb.py`, `fetch.py` and `cli.py`. Ours
+  already caught a dict row (`KeyError`). Imported: the check that a trace document is a JSON object, which lets
+  `AttributeError` leave `TRACE_ERRORS` as in upstream's narrowed list (ours keeps `OverflowError`, which parsing the
+  readsb flags can raise, and raises where upstream returns `None`, so the scan counts the document as malformed);
+  and the CLI's file handles, every one now opened in a `with`. A test fails on a bare `open()` in the package that
+  is neither a `with` context nor assigned to a name.
+- **Coverage preflight.** `_covered_days` (`methods/grid_pair/runner.py`) returns the covered intervals, joined
+  where they touch or overlap. The preflight and the matched clock's recording span must lie inside them; a gap is
+  `flight_data_missing_time` with the gap named. The record keeps `covered_utc` as the outer bounds and gains
+  `covered_intervals_utc` and `coverage_gaps_utc`.
+- **Null-day mapping.** The defect is from the 2026-11-04 research reset: control draws ran on another day's
+  traffic at that day's own date, so a search gated on the recording's stated time could not use them.
+  `data/day_mapping.py` shifts a day's traces by whole days onto the recording's date, and the collective command's
+  `control` field (`traffic_day`, `recording_day`) applies it and records it in the result; the null tooling
+  requires it of every draw and one recording day across them. The collective search has no clock gate today, so
+  the shift changes only the reported clock. The gate itself is PLAN.md G1, and R6.1's control draws use this field.
+- **CPA build.** `jobs=1` and `jobs=N` already build the same table, byte for byte
+  (`tests/test_cpa_build.py::test_pruned_pooled_table_equals_brute_force`, from before this plan), which is why R4
+  could leave `workers` out of the key. R5 changed nothing here but adds the no-segments case for both.
+- **Empty inputs.** The source of this item named no code path, so R5 defines the cases the collective path could
+  not survive: no windows, no flight pass within range of the box, no two windows agreeing on a clock and no fine
+  point with terrain each end in `winner: null` with a reason; a CPA build with no segments returns an empty table
+  with its columns. A fine point where terrain elevation is unavailable is left out and counted
+  (`counts.fine_points_without_terrain`), as `Grid.make` leaves it out of the coarse grid; it used to be put at sea
+  level. An empty `--cpa-cache` path means no cache, as before.
+- **Process pools.** The package already uses its spawn wrapper (`runtime/parallel.process_pool`) everywhere; the
+  raw pools are in dated scripts, which stay. A test fails on a raw `ProcessPoolExecutor` or `multiprocessing.Pool`
+  in `src/`, `bench/`, `tools/` or `tests/` outside `runtime/parallel.py` and `tools/experiments/`, so new study and
+  benchmark code keeps to the wrapper.
+
+Left for later items: R6.1 runs control draws through the benchmark and R6.6 gives the collective result a
+versioned record (the unit folder here is unversioned); R7 checks that a search split by `only_cells` and merged
+equals the whole search on the synthetic scene, which R5 tests only on constructed results.
 
 ### R6. Study runner: just enough for experiments
 
@@ -302,7 +339,7 @@ Extend the existing benchmark (`bench run`, profiles, `--search-param` overrides
 
 1. **Collective in the benchmark.** A `collective` profile that runs end to end from a case (detections to
    windows to search) on R2's `CollectiveParameters`, and control draws that substitute another day's traffic for
-   the same recording.
+   the same recording through R5's `control` field, collected with R5's null tooling.
 2. **Study files.** `bench study run STUDY.json` reads cases, a baseline (recipe, profile, parameters), variants
    (parameter overrides, including method choices), the control-day lists and a master seed (for null and
    normalization draws), and runs each arm as an ordinary benchmark run inside one study folder. It records each
@@ -317,9 +354,10 @@ Extend the existing benchmark (`bench run`, profiles, `--search-param` overrides
 5. **Bounded units.** A per-unit wall-time cap, a required study-file field with no default, marks a unit
    incomplete rather than letting it run on; a timeout is never counted as a result.
 6. **A minimal collective result record.** Collective outputs get a versioned, validated record: windows, modes
-   with their matched passes, the statistic identity, and the null block for control draws. Old records stay
+   with their matched passes, the statistic identity (R5's, as written), and the null block for control draws. Old records stay
    readable. The fuller schema-v3 design is in git history if a later study needs more.
-7. **AWS.** Arms and shards launch through the existing `tools/aws/runs`. Add a study-wide limit on concurrent
+7. **AWS.** Arms and shards launch through the existing `tools/aws/runs`; a collective launch is named by R5's
+   `statistic_label`, not a hand-kept version. Add a study-wide limit on concurrent
    boxes and vCPUs that is checked before each launch, and make the box lifetime cover output upload (today
    `max_hours` starts after preparation and bootstrap cancels its fallback shutdown first).
 
@@ -339,7 +377,7 @@ discovery contracts, a remote or always-on controller, and a GPU backend. The de
 - The pass-window assignment (`greedy_assignment`) is checked against an exhaustive reference on tiny graphs,
   including ties, caps and shared-pass conflicts.
 - Serial and parallel runs of detection, CPA build, the decoy nulls and the collective search give the same
-  results. R1 removed the S2 rescoring's pool test, which ran a dated script; the package's own S2 path has no
+  results, and a collective search split by `only_cells` and merged (R5) gives the whole search's winner. R1 removed the S2 rescoring's pool test, which ran a dated script; the package's own S2 path has no
   pool.
 
 ### R8. Final AWS phase

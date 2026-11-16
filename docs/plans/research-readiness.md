@@ -397,17 +397,64 @@ discovery contracts, a remote or always-on controller, and a GPU backend. The de
 
 ### R7. Tests with known answers
 
-- Each method has small tests of its own contract (units, shapes, masks, score direction).
-- A synthetic scene with a known receiver, flights, f0 and clock runs end to end through both recipes and must
-  recover the receiver. This checks the software, not performance. R6's fixture (`tools/data/synthetic_study.py`)
-  is that scene for the collective recipe: its case `synthetic-a` recovers the receiver through the benchmark's
-  `collective` profile; `synthetic-b`, the same recording in a shifted box, ends on another mode and is there for
-  accounting, not as a known answer.
-- The pass-window assignment (`greedy_assignment`) is checked against an exhaustive reference on tiny graphs,
-  including ties, caps and shared-pass conflicts.
-- Serial and parallel runs of detection, CPA build, the decoy nulls and the collective search give the same
-  results, and a collective search split by `only_cells` and merged (R5) gives the whole search's winner. R1 removed the S2 rescoring's pool test, which ran a dated script; the package's own S2 path has no
-  pool.
+Brought up to date on 2026-11-15 with what R1–R6 landed. Each item says what already exists and what is left; only
+what is left is R7's work. Everything here runs locally in the offline suite.
+
+1. **Each method has small tests of its own contract** (units, shapes, masks, score direction). After R1's split
+   most method files are imported by a test of their own. These are not, and are reached only through a recipe or
+   not at all; each gets a small direct test:
+   - assignment and nulls: `assignment/clock_vote`, `assignment/pass_window`, `nulls/window_decoy_null`
+     (`nulls/robust` is checked only for its seed, in `test_study.py`);
+   - planning: `planning/coarse_cells`, `planning/square_grid`;
+   - scoring: `scoring/log_view`, `scoring/event_window_view`, `scoring/window_pass_score`,
+     `scoring/fine_point_score`, `scoring/f0_sweep`, `scoring/block_paths`, `scoring/pair_zscore`;
+   - search: `search/time_gate`, `search/pair_join`, `search/hypothesis_join`, `search/best_clock`,
+     `search/best_per_pair`, `search/negative_information_filter`;
+   - selection: `selection/top2`, `selection/comparable_pairs`, `selection/usability`, `selection/fields`
+     (`pick_detected` in `test_bench.py` reaches `top2` through the benchmark only);
+   - detection, tracking and whitening: `detection/custom_curve_contrast`, `tracking/harmonic_links`,
+     `whitening/frequency_median`;
+   - R6's `windows_from_detections` (`components/windows.py`): a weak or tone-less event is left out, the rest
+     come highest score first.
+   A file that turns out to hold only a type or a constant is listed in the test as such, not given a test.
+2. **A synthetic scene with a known receiver, flights, f0 and clock runs end to end through both recipes and must
+   recover the receiver.** This checks the software, not performance.
+   - Collective: done by R6. The fixture `tools/data/synthetic_study.py` is the scene, and its case `synthetic-a`
+     recovers the receiver and both flights through the benchmark's `collective` profile
+     (`tests/test_study.py`); `tests/test_collective.py` does the same on the search alone. Left: assert the
+     recovered clock in the benchmark test, as `test_collective.py` does. `synthetic-b`, the same recording in a
+     shifted box, ends on another mode and is there for accounting, not as a known answer.
+   - `grid_pair`: not done. `tests/test_pipeline_synthetic.py` recovers the receiver by calling the components in
+     turn and `refine`; nothing runs `pair_grid_search`, `locate` or a benchmark profile on a scene and checks the
+     answer, and the ledger's behaviour scene finds no surviving candidate under `raw-audio` and `locate`. Left:
+     the fixture's scene through `bench run` under `saved-fit` (fits written by the fixture), `raw-audio` and
+     `locate`, each recovering the receiver and the flight pair, with the fixture's cases gaining those profiles.
+     If `raw-audio` or `locate` cannot recover it on any synthetic scene with today's defaults, that is recorded
+     in the ledger as a finding and the test asserts what the recipe does return; no default changes to make a
+     test pass (§2 rule 3).
+3. **The pass-window assignment (`greedy_assignment`) against an exhaustive reference on tiny graphs**, including
+   ties, caps (`pass_fallback`) and shared-pass conflicts. Not done: `test_collective.py` checks four hand-made
+   cases through `point_scores`. The reference enumerates every assignment of windows to passes on graphs small
+   enough to list; where greedy is not the maximum (it is not an exact matching, and PLAN.md G4 adds one) the
+   test pins the greedy answer and states the gap, so a later exact method is compared with the same reference.
+4. **Serial and parallel runs give the same results.**
+   - Done: detection (`test_phase0_cli.py`, workers 1 and 2), the CPA build (`test_cpa_build.py`, and the empty
+     table in `test_readiness_defects.py`), `refine` (`test_pipeline_synthetic.py`).
+   - Left: the event decoy null and the window decoy null at one worker and two, with R6's seed unset and set;
+     the collective search at one worker and two on the fixture's scene (same winner, modes and Z, bit for bit).
+     R1 removed the S2 rescoring's pool test, which ran a dated script; the package's own S2 path has no pool.
+5. **A collective search split by `only_cells` and merged (R5) gives the whole search's winner.** Not done:
+   R5's merge tests use hand-built unit results. Left: on the fixture's scene, the search run whole and run as
+   one unit per kept cell through `dopplertrack run collective`, merged with `collective-merge`: the same winner
+   and Z, and under `merge_modes: all_units` the same modes where each unit's own list is not cut short (R5's
+   ledger note on that limit). The merged record validates as `COLLECTIVE_V1`.
+6. **R6's runner on a `grid_pair` study.** R6's finish check ran the collective recipe only. Left: one small
+   study on the fixture with a `grid_pair` baseline and a variant (no controls), so the study path is exercised
+   for both recipes before R8 takes it to the fleet.
+
+Finished when every item's "left" is a passing test in the offline suite, the suite's time is reported against
+its Tier 0 target (it is 197 s against 60 s today; R7 keeps new scenes small and says what it added), and any
+finding from item 2 is in the ledger.
 
 ### R8. Final AWS phase
 

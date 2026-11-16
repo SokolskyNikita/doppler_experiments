@@ -34,6 +34,12 @@ def collect_draws(own_path, draw_paths, days) -> dict:
     folder holding a whole search (a full run, or merge's output); days lists the control days expected, each exactly
     once among the draws. Raises IncompleteUnit, naming the trouble, rather than leave anything out."""
     own, *draws = read_units([own_path, *draw_paths])
+    return collect_units(own, draws, days)
+
+
+def collect_units(own: dict, draws: list[dict], days) -> dict:
+    """collect_draws on units already read (units.read_units' dicts, or the benchmark's case folders as
+    evaluation/collective.case_unit reads them)."""
     same_search([own, *draws], traffic=False)
     partial = [u["path"] for u in (own, *draws) if not _whole(u)]
     if partial:

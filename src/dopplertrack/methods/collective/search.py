@@ -104,7 +104,7 @@ def collective_detection(sp: Spectrogram, wins: list[Window], traces, bbox, para
                          *, elevation=None, workers=None, log=print, cpa_cache=None, only_cells=None) -> dict:
     """Coarse-to-fine collective detection over a box. Returns the coarse map (every cell with Z > 0), the kept cells and
     the margin rule's numbers, the fine map's winner, its clock and each window's matched pass, the distinct peaks (key
-    `modes`) and the stages' counts, with the fully resolved parameters under `parameters`. Every setting is a field of
+    `modes`, each with its own matched passes) and the stages' counts, with the fully resolved parameters under `parameters`. Every setting is a field of
     params (CollectiveParameters; the defaults when None). With only_cells (ranks into the kept cells, 0 the highest),
     the fine stage visits just those cells: the coarse stage and every null are the same as the full run's, so the
     cells' results combine by maximum (merge.merge_units).
@@ -142,7 +142,7 @@ def collective_detection(sp: Spectrogram, wins: list[Window], traces, bbox, para
         return dict(base, winner=None, reason="no flight pass within range of the box")
     views_c = views(sw_c)
     t = time.perf_counter()
-    nulls_c = window_decoy_nulls(views_c, wins, cpa_c, segs, coarse.enu, c, sw_c, workers, p.null.null_n)
+    nulls_c = window_decoy_nulls(views_c, wins, cpa_c, segs, coarse.enu, c, sw_c, workers, p.null.null_n, p.null.seed)
     cand = clock_votes(cpa_c, wins, a.clock_bin_s)
     counts["coarse_candidates"] = len(cand)
     if not len(cand):
@@ -171,7 +171,7 @@ def collective_detection(sp: Spectrogram, wins: list[Window], traces, bbox, para
         return dict(base, winner=None, reason="no kept cell in only_cells")
     t = time.perf_counter()
     views_f = views(sw_f)
-    nulls_f = window_decoy_nulls(views_f, wins, cpa_c, segs, coarse.enu, c, sw_f, workers, p.null.null_n)  # over the whole box
+    nulls_f = window_decoy_nulls(views_f, wins, cpa_c, segs, coarse.enu, c, sw_f, workers, p.null.null_n, p.null.seed)  # over the whole box
     fine, cell_of = fine_grid(coarse, keep.gidx.to_numpy()[ranks], elevation, coarse.lat0, coarse.lon0, pl.coarse_m,
                               pl.fine_m)
     asked = len(ranks) * int(round(pl.coarse_m / pl.fine_m)) ** 2
@@ -196,6 +196,8 @@ def collective_detection(sp: Spectrogram, wins: list[Window], traces, bbox, para
                   n_matched=int(w0.n_matched), windows=matched, voters=voters)
     offered = pts_f if pl.clocks_per_point == 1 else point_scores(scored_f, len(wins), clocks=pl.clocks_per_point, **assign)
     found = modes(offered, fine.lat, fine.lon, pl.mode_separation_m, pl.max_modes, pl.mode_clock_separation_s)
+    for m in found:                          # each mode's matched passes, as the winner's (the record's R6.6)
+        m["windows"] = matched_at(scored_f, m.pop("gidx"), m["clock_audio_minus_unix"], segs, wins, **assign)[0]
     cell_best = pts_f.assign(cell=cell_of[pts_f.gidx.to_numpy()]).drop_duplicates("cell")
     base["fine_cells"] = [dict(coarse_lat=float(coarse.lat[int(r.cell)]), coarse_lon=float(coarse.lon[int(r.cell)]),
                                lat=float(fine.lat[int(r.gidx)]), lon=float(fine.lon[int(r.gidx)]), Z=float(r.Z))

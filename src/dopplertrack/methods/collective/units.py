@@ -22,11 +22,14 @@ def start_unit(out, request: dict) -> None:
 
 
 def finish_unit(out, result: dict) -> None:
-    """Write the result, its hash, and then the completion marker."""
+    """Write the result as a versioned collective record (runtime/records.COLLECTIVE_V1), its hash, and then the
+    completion marker."""
     from dopplertrack.runtime.cache import file_sha256
+    from dopplertrack.runtime.records import versioned_collective
     out = Path(out)
     output = out / "result.json"
-    output.write_text(json.dumps(result, indent=2, default=float) + "\n")
+    result = json.loads(json.dumps(result, default=float))       # numpy scalars as plain numbers, as written
+    output.write_text(json.dumps(versioned_collective(result), indent=2) + "\n")
     (out / "result.json.sha256").write_text(f"{file_sha256(output)}  result.json\n")
     (out / "completed.json").write_text('{"status": "completed"}\n')
 

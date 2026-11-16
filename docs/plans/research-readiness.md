@@ -6,7 +6,8 @@
 pre-R3 commit is left for R8, its CLI start is checked). R4 done and merged to `main` on 2026-11-09
 (checked locally; every cache key changes and no value does, ledger entry 22). R5 done on 2026-11-10 and merged to `main` on 2026-11-11
 (checked locally; ledger entries 23–30; its section below is R5 as it landed, with the adjustments R1–R4 made
-necessary). R6–R9 not started. This is the first of two plans. No research in
+necessary). R6 done on 2026-11-15 (checked locally; its section below is R6 as it landed; ledger
+section R6). R7–R9 not started. This is the first of two plans. No research in
 [PLAN.md](../../PLAN.md) starts until every exit check in §5 passes. Implementation is authorized by the owner's
 implementation instruction; status changes are recorded here only.
 
@@ -334,35 +335,60 @@ equals the whole search on the synthetic scene, which R5 tests only on construct
 
 ### R6. Study runner: just enough for experiments
 
-Extend the existing benchmark (`bench run`, profiles, `--search-param` overrides, shards, `--resume`, `merge`,
-`compare`) rather than building a second system.
+Done 2026-11-15, as an extension of the existing benchmark (`bench run`, profiles, `--search-param` overrides,
+shards, `--resume`, `merge`, `compare`), not a second system. This section is R6 as it landed.
 
-1. **Collective in the benchmark.** A `collective` profile that runs end to end from a case (detections to
-   windows to search) on R2's `CollectiveParameters`, and control draws that substitute another day's traffic for
-   the same recording through R5's `control` field, collected with R5's null tooling.
-2. **Study files.** `bench study run STUDY.json` reads cases, a baseline (recipe, profile, parameters), variants
-   (parameter overrides, including method choices), the control-day lists and a master seed (for null and
-   normalization draws), and runs each arm as an ordinary benchmark run inside one study folder. It records each
-   arm's resolved parameters and prints the differences from the baseline before running, so nothing changes
-   unannounced.
-3. **Labels stay out of workers.** Workers get the labels-free case; the projection also strips
-   `expected_outcome` and other evaluator-only fields, checked on the serialized request, not only in memory.
-4. **Complete accounting.** `bench compare` (and the study summary) reports, per arm and case group: scheduled,
-   answered, abstained, no candidate, failed, incomplete and missing. The denominator is the scheduled list, never
-   just what finished; paired differences use only cases complete in both arms. For old runs with no scheduled
-   list the denominator is reported as unknown.
-5. **Bounded units.** A per-unit wall-time cap, a required study-file field with no default, marks a unit
-   incomplete rather than letting it run on; a timeout is never counted as a result.
-6. **A minimal collective result record.** Collective outputs get a versioned, validated record: windows, modes
-   with their matched passes, the statistic identity (R5's, as written), and the null block for control draws. Old records stay
-   readable. The fuller schema-v3 design is in git history if a later study needs more.
-7. **AWS.** Arms and shards launch through the existing `tools/aws/runs`; a collective launch is named by R5's
-   `statistic_label`, not a hand-kept version. Add a study-wide limit on concurrent
-   boxes and vCPUs that is checked before each launch, and make the box lifetime cover output upload (today
-   `max_hours` starts after preparation and bootstrap cancels its fallback shutdown first).
+1. **Collective in the benchmark.** `bench run --profile collective`
+   ([evaluation/collective.py](../../src/dopplertrack/evaluation/collective.py)) runs a case end to end: detection
+   with the `grid_pair` recipe's `locate` detection settings, its usable events as windows
+   (`components/windows.windows_from_detections`), then `collective_detection` on R2's `CollectiveParameters` over
+   the case's box. Overrides are `CollectiveParameters` names; a name starting `detection.` sets a detection
+   parameter. The override `control_day` substitutes that day's traffic for the same recording (R5's `control`
+   block and day mapping; `control_traces` says where a control day's file is), and a study collects the draws with
+   R5's null tooling (`null.collect_units`, the same checks as `run collective-null`) into one NPZ per arm and
+   case. A control draw is scored without its labels. Private cases don't run under this profile.
+2. **Study files.** `bench study run STUDY.json` ([evaluation/study.py](../../src/dopplertrack/evaluation/study.py),
+   whose docstring is the file's format) reads the cases, a baseline (recipe, profile, parameters), variants
+   (parameter overrides, method choices included), the control days and a master seed, and runs each arm, and
+   each arm's control day, as an ordinary benchmark run inside one study folder. `plan.json` holds every arm's
+   resolved parameters, and each variant's differences from the baseline are printed, before the first run starts;
+   a variant that changes nothing, or names an unknown parameter, is refused. The master seed is a parameter of
+   each recipe's decoy null (`null.seed` for collective, `scoring.null_seed` for `grid_pair`; `null` in the study
+   file keeps the draws as they are without a study). `bench study plan`, `summary`, `merge`, `inputs` and `launch`
+   print the plan, re-read a study folder, put shards' study folders together, list the inputs and print the fleet
+   commands.
+3. **Labels stay out of workers.** `bench_case` writes `request.json`, the case without its labels,
+   `expected_outcome`, `group`, `set` or `description`, checks those bytes (no evaluator-only field on the case,
+   no label key at any depth), and runs the worker from the case read back from them.
+4. **Complete accounting.** [evaluation/accounting.py](../../src/dopplertrack/evaluation/accounting.py) puts every
+   scheduled case in one class: answered, abstained, no candidate, failed, incomplete or missing. `results.json`
+   records the scheduled list (a merge takes it from every source's unsharded list, so a shard that never came
+   back is missing); `bench compare` and the study summary report the classes per case group against it, and
+   paired differences use only the cases complete in both runs. A run from before the list reports its
+   denominator as unknown. A study takes its denominators from its plan, so an arm that never ran is all missing.
+5. **Bounded units.** `bench run --unit-wall-s S` (a required field of a study file, with no default) runs every
+   case in its own process group and stops one still running at the cap: it leaves `incomplete.json` and no entry,
+   and is counted incomplete, never as a result.
+6. **A minimal collective result record.** `runtime/records.py` holds `COLLECTIVE_V1` (kind
+   `dopplertrack.collective`): the windows, the winner and the modes, each with its matched passes, R5's statistic
+   identity and domain as written, and `control`, the null block of a control draw. `validate` picks the schema by
+   kind. Every unit `dopplertrack run collective` and `collective-merge` write is this record, and the
+   benchmark's adds case, provenance and execution. `read_collective` still reads a result from before the record
+   (schema_version 0, with the identity marked unavailable where it has none). The fuller schema-v3 design is in git
+   history if a later study needs more.
+7. **AWS.** `bench study launch` prints one `tools/aws/runs launch` command per arm; a collective arm's topic is
+   R5's `statistic_label` of the arm's parameters. `runs launch --study NAME --max-boxes N --max-vcpus V` tags each
+   box with the study and, before each launch, counts the study's pending and running boxes in every region: at
+   the limit nothing is requested and the launch waits as it does for a full region. One launcher at a time is
+   assumed. `--max-hours` is now the box's whole lifetime from its supervisor's start (preparation, the command
+   and the upload): the command stops `--upload-minutes` before the end, and the supervisor arms a power-off for
+   the end as its first act. The supervisor ships with each job, so this needs no new launch template.
 
-Finished when a study with a baseline, two variants and wrong-day controls runs on a synthetic fixture locally and
-reports complete accounting, including deliberately failed and missing cases.
+Finished: a study with a baseline, two variants and wrong-day controls runs locally on the synthetic fixture
+(`tools/data/synthetic_study.py`: a known scene, three cases, one of them broken on purpose) and reports complete
+accounting, with the failed case and with an arm's control draws left unrun
+(`tests/test_study.py::test_a_study_with_two_variants_and_wrong_day_controls_accounts_for_every_unit`). The fleet
+side of item 7 is exercised in R8.
 
 **Not built here**, and added only when a real study shows the need: a journaled multi-attempt state machine,
 a global admission authority, EC2 client tokens and reconciliation, sealed-artifact dependency graphs, adaptive
@@ -373,7 +399,10 @@ discovery contracts, a remote or always-on controller, and a GPU backend. The de
 
 - Each method has small tests of its own contract (units, shapes, masks, score direction).
 - A synthetic scene with a known receiver, flights, f0 and clock runs end to end through both recipes and must
-  recover the receiver. This checks the software, not performance.
+  recover the receiver. This checks the software, not performance. R6's fixture (`tools/data/synthetic_study.py`)
+  is that scene for the collective recipe: its case `synthetic-a` recovers the receiver through the benchmark's
+  `collective` profile; `synthetic-b`, the same recording in a shifted box, ends on another mode and is there for
+  accounting, not as a known answer.
 - The pass-window assignment (`greedy_assignment`) is checked against an exhaustive reference on tiny graphs,
   including ties, caps and shared-pass conflicts.
 - Serial and parallel runs of detection, CPA build, the decoy nulls and the collective search give the same
@@ -384,10 +413,13 @@ discovery contracts, a remote or always-on controller, and a GPU backend. The de
 
 All local work and local checks finish first. Then, after the owner signs in to the `dopplertrack` profile in
 their own terminal: run `tools/check.sh` on the dev box against the final source, and the opt-in Oyster Bay test
-(`tests/test_oyster_bay.py`, whose imports R1 rewrote); run `tools/aws/check.sh` and
-deploy only if the box lifetime change (R6.7) needs a new launch template, with the owner's approval of that
-deployment; and run one small study on the fleet using the synthetic fixture to verify launch, caps, upload,
-collection and termination, after its `--check` and `--rehearse` pass. Credentials are never pasted into chat.
+(`tests/test_oyster_bay.py`, whose imports R1 rewrote); run `tools/aws/check.sh` (the box lifetime change of R6.7
+is in the supervisor, which ships with each job, so no launch template changes and nothing is deployed); and run
+one small study on the fleet using the synthetic fixture to verify launch, the study's box and vCPU limit, the
+wall-time cap, upload, collection (`runs pull`, `bench study merge`) and termination, after its `--check` and
+`--rehearse` pass. The fixture is written on the box by the job's own command
+(`tools/data/synthetic_study.py "$RUN/fixture"`, then `bench study run "$RUN/fixture/study.json" --out "$RUN"`), so
+the job needs no input from the bucket. Credentials are never pasted into chat.
 
 ### R9. New baseline
 
@@ -398,7 +430,7 @@ ledger's summary. These numbers are PLAN.md's starting point and are not used to
 
 ## 4. Behavior-change ledger
 
-Every change that alters an output (R1–R5) gets one entry: what changed, why, which method or recipe, and its
+Every change that alters an output (R1–R6) gets one entry: what changed, why, which method or recipe, and its
 effect on the synthetic and fixture tests. The ledger is `ledger.md` in
 `$DOPPLERTRACK_DATA/runs/2026-11-07-readiness-ledger/`, beside R1's naming review and term checks; every later
 item appends to it. R9's record summarizes it. An unexplained output change blocks
@@ -421,8 +453,8 @@ Research may start when all of these hold:
 
 PLAN.md's first gate starts from this point.
 
-Owner decisions along the way: signing in to the `dopplertrack` profile for R8; approving a launch-template
-deployment if R6.7 needs one; approving R9's spend.
+Owner decisions along the way: signing in to the `dopplertrack` profile for R8, and approving its small fleet
+study; approving R9's spend. R6.7 needs no deployment.
 
 ## 6. Out of scope
 

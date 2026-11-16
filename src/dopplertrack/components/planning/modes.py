@@ -31,7 +31,9 @@ def distinct_modes(peaks, separation_m: float = MODE_SEPARATION_M, max_modes: in
 def modes(pts: pd.DataFrame, lat, lon, separation_m: float = MODE_SEPARATION_M, max_modes: int = MAX_MODES,
           clock_separation_s: float | None = None) -> list[dict]:
     """distinct_modes over pts (columns gidx, Z, b, n_matched) in its order; lat and lon map gidx to coordinates. pts
-    must be sorted by descending Z (collective_detection sorts it)."""
+    must be sorted by descending Z (collective_detection sorts it). Each mode keeps its point's gidx, which the
+    caller uses to look up the mode's matched passes."""
     peaks = (dict(lat=float(lat[int(r.gidx)]), lon=float(lon[int(r.gidx)]), Z=float(r.Z),
-                  clock_audio_minus_unix=float(r.b), n_matched=int(r.n_matched)) for r in pts.itertuples())
+                  clock_audio_minus_unix=float(r.b), n_matched=int(r.n_matched), gidx=int(r.gidx))
+             for r in pts.itertuples())
     return distinct_modes(peaks, separation_m, max_modes, clock_separation_s)

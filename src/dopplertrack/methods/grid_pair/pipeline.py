@@ -212,7 +212,8 @@ def _hypothesis_kwargs(params: GridPairParameters) -> dict:
 
 def _null(w, cpa, segs, grid, c, params, workers, f0_scales):
     return event_decoy_null(w, cpa, segs, grid.enu, c, n=params.scoring.null_n, workers=workers, f0_scales=f0_scales,
-                            temperature_c=params.air.temperature_c, shifts=inclusive_grid(params.scoring.shift_grid_s))
+                            temperature_c=params.air.temperature_c, shifts=inclusive_grid(params.scoring.shift_grid_s),
+                            seed=params.scoring.null_seed)
 
 
 def rectangular_pairs(sp, ev1, ev2, w1, w2, cpa, segs, grid, c, params, funnel, triples, workers):

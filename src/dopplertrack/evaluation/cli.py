@@ -1,4 +1,4 @@
-"""uv run python -m bench {validate,build,run,merge,inputs,tier1,report,prepare,compare}"""
+"""uv run python -m bench {validate,build,run,merge,inputs,tier1,report,prepare,compare,study}"""
 from __future__ import annotations
 
 import argparse
@@ -23,7 +23,12 @@ def main(argv=None):
     r.add_argument("--revision", help="run this commit-ish through its own CLI in its own environment, e.g. a16b700 "
                    "(default: this checkout, in-process)")
     r.add_argument("--profile", choices=sorted(runner.PROFILES), default="saved-fit",
-                   help="saved-fit: the case's committed fits; raw-audio: detect's top two by score, earlier first")
+                   help="saved-fit: the case's committed fits; raw-audio: detect's top two by score, earlier first; "
+                   "locate: the locate command; collective: detection's windows through the collective search")
+    r.add_argument("--unit-wall-s", type=float, metavar="S", help="stop a case still running after S seconds and "
+                   "count it incomplete, never a result; every case then runs in its own process")
+    r.add_argument("--cases", type=Path, metavar="FILE", help="read the cases from this manifest instead of "
+                   "bench/cases.json (a synthetic fixture)")
     r.add_argument("--parallel", type=int, default=1, help="cases to run at once, each in its own process (default: 1)")
     r.add_argument("--shard", metavar="I/N", help="run only every N-th case from the I-th (1-based, sorted ids), so N "
                    "boxes split one run; `bench merge` puts the shards together")
@@ -44,6 +49,7 @@ def main(argv=None):
     rc.add_argument("--revision"); rc.add_argument("--profile", choices=sorted(runner.PROFILES), default="saved-fit")
     rc.add_argument("--code-json", required=True, help="the code revision the parent read when the run started")
     rc.add_argument("--overrides-json", default="{}")
+    rc.add_argument("--cases", type=Path)
     t1 = sub.add_parser("tier1", help="Tier 1: detect and fits against the blind labels, and the known point")
     t1.add_argument("--set", action="append", choices=("development", "calibration", "evaluation"),
                     help="span sets to run (default: development only; calibration is for Phase 4)")
@@ -75,14 +81,37 @@ def main(argv=None):
     pp.add_argument("case", nargs="+")
     pp.add_argument("--weather", action="store_true", help="the table for runs that apply the case's station temperature")
     pp.add_argument("--out", type=Path, help="write the cases' summaries here as JSON")
-    c = sub.add_parser("compare", help="print the difference between two benchmark runs")
+    c = sub.add_parser("compare", help="print each run's accounting and the difference between two benchmark runs")
     c.add_argument("a", type=Path); c.add_argument("b", type=Path)
+    st = sub.add_parser("study", help="a baseline, variants and control draws from a study file (evaluation/study.py)")
+    ssub = st.add_subparsers(dest="study_cmd", required=True)
+    sr = ssub.add_parser("run", help="print each variant's differences from the baseline, then run every arm (and "
+                         "its control draws) as a benchmark run in one study folder, and summarise it")
+    sr.add_argument("study", type=Path)
+    sr.add_argument("--out", type=Path, help="the study folder (default: a new run folder; a box's $RUN); what is "
+                    "finished there is kept")
+    sr.add_argument("--arm", action="append", help="only this arm (repeatable; baseline is the baseline's name)")
+    sr.add_argument("--no-controls", action="store_true", help="skip the control draws")
+    sr.add_argument("--shard", metavar="I/N", help="every N-th case from the I-th of each run, as bench run --shard")
+    sp_ = ssub.add_parser("plan", help="print what the study would run and each variant's differences; run nothing")
+    sp_.add_argument("study", type=Path)
+    ss = ssub.add_parser("summary", help="the accounting and paired differences of a study folder, from what is on disk")
+    ss.add_argument("dir", type=Path)
+    sm = ssub.add_parser("merge", help="one study folder from several of the same study (the fleet's shards)")
+    sm.add_argument("out", type=Path); sm.add_argument("sources", type=Path, nargs="+")
+    si = ssub.add_parser("inputs", help="the files the study's runs read, as JSON, for runs launch --inputs-from")
+    si.add_argument("study", type=Path); si.add_argument("--arm", action="append")
+    sl = ssub.add_parser("launch", help="print each arm's tools/aws/runs launch command; start nothing")
+    sl.add_argument("study", type=Path); sl.add_argument("--arm", action="append")
     a = ap.parse_args(argv)
     # on a fleet box `runs launch` sets $RUN (the job's run folder) and, with --shards, this box's shard
     env_shard = (f"{os.environ['DOPPLERTRACK_SHARD']}/{os.environ['DOPPLERTRACK_SHARDS']}"
                  if os.environ.get("DOPPLERTRACK_SHARD") and os.environ.get("DOPPLERTRACK_SHARDS") else None)
     if a.cmd in ("run", "tier1"):
         a.run_dir = a.run_dir or (Path(os.environ["RUN"]) if os.environ.get("RUN") else None)
+        a.shard = a.shard or env_shard
+    if a.cmd == "study" and a.study_cmd == "run":
+        a.out = a.out or (Path(os.environ["RUN"]) if os.environ.get("RUN") else None)
         a.shard = a.shard or env_shard
 
     if a.cmd == "validate":
@@ -100,7 +129,8 @@ def main(argv=None):
             sys.exit("\n".join(bad))
         print("every derived file matches its recorded hash")
     elif a.cmd == "run":
-        run_dir = runner.run_bench(a.case or cases.case_ids(profile=a.profile), tier=a.tier, run_dir=a.run_dir,
+        ids = a.case or cases.case_ids(profile=a.profile, **({"path": a.cases} if a.cases else {}))
+        run_dir = runner.run_bench(ids, tier=a.tier, run_dir=a.run_dir, unit_wall_s=a.unit_wall_s, cases_path=a.cases,
                                    revision=a.revision, profile=a.profile, parallel=a.parallel,
                                    overrides={**runner.parse_overrides(a.search_param),
                                               **({runner.WEATHER_KEY: True} if a.weather else {})}, shard=a.shard,
@@ -118,7 +148,7 @@ def main(argv=None):
         import json
         code, execute = runner._executor(a.revision, a.profile, print, code=json.loads(a.code_json),
                                          overrides=json.loads(a.overrides_json))
-        runner.run_one(a.case, a.run_dir, execute, code)
+        runner.run_one(a.case, a.run_dir, execute, code, cases_path=a.cases)
     elif a.cmd == "tier1":
         from . import tier1
         if a.build:
@@ -139,6 +169,24 @@ def main(argv=None):
             a.out.write_text(json.dumps(done, indent=1) + "\n")
     elif a.cmd == "compare":
         print(runner.compare_runs(a.a, a.b))
+    elif a.cmd == "study":
+        import json
+        from . import study
+        try:
+            if a.study_cmd == "run":
+                print(study.run_study(a.study, out_dir=a.out, arms=a.arm, shard=a.shard, controls=not a.no_controls))
+            elif a.study_cmd == "plan":
+                print("\n".join(study.announce(study.plan(study.load_study(a.study)))))
+            elif a.study_cmd == "summary":
+                print(study.summary(a.dir))
+            elif a.study_cmd == "merge":
+                print(study.merge_study(a.out, a.sources))
+            elif a.study_cmd == "inputs":
+                print(json.dumps(study.study_inputs(a.study, a.arm), indent=1))
+            elif a.study_cmd == "launch":
+                print("\n".join(study.launch_commands(a.study, a.arm)))
+        except study.StudyError as exc:
+            sys.exit("\n".join(exc.problems))
 
 
 if __name__ == "__main__":

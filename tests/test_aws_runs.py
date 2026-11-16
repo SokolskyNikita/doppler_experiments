@@ -397,3 +397,43 @@ def test_a_sharded_rehearsal_or_check_stands_in_for_one_shard(monkeypatch):
     runs.launch_all(runs.argparse.Namespace(topic="pairs", shards=8, shard=None, rehearse=True, rehearse_shard=3))
     runs.launch_all(runs.argparse.Namespace(topic="pairs", shards=8, shard=None, check=True))
     assert seen == [("pairs-s3of8", [3, 8]), ("pairs-s1of8", [1, 8])]
+
+
+# ---- research readiness R6.7: the box's lifetime and a study's limit ------------------------------------------
+
+def test_max_hours_is_the_boxs_whole_lifetime_and_the_command_stops_in_time_to_upload():
+    life = supervisor.lifetime({"max_hours": 2, "upload_minutes": 20}, started=1000.0)
+    assert life["box_deadline"] == 1000.0 + 7200 and life["command_deadline"] == 1000.0 + 7200 - 1200
+    assert life["fallback_minutes"] == 120 + supervisor.FALLBACK_GRACE_MIN      # armed at the start, past the end
+    short = supervisor.lifetime({"max_hours": 0.25}, started=0.0)               # the default reserve would be all of it
+    assert short["command_deadline"] == 450.0 and short["box_deadline"] == 900.0
+    assert supervisor.lifetime({}, 0.0)["box_deadline"] == 12 * 3600            # a spec from before the field
+
+
+def test_a_kept_box_is_never_given_a_fallback_shutdown(monkeypatch):
+    called = []
+    monkeypatch.setattr(supervisor.subprocess, "run", lambda *a, **k: called.append(a) or type("R", (), {"returncode": 0})())
+    monkeypatch.setattr(supervisor.shutil, "which", lambda name: "/sbin/shutdown")
+    monkeypatch.setenv("DOPPLERTRACK_KEEP_BOX", "1")
+    assert supervisor.arm_fallback(125) is False and not called
+    monkeypatch.delenv("DOPPLERTRACK_KEEP_BOX")
+    assert supervisor.arm_fallback(125) is True and called[0][0] == ["shutdown", "-h", "+125"]
+
+
+def test_a_studys_boxes_are_tagged_and_held_at_its_limit(monkeypatch):
+    out = {"Subnets": "s-a", "TemplateArm64": "lt-arm", "TemplateAmd64": "lt-x86"}
+    tags = lambda req: {t["Key"]: t["Value"] for t in req["TagSpecifications"][0]["Tags"]}   # noqa: E731
+    assert tags(runs.fleet_request(out, "j", "4xlarge", False, study="synthetic"))[runs.STUDY_TAG] == "synthetic"
+    assert runs.STUDY_TAG not in tags(runs.fleet_request(out, "j", "4xlarge", False))
+    assert runs.study_hold((1, 16), max_boxes=2, max_vcpus=32, box_vcpus=16) is None
+    assert "2 boxes at once" in runs.study_hold((2, 32), 2, 64, 16)
+    assert "32 vCPUs at once" in runs.study_hold((1, 16), 4, 32, 32)
+    # checked before each launch: at the limit nothing is requested, and the launch waits like a full region
+    asked = []
+    monkeypatch.setattr(runs, "study_usage", lambda study: (2, 32))
+    monkeypatch.setattr(runs, "box_vcpus", lambda size: 16)
+    monkeypatch.setattr(runs, "try_regions", lambda a, job: asked.append(job) or ([], None, []))
+    monkeypatch.setattr(runs, "put_status", lambda *a, **k: None)
+    a = runs.argparse.Namespace(study="synthetic", max_boxes=2, max_vcpus=64, size="4xlarge")
+    assert runs.place(a, "job", None, "bucket", 0, final=False) is False and not asked
+    assert runs.study_check(runs.argparse.Namespace(study=None)) is None

@@ -502,7 +502,8 @@ def test_a_private_case_runs_with_its_caches_under_private(tmp_path, monkeypatch
         seen[case["id"]] = cache_root()
         raise RuntimeError("stop after recording the cache root")
     for cid, extra in (("public", {}), ("home", {"site": "a-site", "private": True})):
-        monkeypatch.setattr(runner, "blind_case", lambda c, extra=extra, cid=cid: {"id": cid, **extra})
+        meta = {"version": 1, "group": "g", "set": "development", "expected_outcome": "located"}
+        monkeypatch.setattr(runner, "blind_case", lambda c, extra=extra, cid=cid: {"id": cid, **meta, **extra})
         with pytest.raises(RuntimeError):
             runner.bench_case(cid, tmp_path / cid, execute=execute)
     assert seen["public"] == tmp_path / "shared"

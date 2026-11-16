@@ -43,6 +43,10 @@ tools/aws/runs launch TOPIC --case CASE_ID --check -- COMMAND
 # Repeat the same proposed command with --rehearse, then remove those flags for an authorized launch.
 ```
 
+`--max-hours` is the box's whole lifetime, counted from its supervisor's start: preparation, the command and the upload of its outputs. The command is stopped `--upload-minutes` (default 15) before the end, and the supervisor schedules a power-off for the end as its first act, so a preparation or an upload that hangs cannot keep a box. The supervisor is shipped with each job, so this needs no launch-template deployment.
+
+A job that belongs to a study names it: `--study NAME --max-boxes N --max-vcpus V`. Each of its boxes is tagged `dopplertrack-study=NAME`, and before each launch the study's pending and running boxes are counted in every deployed region; a launch that would pass either limit requests nothing and waits, as for a full region (`--queue-minutes`). The check assumes one launcher at a time. `python -m bench study launch STUDY.json` prints these commands for a study file's arms; it starts nothing.
+
 The CLI also supports named inputs, caches, shards, wait/pull/log/status and resume. Inspect `tools/aws/runs --help` and the parser in `runs.py` for current flags. `--resume` normally reuses the saved job bundle and inputs from that job; an explicit `--repo` overrides its code source. It does not implicitly mean “run the current branch.” Never resume a historical job solely because a ledger mentions it.
 
 ## Data and run flow

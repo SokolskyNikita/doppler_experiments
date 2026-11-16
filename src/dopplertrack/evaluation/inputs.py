@@ -43,19 +43,33 @@ class _Lists:
                 "detail": {**head, **detail}}
 
 
-def _case_files(out: _Lists, case: dict, profile: str, who: str, cpa: bool = True):
+def _data(out: _Lists, path: str, role: str, who: str, sha256: str | None = None):
+    """A file under the data root; a path that is absolute (a fixture's own file) is not something to bring."""
+    if not path.startswith("/"):
+        out.add("data", path, role, who, sha256)
+
+
+def _case_files(out: _Lists, case: dict, profile: str, who: str, cpa: bool = True, overrides: dict | None = None):
     sha = {d["path"]: d["sha256"] for d in case.get("derived", [])}
-    out.add("data", case["spectrogram"], "spectrogram", who, sha.get(case["spectrogram"]))
+    _data(out, case["spectrogram"], "spectrogram", who, sha.get(case["spectrogram"]))
     fd = case["flight_data"]
     key = "locate_traces" if profile == "locate" and "locate_traces" in fd else "traces"
-    for p in [fd[key]] if isinstance(fd[key], str) else fd[key]:
-        out.add("data", p, "flight data", who, sha.get(p))
+    traces = [fd[key]] if isinstance(fd[key], str) else fd[key]
+    if profile == "collective":       # its own traces, or a control day's
+        from .collective import trace_files
+        traces = trace_files(case, overrides)
+    for p in traces:
+        _data(out, p, "flight data", who, sha.get(p))
     if profile == "saved-fit" and case["events"]["mode"] == "saved_fits":
         for p in case["events"]["files"]:
             out.add("repo", p, "saved fits", who)
     for f in case["source"]["raw"]:
         out.add("data", f["path"], "raw source (only to rebuild derived files)", who, f["sha256"])
-    if cpa:
+    if cpa and profile == "collective":
+        from .collective import cpa_cache, resolved_parameters
+        out.add("cache", cpa_cache(case, overrides, resolved_parameters(case, overrides)[0].planning.coarse_m),
+                "collective coarse CPA table (built if absent)", who)
+    elif cpa:
         name = case["search"]["cpa_cache"]
         out.add("cache", locate_cpa_cache(case, name) if profile == "locate" else name, "CPA table (built if absent)", who)
     if case["search"].get("dem"):

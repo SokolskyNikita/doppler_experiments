@@ -47,6 +47,7 @@ class ScoringParameters:
 @dataclass(frozen=True)
 class NullParameters:
     null_n: int = NULL_N                           # window_decoy_nulls draws per window (NULL_N)
+    seed: int | None = None                        # a study's master seed for the draws; None: seeded by the window alone
 
 
 @dataclass(frozen=True)

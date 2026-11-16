@@ -111,6 +111,7 @@ class ScoringParameters:
     crop_pad_s: float = 40.0                       # EventWindow.from_fit pad_s
     curve_samples: int = 160                       # EventWindow.sweep_scores n
     null_n: int = NULL_N                           # event_decoy_null draws per event
+    null_seed: int | None = None                   # a study's master seed for the draws; None: seeded by the event alone
 
 
 @dataclass(frozen=True)

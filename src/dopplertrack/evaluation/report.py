@@ -7,6 +7,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from dopplertrack.runtime.records import KIND
+
 from .cases import data_root, load_cases
 
 
@@ -44,7 +46,11 @@ def report_run(run_dir: Path, case_ids: list[str] | None = None, out_dir: Path |
             pages.append({**row, "note": "no result.json"})
             continue
         try:
-            case = json.loads((d / "result.json").read_text()).get("case") or {}
+            record = json.loads((d / "result.json").read_text())
+            if record.get("kind") != KIND:
+                pages.append({**row, "note": f"no page: the report renders {KIND} records, not {record.get('kind')}"})
+                continue
+            case = record.get("case") or {}
             row["set"] = _case_set(doc, case)
             page = render_report(d / "result.json", out_dir=out_dir / d.name, case_meta={"set": row["set"]},
                                  data_root=data_root())

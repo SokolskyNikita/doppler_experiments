@@ -6,7 +6,10 @@ schema of its `schema_version`; `write_record` validates, writes atomically and 
 the bytes written, which a benchmark stores beside the record before it reads any reference answer.
 
 Version 1 holds what the pipeline can fill today (PLAN.md section 5.5). Fields arrive with the
-features that produce them, each with a version bump."""
+features that produce them, each with a version bump.
+
+The collective recipe's result has its own kind and schema (COLLECTIVE_KIND, COLLECTIVE_V1): the minimal record of
+research readiness R6.6. `validate` picks the schema by the record's kind."""
 from __future__ import annotations
 
 import hashlib
@@ -174,6 +177,82 @@ SCHEMA_V2_SITE_RELATIVE = {**SCHEMA_V2, "frame": OneOf("site-relative"), "site":
                            "candidates": ListOf(_REL_CANDIDATE), "refined": Maybe(_REL_REFINED)}
 
 
+# The collective recipe's result (research readiness R6.6), version 1: the windows searched, the winner and the modes
+# with each one's matched passes, the statistic identity as collective/search.py writes it, and `control`, the null
+# block of a control draw (another day's traffic set on the recording's day; null for the own-day search). The
+# schema lists what every such record must hold; a search's fuller output (coarse map, nulls, counts) rides along
+# unchecked. A record written by the benchmark also carries case, provenance and execution (COLLECTIVE_BENCH).
+COLLECTIVE_KIND = "dopplertrack.collective"
+COLLECTIVE_VERSION = 1
+MATCHED_PASS = Nullable({"z": NUMBER, "score": NUMBER})      # a matched pass also names icao, f0_hz and its clock
+MODE = {"lat": NUMBER, "lon": NUMBER, "Z": NUMBER, "clock_audio_minus_unix": NUMBER, "n_matched": int}
+COLLECTIVE_V1 = {
+    "schema_version": int,
+    "kind": OneOf(COLLECTIVE_KIND),
+    "statistic": str,
+    "statistic_identity": Maybe({"name": str, "code_sha256": str, "parameters_sha256": str, "id": str}),
+    "domain": Maybe({"bbox": ListOf(NUMBER), "terrain": bool, "windows_sha256": str}),
+    "windows": ListOf({"t_start": NUMBER, "t_end": NUMBER, "f0": NUMBER, "t_cpa": NUMBER, "score": NUMBER}),
+    "winner": Nullable({**MODE, "windows": ListOf(MATCHED_PASS)}),
+    "parameters": Maybe(dict),
+}
+COLLECTIVE_MODES = ListOf({**MODE, "windows": ListOf(MATCHED_PASS)})      # checked where a record has modes
+CONTROL = Nullable({"traffic_day": str, "recording_day": str, "shift_s": NUMBER})
+COLLECTIVE_BENCH = {
+    "case": {"id": str, "version": int},
+    "provenance": SCHEMA_V1["provenance"],
+    "reason": Nullable(str),
+    "modes": COLLECTIVE_MODES,
+    "control": CONTROL,
+    "execution": SCHEMA_V1["execution"],
+}
+COLLECTIVE_SCHEMAS = {1: COLLECTIVE_V1}
+
+
+def validate_collective(record: dict) -> None:
+    """Raise RecordError listing every way a collective record departs from its version's schema."""
+    version = record.get("schema_version")
+    if version not in COLLECTIVE_SCHEMAS:
+        raise RecordError([f"schema_version: {version!r} is not one of {sorted(COLLECTIVE_SCHEMAS)} for {COLLECTIVE_KIND}"])
+    problems: list[str] = []
+    _check(record, COLLECTIVE_SCHEMAS[version], "record", problems)
+    if "modes" in record:
+        _check(record["modes"], COLLECTIVE_MODES, "record.modes", problems)
+    if "control" in record:
+        _check(record["control"], CONTROL, "record.control", problems)
+    if "case" in record:
+        _check(record, COLLECTIVE_BENCH, "record", problems)
+    if problems:
+        raise RecordError(problems)
+
+
+def versioned_collective(result: dict) -> dict:
+    """A collective search's result as a version-1 record: the result with its kind and version, validated."""
+    record = {**result, "schema_version": COLLECTIVE_VERSION, "kind": COLLECTIVE_KIND}
+    validate_collective(record)
+    return record
+
+
+def read_collective(path) -> dict:
+    """A collective result from disk, whatever wrote it: a versioned record is validated; a result from before the
+    record existed (no kind) is returned as it is with schema_version 0, its statistic identity marked unavailable
+    where it has none (results from before readiness R5), so old outputs stay readable."""
+    doc = json.loads(Path(path).read_text())
+    if not isinstance(doc, dict):
+        raise RecordError([f"{path}: expected an object, got {type(doc).__name__}"])
+    if "kind" in doc:
+        if doc["kind"] != COLLECTIVE_KIND:
+            raise RecordError([f"{path}: kind {doc['kind']!r} is not {COLLECTIVE_KIND}"])
+        validate_collective(doc)
+        return doc
+    if "winner" not in doc or "windows" not in doc:
+        raise RecordError([f"{path}: neither a collective record nor an older collective result"])
+    doc = {**doc, "schema_version": 0}
+    doc.setdefault("statistic_identity", unavailable("written before the statistic identity existed (readiness R5)"))
+    doc.setdefault("domain", unavailable("written before the search domain was recorded (readiness R5)"))
+    return doc
+
+
 def _check(value, spec, where: str, problems: list[str]):
     if isinstance(spec, Maybe):
         if is_unavailable(value):
@@ -215,6 +294,8 @@ def validate(record) -> None:
     """Raise RecordError listing every way `record` departs from the schema of its version."""
     if not isinstance(record, dict):
         raise RecordError([f"record: expected an object, got {type(record).__name__}"])
+    if record.get("kind") == COLLECTIVE_KIND:
+        return validate_collective(record)
     version = record.get("schema_version")
     if version not in SCHEMAS:
         raise RecordError([f"schema_version: {version!r} is not one of {sorted(SCHEMAS)}"])

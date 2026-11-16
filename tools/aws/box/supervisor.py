@@ -14,6 +14,11 @@ s3://<bucket>/jobs/<job>/spec.json, which `runs launch` wrote. In order:
 5. when it ends, is interrupted or times out: every run folder the job made, a tarball of the cache
    entries it added (s3 cache-deltas/<job>.tar), and jobs/<job>/status.json.
 
+The spec's max_hours is the box's whole lifetime, counted from this supervisor's start: preparation, the command
+and the upload of its outputs (`lifetime`). The command is stopped upload_minutes before the end, so what it wrote
+still goes up, and a power-off scheduled for the end is armed first, so a preparation or an upload that hangs can't
+keep the box.
+
 Standard library only: the box has Ubuntu's python3 plus the s5cmd, uv and ffmpeg binaries."""
 from __future__ import annotations
 
@@ -42,6 +47,26 @@ TERM_GRACE_S = 20
 # joblib's per-function code file and the per-entry lock files belong to each box, not to the cache's contents
 CACHE_SKIP = ("func_code.py",)
 CACHE_SKIP_DIRS = ("locks",)
+UPLOAD_MINUTES = 15       # of the box's lifetime, kept for uploading what the command wrote
+FALLBACK_GRACE_MIN = 5    # the scheduled power-off comes this long after the lifetime's end, so an orderly end wins
+
+
+def lifetime(spec: dict, started: float) -> dict:
+    """The box's deadlines from its spec: max_hours from `started` (the supervisor's start) is the whole lifetime;
+    the command stops upload_minutes before its end (at most half the lifetime is kept for the upload); the
+    power-off that ends the box whatever hangs is scheduled fallback_minutes after `started`."""
+    box_s = 3600 * float(spec.get("max_hours", 12))
+    reserve_s = min(60 * float(spec.get("upload_minutes", UPLOAD_MINUTES)), box_s / 2)
+    return {"box_deadline": started + box_s, "command_deadline": started + box_s - reserve_s,
+            "fallback_minutes": int(-(-box_s // 60)) + FALLBACK_GRACE_MIN}
+
+
+def arm_fallback(minutes: int) -> bool:
+    """Schedule the power-off that ends the box `minutes` from now (the bootstrap's own was cancelled when it handed
+    over); False where there is no shutdown command or the box is kept (the dev box, a rehearsal)."""
+    if os.environ.get("DOPPLERTRACK_KEEP_BOX") or not shutil.which("shutdown"):
+        return False
+    return subprocess.run(["shutdown", "-h", f"+{minutes}"], capture_output=True).returncode == 0
 
 
 class Metadata:
@@ -289,7 +314,11 @@ def main(argv=None) -> int:
     args = ap.parse_args(argv)
     md = Metadata()
     job = Job(args.bucket, args.job, md)
+    box_started = time.time()
     spec = json.loads(s5("cat", f"{job.prefix}/spec.json", capture=True).stdout)
+    life = lifetime(spec, box_started)
+    if not spec.get("rehearsal_minutes"):     # a rehearsal runs on the dev box, which must stay up
+        job.status["fallback_shutdown_armed"] = arm_fallback(life["fallback_minutes"])
     data, cache, work = SCRATCH / "data", SCRATCH / "cache", SCRATCH / "work"
     if spec.get("private"):      # a case the owner cleared: its cache stays apart and none of it comes back
         cache = SCRATCH / "data" / "private" / "cache"
@@ -346,7 +375,8 @@ def main(argv=None) -> int:
     if spec.get("jobs"):
         env["DOPPLERTRACK_JOBS"] = str(spec["jobs"])
     rehearsal = spec.get("rehearsal_minutes")      # `runs launch --rehearse`: the dev box, cut off after this long
-    deadline = time.time() + (60 * float(rehearsal) if rehearsal else 3600 * float(spec.get("max_hours", 12)))
+    # a job's deadline is the box's, less the time kept for the upload: preparation has already used some of it
+    deadline = time.time() + 60 * float(rehearsal) if rehearsal else life["command_deadline"]
     checkpoint_s = float("inf") if rehearsal else 60 * float(spec.get("checkpoint_minutes", 10))
     t_start = time.time()
     with open(run / "command.log", "ab") as log:

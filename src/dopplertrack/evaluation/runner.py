@@ -114,6 +114,8 @@ PROFILES = {
     # locate detects its own events and defaults to comparable pairs; geometry, silence and refinement come from
     # the case. Its stated-start clock gate is on unless overridden; see execute_case_locate.
     "locate": {"events": "detect, then locate's pair rule", "harmonics": [1, 1]},
+    # the collective recipe end to end (evaluation/collective.py): detection's usable windows, then the search
+    "collective": {"events": "detect, every usable window", "recipe": "collective"},
 }
 
 
@@ -681,6 +683,9 @@ def _package_version() -> str:
 
 
 HASH_FILE = "result.json.sha256"
+REQUEST_FILE = "request.json"          # what the worker was given (cases.worker_request)
+INCOMPLETE_FILE = "incomplete.json"    # a unit stopped at the wall-time cap: never a result (R6.5)
+POLL_S = 2.0                           # how often run_bench looks at its case processes
 
 
 @contextlib.contextmanager
@@ -707,9 +712,15 @@ def bench_case(case_id: str, case_dir: Path, execute=execute_case, labels=case_l
     """Run one case blind, write result.json and its hash, and only then read the labels and score it. A private
     case (evaluation/private.py) is resolved from $DOPPLERTRACK_DATA/private/, run with its caches there, and its record
     written in the site's frame unless reveal, after a check that no position near the site is left in it."""
-    from .cases import is_private
+    from .cases import META, is_private, read_worker_request, worker_request
     kw = {} if cases_path is None else {"path": cases_path}
     case = blind_case(case_id, **kw)
+    meta = {k: case[k] for k in META}
+    case_dir.mkdir(parents=True, exist_ok=True)
+    # the worker runs from the request as serialized: the case without labels or any evaluator-only field, checked
+    # on the bytes written (R6.3)
+    (case_dir / REQUEST_FILE).write_bytes(worker_request(case))
+    case = read_worker_request((case_dir / REQUEST_FILE).read_bytes())
     private = is_private(case)
     if private:
         from . import private as priv
@@ -717,7 +728,6 @@ def bench_case(case_id: str, case_dir: Path, execute=execute_case, labels=case_l
         if not reveal:              # the log and summary say where locate's point is only as an offset from the site
             site, plain = priv.load_site(case["site"]), log
             log = lambda *a: plain(*(priv.redact(str(x), site) for x in a))   # noqa: E731
-    case_dir.mkdir(parents=True, exist_ok=True)
     with private_cache(case):
         record = execute(case, case_dir, log=log, code=code or code_revision())
     if private and not reveal:
@@ -729,7 +739,6 @@ def bench_case(case_id: str, case_dir: Path, execute=execute_case, labels=case_l
         record["provenance"]["parameters"]["revealed"] = "absolute coordinates, by the owner's --reveal"
     sha = write_record(case_dir / "result.json", record)
     (case_dir / HASH_FILE).write_text(f"{sha}  result.json\n")
-    meta = {k: case[k] for k in ("id", "version", "group", "set", "expected_outcome")}
     return compare_case(case_dir, meta, lambda: labels(case_id, case["version"], **kw))
 
 
@@ -754,6 +763,10 @@ def compare_case(case_dir: Path, meta: dict, read_labels) -> dict:
     except (OSError, IndexError, RecordError, ValueError) as exc:
         return {**entry, "status": "discarded", "reason": f"record does not match the hash written before the "
                 f"truth was read: {exc}"}
+    from dopplertrack.runtime.records import COLLECTIVE_KIND
+    if record.get("kind") == COLLECTIVE_KIND:
+        from .collective import compare_collective
+        return compare_collective(record, {**entry, "record_sha256": expected}, read_labels)
     # a run that failed is reported as an error, never scored as if it had abstained or found nothing
     tf = record["funnel"].get("triples_file")
     triples = None
@@ -855,6 +868,12 @@ def check_overrides(profile: str, overrides: dict | None, revision: str | None =
     """Refuse, before any case runs, an override that names no parameter (the locate profile's case keys aside) or one
     that would change a case's CPA table."""
     from dopplertrack.methods.grid_pair.parameters import resolve as resolve_parameters
+    if profile == "collective":
+        from .collective import resolved_parameters
+        if revision is not None:
+            raise ValueError("the collective profile runs this checkout only")
+        resolved_parameters(None, overrides)       # refuses an unknown name
+        return
     named = {k: v for k, v in (overrides or {}).items() if k != WEATHER_KEY
              and not (profile == "locate" and k in LOCATE_CASE_KEYS)}
     if revision is not None:
@@ -944,6 +963,11 @@ def _executor(revision: str | None, profile: str, log, code: dict | None = None,
         if revision is not None:
             raise ValueError("the locate profile runs this checkout only")
         return code or code_revision(), functools.partial(execute_case_locate, overrides=overrides)
+    if profile == "collective":
+        from .collective import execute_case_collective
+        if revision is not None:
+            raise ValueError("the collective profile runs this checkout only")
+        return code or code_revision(), functools.partial(execute_case_collective, overrides=overrides)
     if revision is None:
         return code or code_revision(), functools.partial(execute_case, profile=profile, overrides=overrides)
     from .revisions import ensure_revision
@@ -970,16 +994,18 @@ def overrides_tag(overrides: dict) -> str:
     return hashlib.sha256(json.dumps(overrides, sort_keys=True).encode()).hexdigest()[:8]
 
 
-def run_one(cid: str, run_dir: Path, execute, code: dict, log=print, reveal: bool = False) -> dict:
+def run_one(cid: str, run_dir: Path, execute, code: dict, log=print, reveal: bool = False, cases_path=None) -> dict:
     """One case into run_dir/<cid>/, with its log beside it; the scoreboard entry also goes to entry.json."""
     case_dir = run_dir / cid
     case_dir.mkdir(parents=True, exist_ok=True)
+    (case_dir / INCOMPLETE_FILE).unlink(missing_ok=True)
     with open(case_dir / "run.log", "w") as fh:
         def case_log(msg, fh=fh):
             print(msg, file=fh, flush=True)
             log(msg)
         w0 = time.perf_counter()
-        entry = bench_case(cid, case_dir, execute=execute, log=case_log, code=code, reveal=reveal)
+        entry = bench_case(cid, case_dir, execute=execute, log=case_log, code=code, reveal=reveal,
+                           **({} if cases_path is None else {"cases_path": cases_path}))
         log(f"{cid}: {entry['status']} in {time.perf_counter() - w0:.0f} s")
     tmp = case_dir / ".entry.json.tmp"
     tmp.write_text(json.dumps(entry, indent=1, sort_keys=True) + "\n")
@@ -1015,43 +1041,70 @@ def write_results(run_dir: Path, info: dict, case_ids: list[str], crashed: dict 
     A case whose process died has no entry, so a resumed run runs it again; `crashed` says why it died."""
     entries = [json.loads((run_dir / c / "entry.json").read_text()) for c in case_ids
                if (run_dir / c / "entry.json").exists()]
+    incomplete = {c: json.loads((run_dir / c / INCOMPLETE_FILE).read_text()) for c in case_ids
+                  if (run_dir / c / INCOMPLETE_FILE).exists() and not (run_dir / c / "entry.json").exists()}
     doc = {"schema": 1, "tier": info["tier"], "profile": info["profile"], "search_overrides": info["search_overrides"],
            "code": info["code"], "git_commit": info["code"]["git_commit"], "git_dirty": info["code"]["git_dirty"],
            "created": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
            "complete": len(entries) == len(case_ids),
            "missing": [c for c in case_ids if not (run_dir / c / "entry.json").exists()], "cases": entries,
-           "crashed": dict(crashed or {})}
+           "crashed": dict(crashed or {}), "incomplete": incomplete,
+           # the denominator of every count (R6.4): what this run was to do, whether or not it finished
+           "scheduled": info.get("scheduled")}
     tmp = run_dir / ".results.json.tmp"
     tmp.write_text(json.dumps(doc, indent=1, sort_keys=True) + "\n")
     os.replace(tmp, run_dir / "results.json")
     return doc
 
 
+def _scheduled(case_ids: list[str], cases_path=None) -> list[dict]:
+    kw = {} if cases_path is None else {"path": cases_path}
+    return [{"case": c, "group": latest_case(c, **kw).get("group")} for c in case_ids]
+
+
+def _stop(proc: subprocess.Popen) -> None:
+    """End a case process and every worker it started (it leads its own process group)."""
+    import signal
+    try:
+        os.killpg(proc.pid, signal.SIGKILL)
+    except (ProcessLookupError, PermissionError):
+        pass
+    proc.wait()
+
+
 def run_bench(case_ids: list[str], tier: str = "t2", run_dir: Path | None = None, log=print,
               revision: str | None = None, profile: str = "saved-fit", parallel: int = 1,
               overrides: dict | None = None, shard: str | None = None, resume: bool = False,
-              reveal: bool = False) -> Path:
+              reveal: bool = False, unit_wall_s: float | None = None, cases_path=None) -> Path:
     """Run cases into a new run folder (or `run_dir`) and collect their scoreboard entries in results.json.
     revision: None runs this checkout in-process; any other commit-ish is exported, verified and run
     through its own CLI (evaluation/revisions.py). parallel > 1 runs that many cases at once, each in its own
     process (`bench run-case`), so stage logs and timings never mix. shard "i/n" runs only that share of the
     cases, for n boxes; `merge_runs` puts the shards together. resume continues a stopped run in run_dir: a case
-    with an entry.json is kept, and the rest run. results.json is rewritten as each case finishes."""
+    with an entry.json is kept, and the rest run. results.json is rewritten as each case finishes.
+
+    unit_wall_s caps each case's wall time: every case then runs in its own process, and one still running at the
+    cap is stopped and marked incomplete (incomplete.json in its folder, no entry), never counted as a result.
+    cases_path reads the cases from another manifest than bench/cases.json (a synthetic fixture)."""
     # the code revision is read once, before anything runs, so an edit during a long run can't relabel it
     overrides = dict(overrides or {})
+    ckw = {} if cases_path is None else {"path": cases_path}
+    all_ids = list(case_ids)
     case_ids = shard_of(case_ids, shard)
-    excluded = [c for c in case_ids if profile not in case_profiles(latest_case(c))]
+    excluded = [c for c in case_ids if profile not in case_profiles(latest_case(c, **ckw))]
     if excluded:
         raise ValueError(f"{excluded} don't run under the {profile} profile (their cases' profiles field)")
+    if unit_wall_s is not None and not unit_wall_s > 0:
+        raise ValueError(f"the per-unit wall-time cap must be above zero seconds, not {unit_wall_s!r}")
     check_overrides(profile, overrides, revision)
     code, execute = _executor(revision, profile, log, overrides=overrides)
     commit = code["git_commit"]
     from .cases import is_private
-    private = [c for c in case_ids if is_private(latest_case(c))]
+    private = [c for c in case_ids if is_private(latest_case(c, **ckw))]
     if private and len(private) != len(case_ids):
         raise ValueError(f"{private} are private and can't share a run folder with public cases")
-    if private and (revision is not None or parallel > 1):
-        raise ValueError("private cases run in-process from this checkout only")
+    if private and (revision is not None or parallel > 1 or unit_wall_s is not None or profile == "collective"):
+        raise ValueError("private cases run in-process from this checkout only, under the grid_pair profiles")
     if resume and run_dir is None:
         raise ValueError("resume needs the stopped run's --run-dir")
     if private and run_dir is not None and not Path(run_dir).resolve().is_relative_to(
@@ -1074,46 +1127,66 @@ def run_bench(case_ids: list[str], tier: str = "t2", run_dir: Path | None = None
         log(f"resuming {run_dir}: {len(done)} of {len(case_ids)} cases already have entries")
     elif done:
         raise ValueError(f"{run_dir} already has entries for {done}; pass --resume to continue it")
-    info.update(command=sys.argv, cases=case_ids, shard=shard, parallel=parallel, **want)
+    info.update(command=sys.argv, cases=case_ids, shard=shard, parallel=parallel, unit_wall_s=unit_wall_s,
+                scheduled=_scheduled(case_ids, cases_path), scheduled_all=_scheduled(all_ids, cases_path), **want)
     info.setdefault("attempts", []).append(datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"))
     todo = [c for c in case_ids if c not in done]
-    if parallel <= 1:
+    if parallel <= 1 and unit_wall_s is None:
         info_path.write_text(json.dumps(info, indent=1) + "\n")
         for cid in todo:
-            run_one(cid, run_dir, execute, code, log, reveal=reveal)
+            run_one(cid, run_dir, execute, code, log, reveal=reveal, cases_path=cases_path)
             write_results(run_dir, info, case_ids)
-    else:
-        # each case's own pools get an equal share of the cores, so N cases never start N full-size pools
-        from dopplertrack.runtime.parallel import JOBS_ENV, default_jobs
-        child_env = {**os.environ, JOBS_ENV: os.environ.get(JOBS_ENV) or str(max(1, default_jobs() // parallel))}
-        info["jobs_per_case"] = int(child_env[JOBS_ENV])
-        info_path.write_text(json.dumps(info, indent=1) + "\n")
-        pending, running, crashed = list(todo), {}, {}
+        write_results(run_dir, info, case_ids)
+        return run_dir
+    # each case's own pools get an equal share of the cores, so N cases never start N full-size pools
+    from dopplertrack.runtime.parallel import JOBS_ENV, default_jobs
+    parallel = max(1, parallel)
+    child_env = {**os.environ, JOBS_ENV: os.environ.get(JOBS_ENV) or str(max(1, default_jobs() // parallel))}
+    info["jobs_per_case"] = int(child_env[JOBS_ENV])
+    info_path.write_text(json.dumps(info, indent=1) + "\n")
+    pending, running, crashed = list(todo), {}, {}
+    try:
         while pending or running:
             while pending and len(running) < parallel:
                 cid = pending.pop(0)
                 (run_dir / cid).mkdir(parents=True, exist_ok=True)
+                (run_dir / cid / INCOMPLETE_FILE).unlink(missing_ok=True)
                 cmd = [sys.executable, "-m", "bench", "run-case", "--run-dir", str(run_dir), "--profile", profile,
                        "--code-json", json.dumps(code), "--overrides-json", json.dumps(overrides), cid] + \
-                    (["--revision", revision] if revision else [])
+                    (["--revision", revision] if revision else []) + \
+                    (["--cases", str(cases_path)] if cases_path is not None else [])
                 out = open(run_dir / cid / "process.log", "w")
-                running[cid] = (subprocess.Popen(cmd, cwd=REPO, stdout=out, stderr=subprocess.STDOUT, env=child_env), out)
+                # its own process group, so a case stopped at the cap takes its worker pool with it
+                running[cid] = (subprocess.Popen(cmd, cwd=REPO, stdout=out, stderr=subprocess.STDOUT, env=child_env,
+                                                 start_new_session=True), out, time.monotonic())
                 log(f"{cid}: started")
-            for cid, (proc, out) in list(running.items()):
-                if proc.poll() is not None:
-                    out.close()
-                    del running[cid]
-                    if (run_dir / cid / "entry.json").exists():
-                        log(f"{cid}: {json.loads((run_dir / cid / 'entry.json').read_text())['status']}")
-                    else:
-                        tail = (run_dir / cid / "process.log").read_text().strip().splitlines()[-3:]
-                        crashed[cid] = f"bench run-case exited with {proc.returncode}: " + " | ".join(tail)
-                        log(f"{cid}: crashed: {crashed[cid]}")
-                    write_results(run_dir, info, case_ids, crashed)
-            time.sleep(2)
-        write_results(run_dir, info, case_ids, crashed)
-        return run_dir
-    write_results(run_dir, info, case_ids)
+            for cid, (proc, out, t0) in list(running.items()):
+                elapsed = time.monotonic() - t0
+                if proc.poll() is None and unit_wall_s is not None and elapsed > unit_wall_s:
+                    _stop(proc)
+                    (run_dir / cid / "entry.json").unlink(missing_ok=True)      # nothing of a stopped unit counts
+                    (run_dir / cid / INCOMPLETE_FILE).write_text(json.dumps(
+                        {"reason": "stopped at the per-unit wall-time cap", "unit_wall_s": unit_wall_s,
+                         "elapsed_s": round(elapsed, 1)}) + "\n")
+                    log(f"{cid}: incomplete: stopped at the {unit_wall_s:g} s wall-time cap")
+                elif proc.poll() is None:
+                    continue
+                out.close()
+                del running[cid]
+                if (run_dir / cid / "entry.json").exists():
+                    log(f"{cid}: {json.loads((run_dir / cid / 'entry.json').read_text())['status']}")
+                elif not (run_dir / cid / INCOMPLETE_FILE).exists():
+                    tail = (run_dir / cid / "process.log").read_text().strip().splitlines()[-3:]
+                    crashed[cid] = f"bench run-case exited with {proc.returncode}: " + " | ".join(tail)
+                    log(f"{cid}: crashed: {crashed[cid]}")
+                write_results(run_dir, info, case_ids, crashed)
+            if running:
+                time.sleep(POLL_S)
+    finally:
+        for proc, out, _ in running.values():       # a stopped run leaves no case process behind
+            _stop(proc)
+            out.close()
+    write_results(run_dir, info, case_ids, crashed)
     return run_dir
 
 
@@ -1148,11 +1221,30 @@ def merge_runs(out_dir: Path, sources: list[Path], log=print) -> dict:
                 if (out_dir / cid).exists():
                     raise ValueError(f"{out_dir} has an unfinished folder for {cid}; merge into a new run folder")
                 shutil.copytree(src / cid, out_dir / cid)
+    crashed = {}
+    for src, info in infos:         # what did not finish keeps its reason: a stopped unit's marker, a crash's message
+        results = json.loads((src / "results.json").read_text()) if (src / "results.json").exists() else {}
+        crashed.update({c: why for c, why in results.get("crashed", {}).items() if c not in sha})
+        for cid in info.get("cases", []):
+            if cid not in sha and (src / cid / INCOMPLETE_FILE).exists() and src.resolve() != out_dir.resolve() \
+                    and not (out_dir / cid).exists():
+                shutil.copytree(src / cid, out_dir / cid)
     info_path = out_dir / "run.json"
     info = json.loads(info_path.read_text()) if info_path.exists() else {}
-    info.update(want, cases=cases, merged_from=[str(s) for s in sources])
+    # every case any source was to run, its own shard or not, so a shard that never came back shows as missing
+    scheduled = {}
+    for _, src_info in infos:
+        listed = src_info.get("scheduled_all") or src_info.get("scheduled")
+        if listed is None:
+            scheduled = None                      # a run from before the scheduled list: the denominator is unknown
+            break
+        scheduled.update({e["case"]: e for e in listed})
+    if scheduled is not None:
+        cases = cases + [c for c in scheduled if c not in cases]
+        scheduled = [scheduled[c] for c in cases]
+    info.update(want, cases=cases, merged_from=[str(s) for s in sources], scheduled=scheduled, scheduled_all=scheduled)
     info_path.write_text(json.dumps(info, indent=1) + "\n")
-    doc = write_results(out_dir, info, cases)
+    doc = write_results(out_dir, info, cases, crashed)
     log(f"merged {len(doc['cases'])} of {len(cases)} cases into {out_dir}" +
         (f"; missing {doc['missing']}" if doc["missing"] else ""))
     return doc
@@ -1170,23 +1262,34 @@ def _fmt(v) -> str:
     return f"{v:.1f}" if isinstance(v, float) else str(v)
 
 
+def entry_metrics(entry: dict) -> tuple[str, ...]:
+    """The scoreboard numbers of an entry's recipe."""
+    from .collective import METRICS as COLLECTIVE_METRICS
+    return COLLECTIVE_METRICS if entry.get("recipe") == "collective" else METRICS
+
+
 def compare_runs(a: Path, b: Path) -> str:
-    """A table of each case's scoreboard numbers in run a and run b, with b − a where both are numbers."""
+    """Each run's accounting against its scheduled cases, then a table of each case's scoreboard numbers in run a and
+    run b, with b - a only where the case is complete in both, and the paired differences over those cases."""
+    from . import accounting
     ra, rb = (json.loads((Path(p) / "results.json").read_text()) for p in (a, b))
     ca, cb = ({e["case"]: e for e in r["cases"]} for r in (ra, rb))
+    acct_a, acct_b = accounting.account(a), accounting.account(b)
     def head(name, path, r):
         return (f"{name}: {path} ({str(r.get('git_commit') or '?')[:9]}{' dirty' if r.get('git_dirty') is True else ''}, "
                 f"{r.get('profile', 'saved-fit')}{', overrides ' + json.dumps(r['search_overrides']) if r.get('search_overrides') else ''})")
-    lines = [head("a", a, ra), head("b", b, rb), ""]
-    for cid in sorted(set(ca) | set(cb)):
+    lines = [head("a", a, ra), *accounting.table(acct_a), head("b", b, rb), *accounting.table(acct_b), ""]
+    paired = accounting.paired_cases(acct_a, acct_b)
+    for cid in sorted(set(acct_a["classes"]) | set(acct_b["classes"])):
         ea, eb = ca.get(cid, {}), cb.get(cid, {})
-        lines.append(f"{cid}  [{ea.get('status', 'missing')} -> {eb.get('status', 'missing')}]"
+        lines.append(f"{cid}  [{acct_a['classes'].get(cid, 'missing')} -> {acct_b['classes'].get(cid, 'missing')}]"
                      + ("  record changed" if ea.get("record_sha256") != eb.get("record_sha256") else "  record identical"))
-        for m in METRICS + ("stage_wall_s",):
+        for m in entry_metrics(ea or eb) + ("stage_wall_s",):
             va = sum(s["wall_s"] for s in ea.get("stages", [])) if m == "stage_wall_s" else ea.get(m)
             vb = sum(s["wall_s"] for s in eb.get("stages", [])) if m == "stage_wall_s" else eb.get(m)
             delta = ""
-            if all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in (va, vb)):
+            if cid in paired and all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in (va, vb)):
                 delta = f"  {vb - va:+.1f}"
             lines.append(f"  {m:<20} {_fmt(va):>12} {_fmt(vb):>12}{delta}")
+    lines += ["", *accounting.paired_lines(accounting.paired_differences(ca, cb, paired), len(paired))]
     return "\n".join(lines)

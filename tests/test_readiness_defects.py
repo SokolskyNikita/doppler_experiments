@@ -25,6 +25,8 @@ from dopplertrack.data.trajectories import Trace
 from dopplertrack.methods.collective import merge, null, search, units
 from dopplertrack.methods.collective.parameters import CollectiveParameters, resolve_collective
 from dopplertrack.methods.grid_pair import runner
+from dopplertrack.runtime.cache import file_sha256
+from dopplertrack.runtime.records import RecordError, read_collective
 
 REPO = Path(__file__).resolve().parents[1]
 BOX = (40.0, 40.03, -74.0, -73.96)
@@ -146,7 +148,7 @@ def test_fine_points_without_terrain_are_left_out_like_coarse_ones():
 # ---- the mode rule's parameters -------------------------------------------------------------------------------
 
 def _peak(lat, lon, z, clock):
-    return dict(lat=lat, lon=lon, Z=z, clock_audio_minus_unix=clock, n_matched=2)
+    return dict(lat=lat, lon=lon, Z=z, clock_audio_minus_unix=clock, n_matched=2, windows=[])
 
 
 def test_the_mode_rule_separates_by_clock_only_when_asked():
@@ -239,8 +241,15 @@ def test_merging_takes_only_complete_units_covering_every_kept_cell_once(tmp_pat
     with pytest.raises(units.IncompleteUnit, match="recorded hash"):
         merge.merge_units([a, c])
     old = _result([1, 2], 7.5); del old["statistic_identity"]
+    with pytest.raises(RecordError, match="statistic_identity"):       # no unit is written without one now
+        _unit(tmp_path, "refused", old)
+    done = _unit(tmp_path, "old", _result([1, 2], 7.5))               # as a run from before R5 left it: unversioned
+    (done / "result.json").write_text(json.dumps(old))
+    (done / "result.json.sha256").write_text(f"{file_sha256(done / 'result.json')}  result.json\n")
     with pytest.raises(units.IncompleteUnit, match="no statistic identity"):
-        merge.merge_units([a, _unit(tmp_path, "old", old)])
+        merge.merge_units([a, done])
+    assert read_collective(done / "result.json")["schema_version"] == 0      # still readable, marked as older
+    assert read_collective(a / "result.json")["schema_version"] == 1
 
 
 def test_merging_refuses_units_of_another_statistic_or_search(tmp_path):

@@ -50,6 +50,9 @@ A subagent reads only the sections its task names.
   label; `bench compare <a> <b>` diffs two runs; `--profile` picks the events; `--revision <commit>` runs another
   commit in an exported, hash-verified environment (run Python there only with `-B`). With a cold CPA table it is a
   long job: say so first and run it in the background.
+- A study: `uv run python -m bench study run STUDY.json` runs a baseline, its variants and their control days as
+  benchmark runs in one study folder, with a wall-time cap per case; `bench study plan` prints what it would run.
+  The file's format is the docstring of `src/dopplertrack/evaluation/study.py`.
 
 ## Data rules
 

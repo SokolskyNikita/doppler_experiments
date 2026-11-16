@@ -10,8 +10,8 @@ A path being installed or unit-tested does not establish acoustic accuracy or a 
 |---|---|---|
 | Installed CLI | `pyproject.toml` → [commands.main.main](../src/dopplertrack/commands/main.py) (also `python -m dopplertrack`) | `spectrogram`, `fit`, `detect`, `extract-region`, `fetch-day`, `search`, `refine`, `search-single`, `locate` |
 | Audio-to-record orchestration | `commands.main._locate` → [grid_pair.runner.locate](../src/dopplertrack/methods/grid_pair/runner.py) | Detection, coverage preflight, pair searches, winner refinement, schema-v2 record/hash; never emits `located` |
-| Repository benchmark | `python -m bench` → [evaluation/runner.py](../src/dopplertrack/evaluation/runner.py) | `saved-fit`, `raw-audio`, `locate`; record/hash before labels, revision exports, shards/resume, comparison; `bench report` renders HTML |
-| Collective search | [collective_detection](../src/dopplertrack/methods/collective/search.py) with its units, merge and control draws (`dopplertrack run collective`, `collective-merge`, `collective-null`); the dated `tools/experiments/2026-11-04/collective_run.py` is a record | Experimental alternative; separate result dictionary, outside CLI locate, benchmark profiles and versioned verdicts |
+| Repository benchmark | `python -m bench` → [evaluation/runner.py](../src/dopplertrack/evaluation/runner.py) | `saved-fit`, `raw-audio`, `locate`, `collective`; the worker's request without evaluator-only fields, record/hash before labels, revision exports, shards/resume, a per-unit wall-time cap, comparison with complete accounting; `bench study` runs a baseline, variants and control draws from a study file; `bench report` renders HTML |
+| Collective search | [collective_detection](../src/dopplertrack/methods/collective/search.py) with its units, merge and control draws (`dopplertrack run collective`, `collective-merge`, `collective-null`); the dated `tools/experiments/2026-11-04/collective_run.py` is a record | Experimental alternative, outside CLI locate and versioned verdicts; its result is a versioned record (`COLLECTIVE_V1`), and the benchmark's `collective` profile ([evaluation/collective.py](../src/dopplertrack/evaluation/collective.py)) runs it end to end from a case |
 
 Installed defaults:
 
@@ -77,7 +77,19 @@ site-relative frame. Version 2 allows `located`, `ambiguous` and `insufficient_e
 fields, types, enumerations and finite floats; it permits extra fields and does not prove cross-field scientific
 validity. `write_record` validates and writes canonical bytes atomically, returning their SHA-256. The benchmark
 writes the record/hash before opening labels and refuses altered records/sidecars. This is procedural blinding,
-not evidence that development data became held-out evaluation. Schema v3 was never adopted; the readiness plan adds a minimal collective record (R6.6).
+not evidence that development data became held-out evaluation. Schema v3 was never adopted. The collective recipe
+has its own minimal record (readiness R6.6), `COLLECTIVE_V1` with kind `dopplertrack.collective`: the windows, the
+winner and the modes with each one's matched passes, the statistic identity and domain, and `control` for a control
+draw; `validate` picks the schema by kind, `read_collective` still reads results from before the record.
+
+The benchmark gives a worker the case as `request.json` holds it: no labels, `expected_outcome`, `group`, `set` or
+`description`, checked on the serialized bytes before the case runs. Every scheduled case then falls in one class
+of [evaluation/accounting.py](../src/dopplertrack/evaluation/accounting.py) (answered, abstained, no candidate,
+failed, incomplete, missing) against the scheduled list `results.json` records; a case stopped at
+`--unit-wall-s` is incomplete, never a result. [evaluation/study.py](../src/dopplertrack/evaluation/study.py) runs a
+study file's baseline, variants and control days as ordinary benchmark runs in one folder, prints each variant's
+parameter differences first, and collects each case's control draws with the collective null tooling. The study
+runner establishes no accuracy: its synthetic fixture (`tools/data/synthetic_study.py`) checks the software.
 
 The installed CLI produces no HTML report. `bench report` uses [reporting/html.py](../src/dopplertrack/reporting/html.py),
 local result records and optional sidecars to render reports into a new run folder. Execution errors are distinct
@@ -192,7 +204,8 @@ an unfinished, foreign, missing or repeated one; `run collective-null`
 and refuses a missing day, a partial or incompatible draw, and on reading an export without the identity or with
 another one. A control draw is the config's `control` field: another day's traffic shifted by whole days onto the
 recording's date ([day_mapping.py](../src/dopplertrack/data/day_mapping.py)). The collective search has no clock gate,
-so today the shift changes only the reported clock. No threshold is fitted here, and no real-data result for the
+so today the shift changes only the reported clock. The benchmark's `collective` profile makes the same draw from
+a case with the override `control_day`. No threshold is fitted here, and no real-data result for the
 repaired statistic is established by this page.
 
 The mode rule's settings are `planning` fields with the rule as it ran as the default: modes separated by distance

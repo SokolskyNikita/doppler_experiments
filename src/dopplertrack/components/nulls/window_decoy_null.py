@@ -13,13 +13,15 @@ NULL_N = 1000
 
 
 # old name: window_nulls
-def window_decoy_nulls(views, wins, cpa, segs, enu, c, sweep, workers=None, n=NULL_N) -> list[dict]:
+def window_decoy_nulls(views, wins, cpa, segs, enu, c, sweep, workers=None, n=NULL_N, seed=None) -> list[dict]:
     """Each window's decoy null: NULL_N CPA rows drawn uniformly (seeded by the window), each pass anchored on the
     window's coarse CPA and scored with the same sweep. Nearly all are wrong passes, so the median and MADN are the
-    window's floor and spread, as in the comparable score's event_decoy_null."""
-    out = []
+    window's floor and spread, as in the comparable score's event_decoy_null. `seed` (a study's master seed; None
+    for the draws as they have always been) joins the window in each draw's own seed."""
+    out, master = [], seed
     for w, win in enumerate(wins):
-        seed = null_seed((round(win.t_start, 3), round(win.t_end, 3), round(win.f0, 4), round(win.t_cpa, 4), sweep))
+        seed = null_seed((round(win.t_start, 3), round(win.t_end, 3), round(win.f0, 4), round(win.t_cpa, 4), sweep)
+                         + (() if master is None else (int(master),)))
         idx = draw_rows(len(cpa), n, seed)
         g, s, th = (cpa[k].to_numpy()[idx] for k in ("gidx", "seg", "t_heard"))
         offs = win.t_cpa - th

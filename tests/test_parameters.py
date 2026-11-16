@@ -84,7 +84,7 @@ def test_each_profile_resolves_to_what_the_code_used_before_r2(profile):
     p = resolve(profile)
     want = {**R1_LIBRARY, **R1_PROFILES[profile]}
     assert {k: _at(p, k) for k in want} == want
-    assert set(R1_PROFILES) == set(bench.PROFILES)
+    assert set(R1_PROFILES) == set(bench.PROFILES) - {"collective"}     # R6's profile runs the other recipe
     # the grids the dataclass stores as (start, stop, step) are R1's literal arrays, exactly
     assert np.array_equal(arange_grid(p.detection.speed_grid_mps), np.arange(40, 170, 13.0))
     assert np.array_equal(geometric_grid(p.detection.slant_range_grid_m), np.geomspace(400, 9000, 10))

@@ -8,12 +8,12 @@ This is the package's current organization after the independence refactor. The 
 |---|---|
 | `commands/` | CLI wiring. `main.py` holds the established `dopplertrack` commands; `methods.py` dispatches the method interface. |
 | `methods/grid_pair/` | The existing grid and fitted-pair pipeline and locate runner; `parameters.py` holds `GridPairParameters`, its profiles and their resolution. |
-| `methods/collective/` | The collective search implementation (`search.py`), with `CollectiveParameters` in `parameters.py`, its run folders (`units.py`), the merge of a search split into units (`merge.py`) and the collection of control draws (`null.py`). It currently takes explicit event windows and returns method output, not a calibrated common verdict. |
+| `methods/collective/` | The collective search implementation (`search.py`), with `CollectiveParameters` in `parameters.py`, its run folders (`units.py`), the merge of a search split into units (`merge.py`) and the collection of control draws (`null.py`). The `dopplertrack run collective` command takes explicit event windows; the benchmark's `collective` profile detects them. Either way the output is method output, a versioned record (`runtime/records.COLLECTIVE_V1`), not a calibrated common verdict. |
 | `methods/parameters.py` | Plumbing the two parameters modules share: the spectrogram stage, override resolution by field name, the JSON form. |
 | `components/` | Reusable algorithm pieces: spectrogram handling, detection, fitting, scoring, candidate grid search, and tracking. |
 | `core/` | Shared geometry, atmospheric calculations, and Doppler propagation. |
 | `data/` | ADS-B providers and trajectory parsing, coverage, and terrain access. |
-| `evaluation/` | Benchmark cases, input preparation, evaluation runs, private-case handling, and reports. `bench/` keeps the `python -m bench` entry point, the case manifest, the labels and the raw-input manifest. |
+| `evaluation/` | Benchmark cases, input preparation, evaluation runs (`runner.py`; `collective.py` is the collective profile), case accounting (`accounting.py`), studies (`study.py`), private-case handling, and reports. `bench/` keeps the `python -m bench` entry point, the case manifest, the labels and the raw-input manifest. |
 | `reporting/` | HTML reports and plotting helpers. |
 | `runtime/` | Shared paths, caches (including CPA tables), parallel execution, and result-record handling. |
 
@@ -54,7 +54,7 @@ are shifted by whole days onto the recording's date).
 dopplertrack run collective --config /path/to/collective.json --out /path/to/new-run
 ```
 
-The output directory must not already exist. Collective windows are supplied as input; this command does not provide end-to-end event detection or a calibrated locate verdict. The folder is a unit: `request.json` (written first, with the statistic identity and its launcher label), `result.json`, its hash and `completed.json`.
+The output directory must not already exist. Collective windows are supplied as input; this command does not provide end-to-end event detection or a calibrated locate verdict. The folder is a unit: `request.json` (written first, with the statistic identity and its launcher label), `result.json` (a versioned collective record), its hash and `completed.json`. To run a benchmark case end to end, detection included, use `python -m bench run --profile collective CASE`.
 
 ```sh
 dopplertrack run collective-merge UNIT_DIR [UNIT_DIR ...] --out /path/to/new-merged

@@ -33,7 +33,7 @@ def _null_scores(task) -> list[float]:
 # old name: event_null
 def event_decoy_null(w: EventWindow, cpa: pd.DataFrame, segs: list[Segment], enu: np.ndarray, c: float,
                n: int = NULL_N, workers: int | None = None, f0_scales=None, temperature_c: float | None = None,
-               shifts=None) -> dict:
+               shifts=None, seed: int | None = None) -> dict:
     """The comparable score's decoy null for one event: its custom_single_score against n (grid point, flight) rows
     drawn uniformly, with replacement, from the CPA table, each anchored on the event. Nearly all are wrong
     flights (decoys; ours: real wrong flights, rarely the true one, summarised by median and MADN rather than
@@ -41,9 +41,11 @@ def event_decoy_null(w: EventWindow, cpa: pd.DataFrame, segs: list[Segment], enu
     for a robust z-score. The draw's seed comes from the event's fit,
     so every search containing the event uses the same null. f0_scales, if given, is the f0 sweep the event's
     candidates get, so that the null has the same chances to match; shifts likewise (custom_single_score's by default).
-    The null's record keeps its keys whatever the sweep."""
+    The null's record keeps its keys whatever the sweep. `seed` (a study's master seed; None for the draws as they
+    have always been) joins the fit in the draw's seed."""
     f = w.fit
-    seed = null_seed((round(f.t_cpa, 6), round(f.f0, 6), round(f.v, 6), round(f.d, 3), w.harmonics))
+    seed = null_seed((round(f.t_cpa, 6), round(f.f0, 6), round(f.v, 6), round(f.d, 3), w.harmonics)
+                     + (() if seed is None else (int(seed),)))
     idx = draw_rows(len(cpa), n, seed)
     rows = cpa.iloc[idx]
     cols = [rows[k].to_numpy() for k in ("gidx", "seg", "t_heard")]

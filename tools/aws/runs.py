@@ -225,8 +225,13 @@ def listed_inputs(doc: dict) -> tuple[list[str], list[str], list[str]]:
     return cases, list(dict.fromkeys(paths)), [k for k in dict.fromkeys(kinds) if k in CACHE_KINDS]
 
 
-def fleet_request(out: dict, job: str, size: str, on_demand: bool, families=FAMILIES, region: str = REGION) -> dict:
-    """The create_fleet arguments: one instance, any listed family of `size` in any of the subnets."""
+STUDY_TAG = "dopplertrack-study"
+
+
+def fleet_request(out: dict, job: str, size: str, on_demand: bool, families=FAMILIES, region: str = REGION,
+                  study: str | None = None) -> dict:
+    """The create_fleet arguments: one instance, any listed family of `size` in any of the subnets. A study's box
+    carries the study's name as a tag, which its limit on concurrent boxes and vCPUs counts (study_usage)."""
     subnets = out["Subnets"].split(",")
     configs = []
     for arch, fams in families.items():
@@ -242,7 +247,47 @@ def fleet_request(out: dict, job: str, size: str, on_demand: bool, families=FAMI
             "OnDemandOptions": {"AllocationStrategy": "lowest-price"},
             "TagSpecifications": [{"ResourceType": "instance", "Tags": [
                 {"Key": "project", "Value": "dopplertrack"}, {"Key": "dopplertrack-job", "Value": job},
-                {"Key": "Name", "Value": f"dopplertrack-job {job}"}]}]}
+                {"Key": "Name", "Value": f"dopplertrack-job {job}"},
+                *([{"Key": STUDY_TAG, "Value": study}] if study else [])]}]}
+
+
+def study_usage(study: str) -> tuple[int, int]:
+    """(boxes, vCPUs) of the study's pending and running boxes, over every region the fleet is deployed in."""
+    boxes = vcpus = 0
+    for region in (r for r in JOB_REGIONS if deployed(r)):
+        for page in session(region).client("ec2").get_paginator("describe_instances").paginate(Filters=[
+                {"Name": f"tag:{STUDY_TAG}", "Values": [study]},
+                {"Name": "instance-state-name", "Values": ["pending", "running"]}]):
+            for res in page["Reservations"]:
+                for i in res["Instances"]:
+                    boxes += 1
+                    vcpus += i.get("CpuOptions", {}).get("CoreCount", 0) * i.get("CpuOptions", {}).get("ThreadsPerCore", 1)
+    return boxes, vcpus
+
+
+def study_hold(used: tuple[int, int], max_boxes: int, max_vcpus: int, box_vcpus: int) -> str | None:
+    """Why one more box of box_vcpus would take the study over its limit, or None when it fits."""
+    boxes, vcpus = used
+    if boxes + 1 > max_boxes:
+        return f"the study's limit of {max_boxes} boxes at once is reached ({boxes} running)"
+    if vcpus + box_vcpus > max_vcpus:
+        return f"the study's limit of {max_vcpus} vCPUs at once would be passed ({vcpus} running, {box_vcpus} more)"
+    return None
+
+
+def box_vcpus(size: str) -> int:
+    return session().client("ec2").describe_instance_types(InstanceTypes=[f"c8g.{size}"])["InstanceTypes"][0][
+        "VCpuInfo"]["DefaultVCpus"]
+
+
+def study_check(a) -> str | None:
+    """The study-wide limit, checked before each launch (research readiness R6.7): None when the job belongs to no
+    study or its next box fits. One launcher at a time is assumed: two started at once can both see room."""
+    if not getattr(a, "study", None):
+        return None
+    if not getattr(a, "_box_vcpus", None):
+        a._box_vcpus = box_vcpus(a.size)
+    return study_hold(study_usage(a.study), a.max_boxes, a.max_vcpus, a._box_vcpus)
 
 
 def launch_all(a) -> list[str]:
@@ -350,6 +395,10 @@ def launch(a) -> str:
     command = " ".join(a.command).strip()
     if not command:
         sys.exit("give the command after --")
+    if getattr(a, "study", None) and not (TOPIC.fullmatch(a.study) and (getattr(a, "max_boxes", None) or 0) >= 1
+                                          and (getattr(a, "max_vcpus", None) or 0) >= 1):
+        sys.exit("--study takes the study's name (lowercase letters, digits and hyphens) with --max-boxes and "
+                 "--max-vcpus, its limit on boxes and vCPUs running at once")
     for k in a.cache:
         if k not in CACHE_KINDS:
             sys.exit(f"--cache takes {', '.join(CACHE_KINDS)}")
@@ -394,6 +443,8 @@ def launch(a) -> str:
                     "resume_of": None if rehearse else a.resume,
                     "rehearsal_minutes": a.rehearse_minutes if rehearse else None, "shard": getattr(a, "shard", None), "private": private_job, "command": command, "inputs": inputs,
                     "caches": caches, "jobs": a.jobs, "max_hours": a.max_hours,
+                    "upload_minutes": getattr(a, "upload_minutes", None) or 15,
+                    "study": getattr(a, "study", None),
                     "checkpoint_minutes": a.checkpoint_minutes, "size": a.size,
                     "market": "on-demand" if a.on_demand else "spot", "submitted": now(),
                     "submitted_from": platform.node(), **code, "code_from": code_from}
@@ -498,6 +549,13 @@ def preflight(a, s3, bucket: str, inputs: list[str], caches: list[str], prior, c
     print("      free " + market + " vCPUs: " + ", ".join(f"{r} {n}" for r, n in free.items()))
     print("      start now: " + (", ".join(f"{r} {n}" for r, n in placed.items()) or "none")
           + (f"; {queued} would queue for capacity" if queued else ""))
+    if getattr(a, "study", None):
+        used = study_usage(a.study)
+        held = study_hold(used, a.max_boxes, a.max_vcpus, vcpus)
+        print(f"      study {a.study}: {used[0]} boxes and {used[1]} vCPUs running of {a.max_boxes} and {a.max_vcpus} "
+              f"allowed; the next box {'waits: ' + held if held else 'fits'}")
+        if vcpus > a.max_vcpus:
+            problems.append(f"study {a.study}: one {a.size} box has {vcpus} vCPUs, above --max-vcpus {a.max_vcpus}")
     for msg in problems:
         print(f"PROBLEM {msg}")
     print("check: " + ("ok" if not problems else f"{len(problems)} problem{'s' if len(problems) > 1 else ''}"))
@@ -535,7 +593,8 @@ def try_regions(a, job: str) -> tuple[list[str], str | None, list[str]]:
     errs = []
     for od in markets:
         for region in (r for r in (a.region or JOB_REGIONS) if deployed(r)):
-            ids, err = start_box(session(region).client("ec2"), outputs(region), job, a.size, od)
+            ids, err = start_box(session(region).client("ec2"), outputs(region), job, a.size, od,
+                                 getattr(a, "study", None))
             if ids:
                 return ids, region, errs
             errs.append(f"{region} {'on-demand' if od else 'spot'}: {err}")
@@ -547,12 +606,13 @@ def place(a, job: str, s3, bucket: str, wait_s: float, final: bool) -> bool:
     a job still without a box is marked failed; else it stays submitted, waiting for capacity."""
     deadline = time.time() + wait_s
     while True:
-        ids, region, errs = try_regions(a, job)
+        held = study_check(a)        # a study at its limit waits like a full region; nothing is requested
+        ids, region, errs = ([], None, [held]) if held else try_regions(a, job)
         if ids or time.time() >= deadline:
             break
         put_status(s3, bucket, job, {"job": job, "state": "submitted", "stage": "waiting for capacity",
                                      "error": " | ".join(errs), "updated": now()})
-        print(f"{job}: every region full ({' | '.join(errs)}); retrying in 60 s", flush=True)
+        print(f"{job}: {'held' if held else 'every region full'} ({' | '.join(errs)}); retrying in 60 s", flush=True)
         time.sleep(60)
     if not ids:
         if final:
@@ -583,8 +643,8 @@ def place(a, job: str, s3, bucket: str, wait_s: float, final: bool) -> bool:
 JOB_EBS_USD_PER_HOUR = 0.063
 
 
-def start_box(ec2, out: dict, job: str, size: str, on_demand: bool) -> tuple[list[str], str]:
-    resp = ec2.create_fleet(**fleet_request(out, job, size, on_demand, region=ec2.meta.region_name))
+def start_box(ec2, out: dict, job: str, size: str, on_demand: bool, study: str | None = None) -> tuple[list[str], str]:
+    resp = ec2.create_fleet(**fleet_request(out, job, size, on_demand, region=ec2.meta.region_name, study=study))
     ids = [i for inst in resp.get("Instances", []) for i in inst.get("InstanceIds", [])]
     codes = sorted({e.get("ErrorCode") for e in resp.get("Errors", [])})     # one per code, not per type and AZ
     return ids, ", ".join(c for c in codes if c)
@@ -1128,7 +1188,14 @@ def main(argv=None) -> None:
                     "(default: 90; 0: fail at once)")
     la.add_argument("--fallback-on-demand", action="store_true", help="if no region has spot capacity, start "
                     "an on-demand box rather than fail (off by default: it uses the on-demand quota)")
-    la.add_argument("--max-hours", type=float, default=12, help="stop the command after this long (default: 12)")
+    la.add_argument("--max-hours", type=float, default=12, help="the box's whole lifetime, from its supervisor's "
+                    "start: preparation, the command and the upload of its outputs (default: 12)")
+    la.add_argument("--upload-minutes", type=float, default=15, help="of --max-hours, kept for the upload: the "
+                    "command is stopped this long before the box's end (default: 15)")
+    la.add_argument("--study", metavar="NAME", help="the study this job belongs to: its boxes are tagged with it and "
+                    "counted against --max-boxes and --max-vcpus before each launch")
+    la.add_argument("--max-boxes", type=int, metavar="N", help="with --study: its boxes running at once, at most")
+    la.add_argument("--max-vcpus", type=int, metavar="N", help="with --study: its vCPUs running at once, at most")
     la.add_argument("--checkpoint-minutes", type=float, default=10, help="upload the run folders this often")
     la.add_argument("--repo", help="ship this checkout instead of the one runs is in (e.g. a worktree at another commit)")
     la.add_argument("--wait", action="store_true", help="wait for it, then pull")

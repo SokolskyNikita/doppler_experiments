@@ -29,7 +29,7 @@ MANIFEST = REPO / "bench" / "manifest.json"
 SETS = ("development", "calibration", "evaluation")
 OUTCOMES = ("located", "not_located", "located_or_abstain")
 # the runner's profiles (evaluation.runner.PROFILES); a case may name the ones it runs under, else it runs under all
-PROFILE_NAMES = ("saved-fit", "raw-audio", "locate")
+PROFILE_NAMES = ("saved-fit", "raw-audio", "locate", "collective")
 
 
 def data_root() -> Path:
@@ -260,6 +260,45 @@ def blind_case(case_id: str, path=CASES) -> dict:
         raise CaseError([f"{case_id}: not runnable yet: {case['runnable']['blocked']}"])
     del case["labels"]
     return case
+
+
+# What only the evaluator may read (research readiness R6.3): the labels, and the fields that say what the answer
+# should be or describe the case in words. A worker gets the case without them; NEVER_IN_REQUEST are label keys
+# that must not appear anywhere in what a worker is sent.
+EVALUATOR_ONLY = ("labels", "expected_outcome", "group", "set", "description")
+NEVER_IN_REQUEST = ("labels", "expected_outcome", "expected_verdict", "true_pair")
+META = ("id", "version", "group", "set", "expected_outcome")
+
+
+def worker_case(case: dict) -> dict:
+    """The case as a worker may see it: no labels and no evaluator-only field."""
+    return {k: copy.deepcopy(v) for k, v in case.items() if k not in EVALUATOR_ONLY}
+
+
+def worker_request(case: dict) -> bytes:
+    """The serialized request a worker runs from: {"case": worker_case}."""
+    return (json.dumps({"case": worker_case(case)}, indent=1, sort_keys=True) + "\n").encode()
+
+
+def read_worker_request(data: bytes) -> dict:
+    """The case of a serialized request, after checking the bytes themselves: no evaluator-only field on the case and
+    no label key at any depth. Raises CaseError naming what it found."""
+    doc = json.loads(data)
+    found = [f"case.{k}" for k in EVALUATOR_ONLY if k in doc.get("case", {})]
+
+    def walk(node, where):
+        if isinstance(node, dict):
+            for k, v in node.items():
+                if k in NEVER_IN_REQUEST and f"{where}.{k}" not in found:
+                    found.append(f"{where}.{k}")
+                walk(v, f"{where}.{k}")
+        elif isinstance(node, list):
+            for i, v in enumerate(node):
+                walk(v, f"{where}[{i}]")
+    walk(doc, "request")
+    if found or set(doc) != {"case"}:
+        raise CaseError([f"a worker's request holds evaluator-only fields: {found or sorted(set(doc) - {'case'})}"])
+    return doc["case"]
 
 
 def case_labels(case_id: str, version: int, path=CASES) -> dict:
